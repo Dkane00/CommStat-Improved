@@ -136,7 +136,7 @@ class Ui_MainWindow(QWidget):
 
         self.oscheck()
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1024, 768)
+        MainWindow.resize(1480, 788)
         icon = QtGui.QIcon()
         icon.addPixmap(QtGui.QPixmap("USA-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainWindow.setWindowIcon(icon)
@@ -386,7 +386,7 @@ class Ui_MainWindow(QWidget):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "CommStat V 2.3.0 Offline Map / Modified by KD9DSS"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "CommStat-Improved V 2.3.1 / Modified by N0DDK"))
         self.actionFilter.setText(_translate("MainWindow", "DISPLAY FILTER"))
         self.actionData.setText(_translate("MainWindow", "DATA MANAGER"))
         self.label.setText(_translate("MainWindow", "TextLabel Marquee"))
