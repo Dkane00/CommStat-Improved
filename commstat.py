@@ -88,7 +88,7 @@ class Ui_MainWindow(QWidget):
 
         self.oscheck()
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1024, 768)
+        MainWindow.resize(1400, 788)
         icon = QtGui.QIcon()
         icon.addPixmap(QtGui.QPixmap("USA-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainWindow.setWindowIcon(icon)
