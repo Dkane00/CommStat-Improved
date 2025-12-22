@@ -342,6 +342,7 @@ class UI(QMainWindow):
 
         if self.red.isChecked() == True:
             red = "3"
+        
         else:
             red = "5"
 
@@ -370,12 +371,16 @@ class UI(QMainWindow):
                     # print("if statement worked" + cellval)
                     self.tableWidget.item(row_number, column_number).setBackground(QtGui.QColor(255, 000, 000))
                     self.tableWidget.item(row_number, column_number).setForeground(QtGui.QColor(255, 000, 000))
+                if self.tableWidget.item(row_number, column_number).text() == "4":
+                    #   print("if statement failed"+cellval)
+                    self.tableWidget.item(row_number, column_number).setBackground(QtGui.QColor(128, 128, 128))
+                    self.tableWidget.item(row_number, column_number).setForeground(QtGui.QColor(128, 128, 128))
                 # else:
                 #   print("if statement failed"+cellval)
 
         table = self.tableWidget
         table.setHorizontalHeaderLabels(
-            str("Date Time UTC ;ID ;Callsign; Grid ; Priority; Stat; Pow; H2O; Med; Com; Trv; Int; Fuel; Food; Cri; Civ; Pol; Remarks").split(
+            str("Date Time UTC ;ID ;Callsign; Grid ; Scope; Pin; Pow; H2O; Med; Com; Trv; Int; Fuel; Food; Cri; Civ; Pol; Remarks").split(
                 ";"))
         header = table.horizontalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
@@ -395,7 +400,6 @@ class UI(QMainWindow):
 
 
 
-
     def mapperWidget(self):
         global mapper
         global data
@@ -405,57 +409,60 @@ class UI(QMainWindow):
         global selectedgroup
         global statelist
 
-
-
-
         gridlist = []
-
 
         self.mapwidget.deleteLater()
         self.mapwidget = QWebEngineView()
         self.mapwidget.setObjectName("widget")
 
-        if self.green.isChecked() == True:
+        if self.green.isChecked():
             green = 1
         else:
             green = 0
-        if self.yellow.isChecked() == True:
+        if self.yellow.isChecked():
             yellow = 2
         else:
             yellow = 0
 
-        if self.red.isChecked() == True:
+        if self.red.isChecked():
             red = 3
         else:
             red = 0
-        ##################################
 
-
-
-
-        mapper = QWebEngineView()
         coordinate = (38.8199286, -90.4782551)
-        m = folium.Map(
-            tiles='Stamen Terrain',
-            zoom_start=4,
-            location=coordinate
 
+        # Create map with NO default tiles
+        m = folium.Map(
+            location=coordinate,
+            zoom_start=4,
+            tiles=None,  # Disable Folium's default OpenStreetMap tiles
+            attr='Your Local Map Tiles'
         )
+
+        # Add LOCAL tile layer (tilesPNG2 directory)
+        folium.raster_layers.TileLayer(
+            tiles='http://localhost:8000/{z}/{x}/{y}.png',
+            name='Local Tiles',
+            attr='Local Tiles',
+            max_zoom=8,  # Local tiles only up to zoom level 8
+            control=False  # Hide layer toggle
+        ).add_to(m)
+
+        # Add ONLINE tile layer (OpenStreetMap) for zoom > 8
+        folium.raster_layers.TileLayer(
+            tiles='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            name='OpenStreetMap',
+            attr='OpenStreetMap',
+            min_zoom=8,  # Online tiles only from zoom level 8
+            control=False  # Hide layer toggle
+        ).add_to(m)
 
         try:
             connection = sqlite3.connect('traffic.db3')
-            #cur = connection.cursor()
-
             query = (
                 "SELECT callsign, SRid, status, grid  FROM StatRep_Data WHERE groupname = ? AND (status  = ? OR status = ? OR status = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(
                     ', '.join('?' for _ in statelist)))
             cursor = connection.execute(query, [selectedgroup, green, yellow, red, start, end] + statelist)
-            #items = cursor.fetchall()
-
-
-            #query = (
-            #    "SELECT callsign, SRid, status FROM StatRep_Data WHERE groupname = ? AND datetime BETWEEN ? AND ?")
-            #cursor = connection.execute(query, (selectedgroup, start, end))
             items = cursor.fetchall()
 
             for item in items:
@@ -467,144 +474,66 @@ class UI(QMainWindow):
                 testlat = float(coords[0])
                 testlong = float(coords[1])
                 count = gridlist.count(grid)
-                print(call + " before lat  & Long " + str(testlat) + "  " + str(testlong))
                 if count > 0:
-                    print("latbefore :"+str(testlat))
                     testlat = testlat + (count * .010)
-                    print("latafter :" + str(testlat))
-                    testlong = testlong +(count * .010)
+                    testlong = testlong + (count * .010)
                 gridlist.append(grid)
-                print(call+" After lat  & Long "+str(testlat)+"  "+str(testlong))
+
                 testlat = float(testlat)
                 testlong = float(testlong)
-
-
-
-
-
-
-
-                #glat = gridLatint
-                #glon = gridLongint
                 glat = testlat
                 glon = testlong
-
-
-
-
-
-
-            #query = "SELECT gridlat, gridlong, callsign, date  FROM checkins_Data where groupname = ? and date like ? or date LIKE ?"
-            #cursor.execute(query, (selectedgroup, '%' + todaystring2 + '%', '%' + yesterday + '%'))
-
-
-            #sqlite_select_query = 'SELECT gridlat, gridlong, callsign, date FROM checkins_Data where groupname=?'
-            #cursor.execute(sqlite_select_query, (selectedgroup,))
-            #tems = cursor.fetchall()
-
-            #for item in items:
-            #    glat = item[0]
-            #    glon = item[1]
-            #    call = item[2]
-            #    ack = item[3]
-            #    utc = item[4]
-
-
-
 
                 pinstring = ("Callsign :")
                 html = '''<HTML> <BODY><p style="color:blue;font-size:14px;">%s %s<br>
                 StatRep ID :
                 %s  
-                </p></BODY></HTML>''' % (pinstring,call,srid,)
-                iframe = folium.IFrame(html,
-                                       width=160,
-                                       height=70)
+                </p></BODY></HTML>''' % (pinstring, call, srid,)
+                iframe = folium.IFrame(html, width=160, height=70)
+                popup = folium.Popup(iframe, min_width=100, max_width=160)
 
-                popup = folium.Popup(iframe,
-                                     min_width=100, max_width=160)
-                #folium.Marker(location=[glat, glon], popup=popup).add_to(m)
-                #print(status)
                 if "2" in status and yellow == 2:
                     color = "orange"
-                    radius = 40
+                    radius = 10
                     filler = True
                 elif "2" in status and yellow == 0:
                     color = ""
-                    radius = 40
+                    radius = 10
                     filler = False
-
                 elif "3" in status and red == 3:
                     color = "red"
-                    radius = 40
+                    radius = 10
                     filler = True
                 elif "3" in status and red == 0:
                     color = ""
-                    radius = 40
+                    radius = 10
+                    filler = False
+                elif "1" in status and green == 1:
+                    color = "green"
+                    radius = 3
+                    filler = True
+                elif "1" in status and green == 0:
+                    color = ""
+                    radius = 3
                     filler = False
 
-                elif "1" in status and green == 1:
-                        color = "green"
-                        radius = 6
-                        filler = True
-                elif "1" in status and green == 0:
-                        color = ""
-                        radius = 6
-                        filler = False
-
-
-
-                folium.CircleMarker(radius=radius,fill=filler, color=color, fill_color=color,
-
-                 location=[glat, glon], popup=popup, icon=folium.Icon(color="red")).add_to(m)
-
-
-            #cur.close()
-            #cursor.close()
+                folium.CircleMarker(radius=radius, fill=filler, color=color, fill_color=color,
+                                    location=[glat, glon], popup=popup, icon=folium.Icon(color="red")).add_to(m)
 
         except sqlite3.Error as error:
             print("Data Manager Failed to read data from sqlite table", error)
         finally:
-            if (connection):
+            if connection:
                 connection.close()
 
-         #       print("The SQLite connection is closed")
-        # return map
-
-        # folium.Marker(location=[38.655800, -87.274721],popup='<h3 style="color:green;">Marker2</h3>').add_to(m)
-        # save map data to data object
         data = io.BytesIO()
         m.save(data, close_file=False)
         m.save('map.html')
-        #self.build_report()
-
-        #mapper.setHtml(data.getvalue().decode())
-
-       # if map_flag == 1:
-            #mapper.closeEvent()
-            #self.widget.deleteLater()
-            #self.widget = QWebEngineView()
-            #self.widget.setObjectName("widget")
-        #    mapper.setHtml(data.getvalue().decode())
-        #    mapper.reload()
-            #self.gridLayout_2.addWidget(mapper, 4, 0, 2, 5)
-         #   print("\n \n executed map reload \n \n")
-
-        #else:
-        #    mapper.setHtml(data.getvalue().decode())
-            #self.widget.setHtml(data.getvalue().decode())
-        #    self.gridLayout_2.addWidget(mapper, 4, 0, 2, 5)
-        #    map_flag = 1
-        #    print("\n \n Executed map update \n \n")
-        #mapper.deleteLater()
 
         self.mapwidget.setHtml(data.getvalue().decode())
-        #self.mapwidget.show()
-        #print(self.mapwidget.show())
         self.layout.addWidget(self.mapwidget, 4, 0, 1, 9)
 
-        #print("added widget")
-        #self.buildreport()
+
 
 
 
@@ -703,7 +632,7 @@ class UI(QMainWindow):
         html = "<html><title>&nbsp; Commstat Status Report Data to HTML</title><body><STYLE TYPE='text/CSS'><!--/* The margin order is: top right bottom left */" \
                                                                                                           "BODY { margin: 0 auto;" \
                                                                                                           "font-family: Helvetica, Times, Geneva;" \
-                                                                                                          "font-size: 10pt;" \
+                                                                                                          "font-size: 8pt;" \
                                                                                                           "font-style: plain" \
                                                                                                           "text-align: center;" \
                                                                                                           "background-color: white;" \
@@ -717,6 +646,7 @@ class UI(QMainWindow):
         color1 = "green"
         color2 = "yellow"
         color3 = "red"
+        color4 = "gray"        
         for row in result:
             srdatetime = row[0]
             srstatus = row[5]
@@ -739,13 +669,15 @@ class UI(QMainWindow):
                     colorsr5 = color2
             if "3" in srstatus:
                 colorsr5 = color3
+				
             if "1" in srpow:
                 colorsr6 = color1
             if "2" in srpow:
                     colorsr6 = color2
             if "3" in srpow:
                 colorsr6 = color3
-
+            if "4" in srpow:
+                colorsr6 = color4
 
             if "1" in srh20:
                 colorsr7 = color1
@@ -753,13 +685,17 @@ class UI(QMainWindow):
                     colorsr7 = color2
             if "3" in srh20:
                 colorsr7 = color3
-
+            if "4" in srh20:
+                colorsr7 = color4
+                
             if "1" in srmed:
                 colorsr8 = color1
             if "2" in srmed:
                     colorsr8 = color2
             if "3" in srmed:
                 colorsr8 = color3
+            if "4" in srmed:
+                colorsr8 = color4
 
             if "1" in srota:
                 colorsr9 = color1
@@ -767,6 +703,8 @@ class UI(QMainWindow):
                     colorsr9 = color2
             if "3" in srota:
                 colorsr9 = color3
+            if "4" in srota:
+                colorsr9 = color4
 
             if "1" in srtrav:
                 colorsr10 = color1
@@ -774,49 +712,62 @@ class UI(QMainWindow):
                     colorsr10 = color2
             if "3" in srtrav:
                 colorsr10 = color3
-
+            if "4" in srtrav:
+                colorsr10 = color4
+                
             if "1" in srnet:
                 colorsr11 = color1
             if "2" in srnet:
                     colorsr11 = color2
             if "3" in srnet:
                 colorsr11 = color3
-
+            if "4" in srnet:
+                colorsr11 = color4
+                
             if "1" in srfuel:
                 colorsr12 = color1
             if "2" in srfuel:
                     colorsr12 = color2
             if "3" in srfuel:
                 colorsr12 = color3
-
+            if "4" in srfuel:
+                colorsr12 = color4
+                
             if "1" in srfood:
                 colorsr13 = color1
             if "2" in srfood:
                     colorsr13 = color2
             if "3" in srfood:
                 colorsr13 = color3
-
+            if "4" in srfood:
+                colorsr13 = color4
+                
             if "1" in srcrime:
                 colorsr14 = color1
             if "2" in srcrime:
                     colorsr14 = color2
             if "3" in srcrime:
                 colorsr14 = color3
-
+            if "4" in srcrime:
+                colorsr14 = color4
+                
             if "1" in srcivil:
                 colorsr15 = color1
             if "2" in srcivil:
                     colorsr15 = color2
             if "3" in srcivil:
                 colorsr15 = color3
-
+            if "4" in srcivil:
+                colorsr15 = color4
+                
             if "1" in srpolitical:
                 colorsr16 = color1
             if "2" in srpolitical:
                     colorsr16 = color2
             if "3" in srpolitical:
                 colorsr16 = color3
-
+            if "4" in srpolitical:
+                colorsr16 = color4
 
             html += "<tr><td>"
             html += "&nbsp; " +str(srdatetime)+" &nbsp; &nbsp;</td><td> &nbsp; &nbsp;"+row[1]+" &nbsp;&nbsp;</td><td>"+row[2]+" &nbsp;&nbsp; </td><td> &nbsp;&nbsp; "+row[3]+" &nbsp;&nbsp; </td><td>&nbsp;&nbsp;  "+row[4]+"&nbsp;&nbsp;</td><td style = background-color:"+colorsr5+";><font color = "+colorsr5+">&nbsp;"+row[5]+"&nbsp;</td><td style = background-color:"+colorsr6+";><font color = "+colorsr6+">&nbsp;"+row[6]+"&nbsp;</td><td style = background-color:"+colorsr7+";><font color = "+colorsr7+">&nbsp;"+row[7]+"&nbsp;</td><td style = background-color:"+colorsr8+";><font color = "+colorsr8+">&nbsp;"+row[8]+"&nbsp;</td><td style = background-color:"+colorsr9+";><font color = "+colorsr9+">&nbsp;"+row[9]+"&nbsp;</td><td style = background-color:"+colorsr10+";><font color = "+colorsr10+">&nbsp;"+row[10]+"&nbsp;</td><td style = background-color:"+colorsr11+";><font color = "+colorsr11+">&nbsp;"+row[11]+"&nbsp;</td><td style = background-color:"+colorsr12+";><font color = "+colorsr12+">&nbsp;"+row[12]+"&nbsp;</td><td style = background-color:"+colorsr13+";><font color = "+colorsr13+">&nbsp;"+row[13]+"&nbsp;</td><td style = background-color:"+colorsr14+";><font color = "+colorsr14+">&nbsp;"+row[14]+"&nbsp;</td><td style = background-color:"+colorsr15+";><font color = "+colorsr15+">&nbsp;"+row[15]+"&nbsp;</td><td style = background-color:"+colorsr16+";><font color = "+colorsr16+">&nbsp;"+row[16]+"&nbsp;</td><td>&nbsp;&nbsp;"+row[17]

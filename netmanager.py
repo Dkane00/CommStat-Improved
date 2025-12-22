@@ -536,70 +536,73 @@ class Ui_Form_Net_Manager(object):
         
 
 
-
-
+        
     def mapperWidget(self):
-        global mapper
-        global data
-        global map_flag
-        #global mapper
-        global selectednetid
-        if selectednetid < 1:
-            print("NETMANAGER Net ID Not Selected")
-            selectednetid = 1
+        global mapper, data, map_flag, selectednetid
 
+        # Remove old widget
         self.widget.deleteLater()
         self.widget = QWebEngineView()
         self.widget.setObjectName("widget")
 
-
-        mapper = QWebEngineView()
+        # Set map center
         coordinate = (38.8199286, -90.4782551)
-        m = folium.Map(
-            #tiles='Stamen Terrain',
-            zoom_start=4,
-            location=coordinate
 
+        # Create map with NO default tiles
+        m = folium.Map(
+            location=coordinate,
+            zoom_start=4,
+            tiles=None  # Disable Folium's default OpenStreetMap tiles
         )
 
+        # Add LOCAL tile layer (tilesPNG2 directory)
+        folium.raster_layers.TileLayer(
+            tiles='http://localhost:8000/{z}/{x}/{y}.png',
+            name='Local Tiles',
+            attr='Local Tiles',
+            max_zoom=8,  # Local tiles only up to zoom level 8
+            overlay=False,  # Base layer
+            control=False  # Hide layer toggle
+        ).add_to(m)
+
+        # Add ONLINE  tile layer (OpenStreetMap) for zoom > 7
+        folium.raster_layers.TileLayer(
+            tiles='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            name='Topo Tiles',
+            attr='OpenTopoMap',
+            min_zoom=8,  # Online tiles only from zoom level 8
+            overlay=False,  # Base layer
+            control=False  # Hide layer toggle
+        ).add_to(m)
+
+        # Add map markers from database (your existing marker logic)
         try:
             sqliteConnection = sqlite3.connect('traffic.db3')
             cursor = sqliteConnection.cursor()
-            today = QDate.currentDate()
-            todaystring2 = (today.toString(Qt.ISODate))
-            yesterday = today.addDays(-1).toString(Qt.ISODate)
 
-            netid = selectednetid
+            # Fetch check-ins for the selected net
+            if selectednetid < 1:
+                selectednetid = 1
+
             connection = sqlite3.connect('traffic.db3')
             cur = connection.cursor()
-            netstart1 = cur.execute("SELECT NETSTART FROM NETS WHERE NetId = ?", (netid,))
+            netstart1 = cur.execute("SELECT NETSTART FROM NETS WHERE NetId = ?", (selectednetid,))
             start1 = netstart1.fetchone()
 
-            netend1 = cur.execute("SELECT NETEND FROM NETS WHERE NetId = ?", (netid,))
+            netend1 = cur.execute("SELECT NETEND FROM NETS WHERE NetId = ?", (selectednetid,))
             end1 = netend1.fetchone()
-            connection = sqlite3.connect('traffic.db3')
-            cur = connection.cursor()
-            start = (start1[0])
+
+            start = start1[0]
             format_data = "%Y-%m-%d %H:%M"
             netstart = datetime.strptime(start, format_data)
-
-            end = (end1[0])
-            format_data = "%Y-%m-%d %H:%M"
+            end = end1[0]
             netend = datetime.strptime(end, format_data)
-            query = (
-                "SELECT gridlat, gridlong, callsign, ACK, date FROM checkins_Data WHERE date BETWEEN ? AND ?")
+
+            query = "SELECT gridlat, gridlong, callsign, ACK, date FROM checkins_Data WHERE date BETWEEN ? AND ?"
             cursor.execute(query, (netstart, netend))
-
-
-
-            #query = "SELECT gridlat, gridlong, callsign, date  FROM checkins_Data where groupname = ? and date like ? or date LIKE ?"
-            #cursor.execute(query, (selectedgroup, '%' + todaystring2 + '%', '%' + yesterday + '%'))
-
-
-            #sqlite_select_query = 'SELECT gridlat, gridlong, callsign, date FROM checkins_Data where groupname=?'
-            #cursor.execute(sqlite_select_query, (selectedgroup,))
             items = cursor.fetchall()
 
+            # Add markers to map
             for item in items:
                 glat = item[0]
                 glon = item[1]
@@ -607,24 +610,18 @@ class Ui_Form_Net_Manager(object):
                 ack = item[3]
                 utc = item[4]
 
+                html = '''<HTML><BODY><p style="color:blue;font-size:14px;">Checked In: %s<br>Ack: %s<br>Time: %s</p></BODY></HTML>''' % (call, ack, utc)
+                iframe = folium.IFrame(html, width=160, height=70)
+                popup = folium.Popup(iframe, min_width=100, max_width=160)
 
-
-
-                pinstring = ("Checked In:")
-                html = '''<HTML> <BODY><p style="color:blue;font-size:14px;">%s %s<br>
-                Ack'ed :%s<br>
-                Time :%s
-                </p></BODY></HTML>''' % (pinstring,call, ack, utc,)
-                iframe = folium.IFrame(html,
-                                       width=160,
-                                       height=70)
-
-                popup = folium.Popup(iframe,
-                                     min_width=100, max_width=160)
-                #folium.Marker(location=[glat, glon], popup=popup).add_to(m)
-                folium.CircleMarker(radius=6,fill=True, fill_color="darkblue",
-                 location=[glat, glon], popup=popup, icon=folium.Icon(color="red")).add_to(m)
-
+                folium.CircleMarker(
+                    radius=6,
+                    fill=True,
+                    fill_color="darkblue",
+                    location=[glat, glon],
+                    popup=popup,
+                    icon=folium.Icon(color="red")
+                ).add_to(m)
 
             cur.close()
             cursor.close()
@@ -632,52 +629,14 @@ class Ui_Form_Net_Manager(object):
         except sqlite3.Error as error:
             print("NETMANAGER Failed to read data from sqlite table", error)
         finally:
-            if (sqliteConnection):
+            if sqliteConnection:
                 sqliteConnection.close()
-         #       print("The SQLite connection is closed")
-        # return map
 
-        # folium.Marker(location=[38.655800, -87.274721],popup='<h3 style="color:green;">Marker2</h3>').add_to(m)
-        # save map data to data object
+        # Render map into QWebEngineView
         data = io.BytesIO()
         m.save(data, close_file=False)
-        #mapper.setHtml(data.getvalue().decode())
-
-       # if map_flag == 1:
-            #mapper.closeEvent()
-            #self.widget.deleteLater()
-            #self.widget = QWebEngineView()
-            #self.widget.setObjectName("widget")
-        #    mapper.setHtml(data.getvalue().decode())
-        #    mapper.reload()
-            #self.gridLayout_2.addWidget(mapper, 4, 0, 2, 5)
-         #   print("\n \n executed map reload \n \n")
-
-        #else:
-        #    mapper.setHtml(data.getvalue().decode())
-            #self.widget.setHtml(data.getvalue().decode())
-        #    self.gridLayout_2.addWidget(mapper, 4, 0, 2, 5)
-        #    map_flag = 1
-        #    print("\n \n Executed map update \n \n")
-        #mapper.deleteLater()
-
         self.widget.setHtml(data.getvalue().decode())
-        # self.widget.setHtml(data.getvalue().decode())
-
         self.gridLayout_2.addWidget(self.widget, 4, 0, 2, 5)
-
-
-
-        #self.gridLayout.addWidget.widget = QWebEngineView()
-        #mapper.setHtml(data.getvalue().decode())
-        #self.gridLayout_2.addWidget(mapper, 4, 0, 2, 5)
-
-
-
-        #print("Mapping completed")
-        #self.loadcheckins()
-        #QtCore.QTimer.singleShot(30000, self.mapperWidget)
-        #QtCore.QTimer.singleShot(30000, self.run_mapper)
 
     def run_mapper(self):
         global mapper

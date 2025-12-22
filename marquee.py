@@ -241,7 +241,7 @@ class Ui_FormMarquee(object):
         #x = msg.exec_()
 
         now = QDateTime.currentDateTime()
-        date = (now.toUTC().toString("yyyy-MM-dd HH:mm:ss"))
+        date = (now.toUTC().toString("yy-MM-dd HH:mm"))
         conn = sqlite3.connect("traffic.db3")
         cur = conn.cursor()
         conn.set_trace_callback(print)
@@ -311,7 +311,8 @@ class Ui_FormMarquee(object):
         x = msg.exec_()
 
         now = QDateTime.currentDateTime()
-        date = (now.toUTC().toString("yyyy-MM-dd HH:mm:ss"))
+        
+        date = (now.toUTC().toString("yy-MM-dd HH:mm"))
         conn = sqlite3.connect("traffic.db3")
         cur = conn.cursor()
         conn.set_trace_callback(print)

@@ -110,23 +110,40 @@ class Ui_FormMembers(object):
         print("starting mapping")
         mapper = QWebEngineView()
         coordinate = (38.8199286, -90.4782551)
-        m = folium.Map(
-            #tiles='Stamen Terrain',
-            zoom_start=4,
-            location=coordinate
 
+        # Create map with NO default tiles
+        m = folium.Map(
+            location=coordinate,
+            zoom_start=4,
+            tiles=None  # Disable Folium's default OpenStreetMap tiles
         )
 
+        # Add LOCAL tile layer (tilesPNG2 directory)
+        folium.raster_layers.TileLayer(
+            tiles='http://localhost:8000/{z}/{x}/{y}.png',
+            name='Local Tiles',
+            attr='Local Tiles',
+            max_zoom=8,  # Local tiles only up to zoom level 8
+            control=False  # Hide layer toggle
+        ).add_to(m)
+
+        # Add ONLINE tile layer (OpenTopoMap) for zoom > 8
+        folium.raster_layers.TileLayer(
+            tiles='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            name='OpenStreetMap',
+            attr='OpenStreetMap',
+            min_zoom=8,  # Online tiles only from zoom level 8
+            control=False  # Hide layer toggle
+        ).add_to(m)
+
+        # Add map markers from database
         try:
             print("starting data pull for map")
             sqliteConnection = sqlite3.connect('traffic.db3')
             cursor = sqliteConnection.cursor()
 
-            #query = "SELECT datetime, idnum, callsign, message FROM bulletins_Data where groupid = ?"
-           # result = connection.execute(query, (selectedgroup,))
-
-            sqlite_select_query = 'SELECT gridlat, gridlong, callsign, date FROM members_Data where groupname1=? OR groupname2=?'
-            cursor.execute(sqlite_select_query, (selectedgroup,selectedgroup,))
+            sqlite_select_query = 'SELECT gridlat, gridlong, callsign, date FROM members_Data WHERE groupname1=? OR groupname2=?'
+            cursor.execute(sqlite_select_query, (selectedgroup, selectedgroup,))
             items = cursor.fetchall()
 
             for item in items:
@@ -134,64 +151,59 @@ class Ui_FormMembers(object):
                 glon = item[1]
                 call = item[2]
                 utc = item[3]
-                    
-                
+
                 now = QDateTime.currentDateTime()
                 recent = now.addSecs(-60 * 60)
-                date = (recent.toUTC().toString("yyyy-MM-dd HH:mm:ss"))
-                #print(date)
-                #print(utc)
-                if utc > date :
-                    #print ("Member List opened : This Member station heard in the last hour : "+call, utc, date)
-                    #print(colored('hello', 'red'), colored('world', 'green'))
+                date = recent.toUTC().toString("yyyy-MM-dd HH:mm:ss")
+                flag = "N"
+
+                if utc > date:
                     flag = "Y"
 
-                pinstring = (" Last Heard :")
-                html = '''<HTML> <BODY><p style="color:blue;font-size:14px;">%s<br>
-                %s<br>
-                %s
-                </p></BODY></HTML>''' % (call, pinstring, utc)
-                iframe = folium.IFrame(html,
-                                       width=160,
-                                       height=70)
+                pinstring = "Last Heard:"
+                html = f'''
+                <HTML><BODY>
+                    <p style="color:blue;font-size:14px;">
+                        {call}<br>{pinstring}<br>{utc}
+                    </p>
+                </BODY></HTML>
+                '''
+                iframe = folium.IFrame(html, width=160, height=70)
+                popup = folium.Popup(iframe, min_width=100, max_width=160)
 
-                popup = folium.Popup(iframe,
-                                     min_width=100, max_width=160)
-                #folium.Marker(location=[glat, glon], popup=popup).add_to(m)
-                if "Y" in flag:
-                    #print("found Yes flag "+flag+" "+call+" " +utc)
-                    
-                    folium.CircleMarker(color = "green", radius=10,fill=True, fill_color="green",
-                 location=[glat, glon], popup=popup, icon=folium.Icon(color="red")).add_to(m)
+                if flag == "Y":
+                    folium.CircleMarker(
+                        color="green",
+                        radius=10,
+                        fill=True,
+                        fill_color="green",
+                        location=[glat, glon],
+                        popup=popup
+                    ).add_to(m)
                 else:
-                    folium.CircleMarker( radius=6,fill=True, fill_color="darkblue",
-                 location=[glat, glon], popup=popup, icon=folium.Icon(color="red")).add_to(m)
-                    #print("Should not be flagged :"+flag)
-
-            
+                    folium.CircleMarker(
+                        radius=6,
+                        fill=True,
+                        fill_color="darkblue",
+                        location=[glat, glon],
+                        popup=popup
+                    ).add_to(m)
 
             cursor.close()
 
         except sqlite3.Error as error:
             print("Failed to read data from sqlite table", error)
         finally:
-            if (sqliteConnection):
+            if sqliteConnection:
                 sqliteConnection.close()
-         #       print("The SQLite connection is closed")
-        # return map
 
-        # folium.Marker(location=[38.655800, -87.274721],popup='<h3 style="color:green;">Marker2</h3>').add_to(m)
-        # save map data to data object
+        # Render map into QWebEngineView
         data = io.BytesIO()
         m.save(data, close_file=False)
-
-        #self.gridLayout.addWidget()widget = QWebEngineView()
         mapper.setHtml(data.getvalue().decode())
         self.gridLayout_2.addWidget(mapper, 2, 0, 1, 2)
         print("Mapping completed")
         self.loadmembers()
-        #QtCore.QTimer.singleShot(30000, self.mapperWidget)
-        #QtCore.QTimer.singleShot(90000, self.run_mapper)
 
     def run_mapper(self):
         global mapper

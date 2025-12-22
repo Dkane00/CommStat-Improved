@@ -164,12 +164,12 @@ class Ui_FormJS8Mail(object):
     def transmit(self):
             #emailcmd = "@APRSIS CMD :EMAIL-2  :";
             #emailtail = "{03}";
-            message = ("@"+selectedgroup+ "  , "+state+" "+grid+", CS1")
+            message = ("@"+selectedgroup+ "  , "+state+" "+grid+", CS 2.3.0")
             messageType = js8callAPIsupport.TYPE_TX_SEND
             #mode = "EMAIL-2"
             #mode = mode.ljust(9)
             messageString = message  # mode+" "+self.tocall.get()+" "+text
-            self.prGreen("CS1 Station Response Transmitted")
+            self.prGreen("CS1.2.0.0 Station Response Transmitted")
             self.sendMessage(messageType, messageString)
             self.closeapp()
 

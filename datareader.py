@@ -71,7 +71,7 @@ def oscheck():
         bull2 = 4
     if winos in (platform.platform()):
         print("Datareader this is Windows OS")
-        OS_Directed = "\DIRECTED.TXT"
+        OS_Directed = r"\DIRECTED.TXT"
         # sudo apt install ./python-pyqt5.qtwebengine_5.15.2-2_arm64.deb
     if linuxos in (platform.platform()):
         print("Datareader this is Linux OS")
@@ -176,7 +176,7 @@ def parseDirected():
                 #forwarded statrep
                 ###
                 if "{F%}" in str1:  # THIS IS A Forwarded STATREP
-                    mylist = ['1', '2', '3', '4']
+                    mylist = ['1', '2', '3', '4', '5']
                     arr = str1.split('\t')
                     utc = arr[0]
                     callsignmix = arr[4]
@@ -197,24 +197,26 @@ def parseDirected():
                     orig_call = arr2[6]
                     #print(orig_call)
                     if prec1 == "1":
-                        prec = "Routine"
+                        prec = "My Location"
 
                     if prec1 == "2":
-                        prec = "Priority"
+                        prec = "My Community"
 
                     if prec1 == "3":
-                        prec = "Immediate"
+                        prec = "My County"
 
                     if prec1 == "4":
-                        prec = "Flash"
-                    # for item in mylist:
+                        prec = "My Region"
+                    if prec1 == "5":
+                        prec = "Other Location"
+    # for item in mylist:
                     #    if item in prec1:
                     #        print("StatRep failed for null precedence field :"+str1)
                     #        continue
                     #   else:
                     #      print("here is the else statement")
 
-                    if prec1 not in ["1", "2", "3", "4"]:
+                    if prec1 not in ["1", "2", "3", "4", "5"]:
                         prRed("Forwarded StatRep failed for null precedence field :" + str1 + " \n \n")
                         continue
 
@@ -223,51 +225,51 @@ def parseDirected():
                     srcode = arr2[4]
                     arr5 = list(srcode)
                     status = arr5[0]
-                    if status not in ["1", "2", "3"]:
+                    if status not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null status field :" + str1 + " \n \n")
                         continue
                     commpwr = arr5[1]
-                    if commpwr not in ["1", "2", "3"]:
+                    if commpwr not in ["1", "2", "3", "4"]:
                         print("Forwarded StatRep failed for null commpwr field :" + str1 + " \n \n")
                         continue
                     pubwtr = arr5[2]
-                    if pubwtr not in ["1", "2", "3"]:
+                    if pubwtr not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null pubwtr field :" + str1 + " \n \n")
                         continue
                     med = arr5[3]
-                    if med not in ["1", "2", "3"]:
+                    if med not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null med field :" + str1 + " \n \n")
                         continue
                     ota = arr5[4]
-                    if ota not in ["1", "2", "3"]:
+                    if ota not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null ota field :" + str1 + " \n \n")
                         continue
                     trav = arr5[5]
-                    if trav not in ["1", "2", "3"]:
+                    if trav not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null trav field :" + str1 + " \n \n")
                         continue
                     net = arr5[6]
-                    if net not in ["1", "2", "3"]:
+                    if net not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null net field :" + str1 + " \n \n")
                         continue
                     fuel = arr5[7]
-                    if fuel not in ["1", "2", "3"]:
+                    if fuel not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null fuel field :" + str1 + " \n \n")
                         continue
                     food = arr5[8]
-                    if food not in ["1", "2", "3"]:
+                    if food not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null food field :" + str1 + " \n \n")
                         continue
                     crime = arr5[9]
-                    if crime not in ["1", "2", "3"]:
+                    if crime not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null crime field :" + str1 + " \n \n")
                         continue
                     civil = arr5[10]
-                    if civil not in ["1", "2", "3"]:
+                    if civil not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null or missing civil field :" + str1 + " \n \n")
                         continue
                     pol = arr5[11]
-                    if pol not in ["1", "2", "3"]:
+                    if pol not in ["1", "2", "3", "4"]:
                         prRed("Forwarded StatRep failed for null pol field :" + str1 + " \n \n")
                         continue
 
@@ -289,7 +291,7 @@ def parseDirected():
 
                 #original Statrep
                 if "{&%}" in str1: #THIS IS STATREP
-                    mylist = ['1','2','3','4']
+                    mylist = ['1','2','3','4' '5']
                     arr = str1.split('\t')
                     utc = arr[0]
                     callsignmix = arr[4]
@@ -308,16 +310,20 @@ def parseDirected():
                     curgrid = arr2[1]
                     prec1 = arr2[2]
                     if prec1 == "1":
-                        prec = "Routine"
+                        prec = "My Location"
 
                     if prec1 == "2":
-                        prec = "Priority"
+                        prec = "My Community"
 
                     if prec1 == "3":
-                        prec = "Immediate"
+                        prec = "My County"
 
                     if prec1 == "4":
-                        prec = "Flash"
+                        prec = "My Region"
+                        
+                    if prec1 == "5":
+                        prec = "Other Location"                       
+                        
                     #for item in mylist:
                     #    if item in prec1:
                     #        print("StatRep failed for null precedence field :"+str1)
@@ -325,7 +331,7 @@ def parseDirected():
                      #   else:
                       #      print("here is the else statement")
                       
-                    if prec1 not in ["1","2","3","4"] :
+                    if prec1 not in ["1","2","3","4", "5"] :
                         prRed("StatRep failed for null precedence field :"+str1+" \n \n")
                         continue
                     
@@ -338,47 +344,47 @@ def parseDirected():
                         prRed("StatRep failed for null status field :"+str1+" \n \n")
                         continue
                     commpwr = arr5[1]
-                    if commpwr not in ["1","2","3"]:
+                    if commpwr not in ["1","2","3", "4"]:
                         print("StatRep failed for null commpwr field :"+str1+" \n \n")
                         continue
                     pubwtr = arr5[2]
-                    if pubwtr not in ["1","2","3"]:
+                    if pubwtr not in ["1","2","3", "4"]:
                         prRed("StatRep failed for null pubwtr field :"+str1+" \n \n")
                         continue
                     med = arr5[3]
-                    if med not in ["1","2","3"]:
+                    if med not in ["1","2","3", "4"]:
                         prRed("StatRep failed for null med field :"+str1+" \n \n")
                         continue
                     ota = arr5[4]
-                    if ota not in ["1","2","3"]:
+                    if ota not in ["1","2","3", "4"]:
                         prRed("StatRep failed for null ota field :"+str1+" \n \n")
                         continue
                     trav = arr5[5]
-                    if trav not in["1","2","3"] :
+                    if trav not in["1","2","3", "4"] :
                         prRed("StatRep failed for null trav field :"+str1+" \n \n")
                         continue
                     net = arr5[6]
-                    if net not in ["1","2","3"]:
+                    if net not in ["1","2","3", "4"]:
                         prRed("StatRep failed for null net field :"+str1+" \n \n")
                         continue
                     fuel = arr5[7]
-                    if fuel not in ["1","2","3"]:
+                    if fuel not in ["1","2","3", "4"]:
                         prRed("StatRep failed for null fuel field :"+str1+" \n \n")
                         continue
                     food = arr5[8]
-                    if food not in ["1","2","3"]:
+                    if food not in ["1","2","3", "4"]:
                         prRed("StatRep failed for null food field :"+str1+" \n \n")
                         continue
                     crime = arr5[9]
-                    if crime not in ["1","2","3"] :
+                    if crime not in ["1","2","3", "4"] :
                         prRed("StatRep failed for null crime field :"+str1+" \n \n")
                         continue
                     civil = arr5[10]
-                    if civil not in ["1","2","3"]:
+                    if civil not in ["1","2","3", "4"]:
                         prRed("StatRep failed for null or missing civil field :"+str1+" \n \n")
                         continue
                     pol = arr5[11]
-                    if pol not in ["1","2","3"]:
+                    if pol not in ["1","2","3", "4"]:
                         prRed("StatRep failed for null pol field :"+str1+" \n \n")
                         continue
                         

@@ -1,3 +1,10 @@
+
+# comment: mod to make directed not wrap but scroll. Only mod and have not updated versions on the CS Responder as I wait to see if I add more mods. Changed "zoom_start..." to 3 to see if full USA map holds as CS refreshes. Map size has been increased and recentered and zoomed now 1.0.7.4
+# comment: 2.0.0 offline map for Net Manager and Members list.
+# comment: 2.1.0 added a click to view_statrep. Click on a map pin or statrep.
+# 2.1.1 added a text filed to a displayed statrep. Allowing a brevity report to be pasted in then saved to the html output
+# comment: 2.2 added brevity entry and decode
+# comment: 2.3 added GridFinder
 import subprocess
 import sys
 import webbrowser
@@ -5,16 +12,16 @@ from random import randint
 import feedparser
 from file_read_backwards import FileReadBackwards
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QApplication, QGridLayout, QMainWindow, QPlainTextEdit, QWidget, QTableWidget, QMenu, \
-    QAction, qApp, QScrollArea, QLabel, QDialog, QInputDialog
+from PyQt5.QtGui import QIcon, QColor, QCursor
+from PyQt5.QtWidgets import QApplication, QGridLayout, QMainWindow, QPlainTextEdit, QWidget, QTableWidget, QTableWidgetItem, QMenu, \
+    QAction, qApp, QScrollArea, QLabel, QDialog, QInputDialog, QMessageBox
 from PyQt5.QtCore import QUrl, QTime, QTimer, QDateTime, Qt, pyqtSignal
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile, QWebEnginePage
 import io
 import folium
 import sqlite3
 import os
-import filter
+import socket
 import settings
 from settings import Ui_FormSettings
 from configparser import ConfigParser
@@ -27,17 +34,36 @@ from statrep import Ui_FormStatRep
 from bulletin import Ui_FormBull
 from marquee import Ui_FormMarquee
 from checkin import Ui_FormCheckin
-from filter import Ui_FilterForm
 from members import Ui_FormMembers
 from heardlist import Ui_FormHeard
-#from roster import Ui_FormRoster
 from statack import Ui_FormStatack
-#from datareset import Ui_FormReset
 from about import Ui_FormAbout
-#from addcall import Ui_FormAddCall
 import platform
 import maidenhead as mh
+import http.server
+import socketserver
 
+# Define the handler to serve files from the 'tilesPNG2' directory
+class TileHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory="tilesPNG2", **kwargs)
+
+# Function to start the local server
+def start_local_server(port=8000):
+    ports = [port, port + 1]  # Try default port and next port
+    for p in ports:
+        try:
+            with socketserver.TCPServer(("", p), TileHandler) as httpd:
+                print(f"Serving at port {p}")
+                httpd.serve_forever()
+            return p  # Return the successful port
+        except OSError as e:
+            if e.errno == 98:  # Address already in use
+                print(f"Port {p} is in use, trying next port...")
+                continue
+            raise
+    print("Failed to start server: all ports in use")
+    return None
 
 callsign = ""
 callsignSuffix = ""
@@ -62,7 +88,7 @@ bull1 = 1
 bull2 = 3
 OS_Directed = ""
 
-statelist = ['AP', 'AO', 'AO', 'BO', 'CN', 'CM', 'CO', 'DN', 'DM', 'DL', 'DO', 'EN', 'EM','EL','EO','FN','FM','FO']
+statelist = ['AP', 'AO', 'BO', 'CN', 'CM', 'CO', 'DN', 'DM', 'DL', 'DO', 'EN', 'EM','EL','EO','FN','FM','FO']
 start = '2023-01-01 05:00'
 end = '2030-02-23 00:56'
 green = True
@@ -71,10 +97,32 @@ red = True
 grids = statelist
 loadflag = 0
 
+class CustomWebEnginePage(QWebEnginePage):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_widget = parent
 
-
+    def acceptNavigationRequest(self, url, navigation_type, is_main_frame):
+        if url.path().startswith("/statrep/"):
+            srid = url.path().replace("/statrep/", "").strip()
+            if srid:
+                try:
+                    view_statrep_path = os.path.join(os.getcwd(), "view_statrep.py")
+                    subprocess.Popen([sys.executable, view_statrep_path, srid])
+                    print(f"Launched view_statrep.py with SRid: {srid}")
+                except Exception as e:
+                    print(f"Failed to launch view_statrep.py: {e}")
+            return False  # Prevent navigation
+        return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
 
 class Ui_MainWindow(QWidget):
+    def __init__(self):
+        super(Ui_MainWindow, self).__init__()
+        # Start the server in a separate thread
+        self.server_thread = threading.Thread(target=start_local_server)
+        self.server_thread.daemon = True  # Daemonize thread to ensure it exits when the main program does
+        self.server_thread.start()
+
     def setupUi(self, MainWindow):
         global marqueecolor
         global bull1
@@ -88,7 +136,7 @@ class Ui_MainWindow(QWidget):
 
         self.oscheck()
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1400, 788)
+        MainWindow.resize(1024, 768)
         icon = QtGui.QIcon()
         icon.addPixmap(QtGui.QPixmap("USA-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         MainWindow.setWindowIcon(icon)
@@ -132,15 +180,15 @@ class Ui_MainWindow(QWidget):
         self.gridLayout_2.addWidget(self.label_3, 0, 0, 1, 1)
         self.label_3.setText("Current Group : AMMRRON")
 
-
         self.readconfig()
 
         self.tableWidget = QtWidgets.QTableWidget(self.centralwidget)
         self.tableWidget.setObjectName("tableWidget")
         self.tableWidget.setColumnCount(0)
         self.tableWidget.setRowCount(0)
-        self.gridLayout_2.addWidget(self.tableWidget, 1, 0, 1, 4)
-        #self.loadData()
+        # Connect itemClicked signal for left-click with chooser
+        self.tableWidget.itemClicked.connect(self.handleTableClick)
+        self.gridLayout_2.addWidget(self.tableWidget, 1, 0, 1, 5)
 
         if "1" in green:
             greenstat = "ON"
@@ -154,8 +202,6 @@ class Ui_MainWindow(QWidget):
             redstat = "ON"
         else:
             redstat = "OFF"
-
-
 
         self.label_start = QtWidgets.QLabel(self.centralwidget)
         font = QtGui.QFont()
@@ -177,67 +223,35 @@ class Ui_MainWindow(QWidget):
         self.gridLayout_2.addWidget(self.label_filters, 2, 1, 1, 3)
         self.label_filters.setText(" Red : "+redstat+" |  Grids : "+grids)
 
-        #self.filtersTextEdit = QtWidgets.QPlainTextEdit(self.centralwidget)
-        #self.filtersTextEdit.setObjectName("filtersTextEdit")
-        #self.gridLayout_2.addWidget(self.filtersTextEdit, 2, 0, 1, 4)
-
         self.plainTextEdit = QtWidgets.QPlainTextEdit(self.centralwidget)
         self.plainTextEdit.setObjectName("plainTextEdit")
         self.plainTextEdit.setFont(font)
-        self.gridLayout_2.addWidget(self.plainTextEdit, 3, 0, 1, 4)
 
+        # Set word wrap mode to NoWrap
+        self.plainTextEdit.setWordWrapMode(QtGui.QTextOption.NoWrap)
 
-        
+        # Enable vertical and horizontal scrollbars
+        self.plainTextEdit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.plainTextEdit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
+        self.gridLayout_2.addWidget(self.plainTextEdit, 3, 2, 1, 3)
 
-        #self.widget = QtWidgets.QWidget(self.centralwidget)
-        #self.setObjectName("widget")
-        #self.gridLayout_2.addWidget(self.widget, 3, 0, 1, 1)
-        #self.mapperWidget()
-        #mapper.setHtml(data.getvalue().decode())
-        #self.gridLayout_2.addWidget(mapper, 3, 0, 1, 1)
-        
-
-        
-        
         self.widget = QWebEngineView(self.centralwidget)
         self.setObjectName("widget")
-        self.gridLayout_2.addWidget(self.widget, 4, 0, 1, 1)
-        
-        #print("Mapping completed")
+        # Set custom QWebEnginePage to handle statrep URLs
+        custom_page = CustomWebEnginePage(self)
+        self.widget.setPage(custom_page)
+        self.gridLayout_2.addWidget(self.widget, 3, 0, 2, 2)
 
-
-        #Bulletins Widget
         self.tableWidget_2 = QtWidgets.QTableWidget(self.centralwidget)
         self.tableWidget_2.setObjectName("tableWidget_2")
         self.tableWidget_2.setColumnCount(0)
         self.tableWidget_2.setRowCount(0)
-        #self.gridLayout_2.addWidget(self.tableWidget_2, 3, 1, 1, 3)
-        self.gridLayout_2.addWidget(self.tableWidget_2, 4, 1, 1, 3)
-        
-        #self.loadbulletins()
+        self.gridLayout_2.addWidget(self.tableWidget_2, 4, 2, 1, 3)
 
-        self.gridLayout_2.setRowStretch(0, 0);
-        self.gridLayout_2.setRowStretch(1, 1);
-        #self.gridLayout_2.setRowStretch(2, 1);
-        #self.gridLayout_2.setRowStretch(3, 1);
-        self.gridLayout_2.setRowStretch(4, 1);
-        #self.gridLayout.setRowStretch(0, 3);
-        #self.gridLayout.setRowStretch(1, 1);
-        #self.gridLayout.setRowStretch(2, 2);
-        #self.gridLayout_2.setColumnStretch(0, 1)
-        #self.gridLayout_2.setColumnStretch(1, 1)
-        #self.gridLayout_2.setColumnStretch(3,1)
-        #self.gridLayout_2.setColumnStretch(4,1)
-
-        #self.actionExit_2 = QAction('&actionEXIT', MainWindow)
-        #self.actionExit_2.setShortcut('Ctrl+Q')
-        #self.actionExit_2.setStatusTip('APPLICATION EXIT')
-
-
-        #self.actionYellow.triggered.connect(lambda: self.change("yellow"))
-
-
+        self.gridLayout_2.setRowStretch(0, 0)
+        self.gridLayout_2.setRowStretch(1, 1)
+        self.gridLayout_2.setRowStretch(4, 1)
 
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QtWidgets.QMenuBar(MainWindow)
@@ -268,9 +282,6 @@ class Ui_MainWindow(QWidget):
         self.actionMEMBER_LIST = QtWidgets.QAction(MainWindow)
         self.actionMEMBER_LIST.setObjectName("actionMEMBER_LIST")
 
-        #self.actionHEARD_LIST = QtWidgets.QAction(MainWindow)
-        #self.actionHEARD_LIST.setObjectName("actionHEARD_LIST")
-
         self.actionSTATREP_ACK = QtWidgets.QAction(MainWindow)
         self.actionSTATREP_ACK.setObjectName("actionSTATREP_ACK")
         self.actionNET_ROSTER = QtWidgets.QAction(MainWindow)
@@ -282,12 +293,6 @@ class Ui_MainWindow(QWidget):
         self.actionSETTINGS = QtWidgets.QAction(MainWindow)
         self.actionSETTINGS.setObjectName("actionSETTINGS")
         
-        #self.actionADDCALL = QtWidgets.QAction(MainWindow)
-        #self.actionADDCALL.setObjectName("actionADDCALL")
-        
-        
-        #self.actionDATA_RESET = QtWidgets.QAction(MainWindow)
-        #self.actionDATA_RESET.setObjectName("actionDATA_RESET")
         self.actionHELP = QtWidgets.QAction(MainWindow)
         self.actionHELP.setObjectName("actionHELP")
         self.actionABOUT = QtWidgets.QAction(MainWindow)
@@ -295,7 +300,6 @@ class Ui_MainWindow(QWidget):
 
         self.actionEXIT_2 = QtWidgets.QAction(MainWindow)
         self.actionEXIT_2.setObjectName("actionEXIT_2")
-
 
         self.menuEXIT.addAction(self.actionJS8EMAIL)
         self.actionJS8EMAIL.triggered.connect(self.js8email_window)
@@ -306,15 +310,8 @@ class Ui_MainWindow(QWidget):
         self.menuEXIT.addAction(self.actionNET_CHECK_IN)
         self.actionNET_CHECK_IN.triggered.connect(self.checkin_window)
 
-
-
-
         self.menuEXIT.addAction(self.actionMEMBER_LIST)
         self.actionMEMBER_LIST.triggered.connect(self.members_window)
-
-        #self.menuEXIT.addAction(self.actionHEARD_LIST)
-        #self.actionHEARD_LIST.triggered.connect(self.heard_window)
-
 
         self.menuEXIT.addSeparator()
         self.menuEXIT.addAction(self.actionSTATREP_ACK)
@@ -335,13 +332,7 @@ class Ui_MainWindow(QWidget):
 
         self.menuEXIT.addAction(self.actionSETTINGS)
         self.actionSETTINGS.triggered.connect(self.settings_window)
-        
-        #self.menuEXIT.addAction(self.actionADDCALL)
-        #self.actionADDCALL.triggered.connect(self.addcall_window)
 
-
-        #self.menuEXIT.addAction(self.actionDATA_RESET)
-        #self.actionDATA_RESET.triggered.connect(self.reset_window)
         self.menuEXIT.addAction(self.actionHELP)
         self.actionHELP.triggered.connect(self.open_webbrowser)
         self.menuEXIT.addAction(self.actionABOUT)
@@ -361,54 +352,41 @@ class Ui_MainWindow(QWidget):
         self.showTime()
 
         self.timeLine = QtCore.QTimeLine()
-        self.timeLine.setCurveShape(QtCore.QTimeLine.LinearCurve)                   # linear Timeline
+        self.timeLine.setCurveShape(QtCore.QTimeLine.LinearCurve)
         self.timeLine.frameChanged.connect(self.setText)
         self.timeLine.finished.connect(self.nextNews)
         self.signalMapper = QtCore.QSignalMapper(self)
         
         self.oscheck()
 
-        #time.sleep(1)
-
-        #self.loadbulletins()
-
         self.feed()
-        #self.directed()
         self.filetest()
 
-
-        finalpath = os.path.normpath(path)
-        #print(finalpath)
-        #watch = QtCore.QFileSystemWatcher(self)
-        #watch.addPath(finalpath)
-        #print("this is finalpath"+finalpath)
-        #watch.fileChanged.connect(self.thread)
-        #print("JS8 file changed")
-
-
-
-        finalpath2 = os.path.abspath(os.getcwd())
-        finalpath3 = finalpath2+"/copyDIRECTED.TXT"
-        #watch2 = QtCore.QFileSystemWatcher(self)
-        #watch2.addPath(finalpath3)
-        #print("this is finalpath3 "+finalpath3)
-        #watch2.fileChanged.connect(self.directed)
-        
-        #finalpath2 = os.path.abspath(os.getcwd())
-        #finalpath4 = finalpath2+"\\traffic.db3"
-        #watch3 = QtCore.QFileSystemWatcher(self)
-        #watch3.addPath(finalpath4)
-        #print(finalpath3)
-        #watch3.fileChanged.connect(self.directed)
-
-
-
-
-
+    def handleTableClick(self, item):
+        """Handle left-click on tableWidget with a chooser dialog positioned near the mouse."""
+        row = item.row()
+        if row >= 0:
+            srid = self.tableWidget.item(row, 1).text()
+            msg = QMessageBox()
+            msg.setWindowTitle("View StatRep")
+            msg.setText(f"View StatRep for SRid {srid}?")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.Yes)
+            # Position dialog near mouse cursor
+            mouse_pos = QCursor.pos()
+            msg.move(mouse_pos.x() + 10, mouse_pos.y() + 10)  # Offset slightly for visibility
+            response = msg.exec_()
+            if response == QMessageBox.Yes:
+                try:
+                    view_statrep_path = os.path.join(os.getcwd(), "view_statrep.py")
+                    subprocess.Popen([sys.executable, view_statrep_path, srid])
+                    print(f"Launched view_statrep.py with SRid: {srid}")
+                except Exception as e:
+                    print(f"Failed to launch view_statrep.py: {e}")
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "CommStat Ver 1.0.5"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "CommStat V 2.3.0 Offline Map / Modified by KD9DSS"))
         self.actionFilter.setText(_translate("MainWindow", "DISPLAY FILTER"))
         self.actionData.setText(_translate("MainWindow", "DATA MANAGER"))
         self.label.setText(_translate("MainWindow", "TextLabel Marquee"))
@@ -419,21 +397,14 @@ class Ui_MainWindow(QWidget):
         self.actionSTATREP.setText(_translate("MainWindow", "STATREP"))
         self.actionNET_CHECK_IN.setText(_translate("MainWindow", "NET CHECK IN"))
         self.actionMEMBER_LIST.setText(_translate("MainWindow", "MEMBER LIST"))
-
-        #self.actionHEARD_LIST.setText(_translate("MainWindow", "HEARD LIST"))
-
         self.actionSTATREP_ACK.setText(_translate("MainWindow", "STATREP ACK"))
         self.actionNET_ROSTER.setText(_translate("MainWindow", "NET MANAGER"))
         self.actionNEW_MARQUEE.setText(_translate("MainWindow", "NEW MARQUEE"))
         self.actionFLASH_BULLETIN.setText(_translate("MainWindow", "FLASH BULLETIN"))
         self.actionSETTINGS.setText(_translate("MainWindow", "SETTINGS"))
-        #self.actionADDCALL.setText(_translate("MainWindow", "ADDCALL"))
-        #self.actionDATA_RESET.setText(_translate("MainWindow", "DATA RESET"))
-        self.actionABOUT.setText(_translate("MainWindow", "ABOUT"))
         self.actionHELP.setText(_translate("MainWindow", "HELP"))
+        self.actionABOUT.setText(_translate("MainWindow", "ABOUT"))
         self.actionEXIT_2.setText(_translate("MainWindow", "EXIT"))
-
-
 
     def oscheck(self):
         global OS
@@ -450,21 +421,15 @@ class Ui_MainWindow(QWidget):
             bull2 = 4
         if winos in (platform.platform()):
             print("Commstat this is Windows OS")
-            OS_Directed = "\DIRECTED.TXT"
-        # sudo apt install ./python-pyqt5.qtwebengine_5.15.2-2_arm64.deb
+            OS_Directed = r"\DIRECTED.TXT"
         if linuxos in (platform.platform()):
             print("Commstat this is Linux OS")
             OS_Directed = "/DIRECTED.TXT"
-
         else:
-            # print("This is not 64bit PiOS")
-            # OS = "Mint"
             print("Commstat operating System is :" + platform.platform())
             print("Commstat Python version is :" + platform.python_version())
 
-
     def readconfig(self):
-        # Read config.ini file
         config_object = ConfigParser()
         config_object.read("config.ini")
         global callsign
@@ -482,16 +447,10 @@ class Ui_MainWindow(QWidget):
         global red
         global grids
 
-        # Get the password
         userinfo = config_object["USERINFO"]
-        #print("callsign is {}".format(userinfo["callsign"]))
-        #print("callsignsuffix is {}".format(userinfo["callsignsuffix"]))
-        #print("group1 is {}".format(userinfo["group1"]))
-        #print("group2 is {}".format(userinfo["group2"]))
-        #print("grid is {}".format(userinfo["grid"]))
         systeminfo = config_object["DIRECTEDCONFIG"]
         filter = config_object["FILTER"]
-        #print("file path  is {}".format(systeminfo["path"]))
+
         callsign = format(userinfo["callsign"])
         callsignSuffix = format(userinfo["callsignsuffix"])
         group1 = format(userinfo["group1"])
@@ -500,8 +459,6 @@ class Ui_MainWindow(QWidget):
         path1 = format(systeminfo["path"])
         path = (path1+""+OS_Directed)
         selectedgroup = format(userinfo["selectedgroup"])
-        #print("this is the new path :"+path)
-        #print(selectedgroup)
         start = format(filter["start"])
         end = format(filter["end"])
         green = format(filter["green"])
@@ -509,27 +466,19 @@ class Ui_MainWindow(QWidget):
         red = format(filter["red"])
         grids = format(filter["grids"])
 
-
-
-
-
         if (callsign =="NOCALL"):
             self.settings_window()
-            
+
     def filetest(self):
         global path
-        global directedsize    # path
-        #print("started file test")
+        global directedsize
         pathlocal = path
         status = os.stat(path)
         statussize = status.st_size
-        #print("Here is the current Directed size : "+str(status.st_size))
-        #print("Here is the previous Directed size :"+str(directedsize))
         if statussize != directedsize:
             directedsize = statussize
             self.directed()
             QtCore.QTimer.singleShot(3000, self.directed)
-            #print("ran second direct") 
             QtCore.QTimer.singleShot(30000, self.filetest)
         else:
             QtCore.QTimer.singleShot(30000, self.filetest)
@@ -539,168 +488,84 @@ class Ui_MainWindow(QWidget):
         dialog.ui = Ui_FormSettings()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
-
-
 
     def settings_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormSettings()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
-        
-    #def addcall_window(self):
-    #    dialog = QtWidgets.QDialog()
-    #    dialog.ui = Ui_FormAddCall()
-    #    dialog.ui.setupUi(dialog)
-    #    dialog.exec_()
-    #    #dialog.show()
-
-
 
     def js8email_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormJS8Mail()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
-
 
     def js8sms_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormJS8SMS()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
-
 
     def statrep_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormStatRep()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
 
     def bull_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormBull()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
-
 
     def marquee_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormMarquee()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
-
 
     def checkin_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormCheckin()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
 
     def filter_window(self):
-        #dialog = QtWidgets.QDialog()
-        #dialog.ui = Ui_FilterForm()
-        #dialog.ui.setupUi(dialog)
-        #dialog.exec_()
-        #if dialog.exec_() == QtWidgets.QDialog.Accepted:
-        #    print("the filter is completed")
-        #dialog.window_closed.connect(self.loadData)
-        #subprocess.call([sys.executable, "filter.py"])
         result = subprocess.run([sys.executable, "filter.py"])
         print(result)
         self.loadData()
         self.run_mapper()
 
     def data_window(self):
-        #dialog = QtWidgets.QDialog()
-        #dialog.ui = Ui_FilterForm()
-        #dialog.ui.setupUi(dialog)
-        #dialog.exec_()
-        #if dialog.exec_() == QtWidgets.QDialog.Accepted:
-        #    print("the filter is completed")
-        #dialog.window_closed.connect(self.loadData)
-        #subprocess.call([sys.executable, "filter.py"])
         result = subprocess.run([sys.executable, "commdata.py"])
         print(result)
 
-
-
-
     def members_window(self):
-        #dialog = QDialog()
-        #dialog.ui = Ui_FormMembers()
-        #dialog.ui.setupUi(dialog)
-        #dialog.exec_()
-        #dialog.show()
-        #call(["python", "members.py"])
         subprocess.call([sys.executable, "members.py"])
-
-    #def heard_window(self):
-        #dialog = QtWidgets.QDialog()
-        #dialog.ui = Ui_FormHeard()
-        #dialog.ui.setupUi(dialog)
-        #dialog.exec_()
-        #dialog.show()
-        #call(["python", "heardlist.py"])
-    #    subprocess.call([sys.executable, "heardlist.py"])
-
-    def roster_window(self):
-        #dialog = QtWidgets.QDialog()
-        #dialog.ui = Ui_FormRoster()
-        #dialog.ui.setupUi(dialog)
-        #dialog.exec_()
-        #dialog.show()
-        call(["python", "roster.py"])
-
-
-    def netmanager_window(self):
-        #call(["python", "netmanager.py"])
-        subprocess.call([sys.executable, "netmanager.py"])
-
-
-    def thread_netmanage(self):
-        t5 = threading.Thread(target=self.netmanager_window)
-        t5.start()
-
-
 
     def statack_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormStatack()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
 
-    def reset_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormReset()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
-        #dialog.show()
+    def thread_netmanage(self):
+        t5 = threading.Thread(target=self.netmanager_window)
+        t5.start()
+
+    def netmanager_window(self):
+        subprocess.call([sys.executable, "netmanager.py"])
 
     def about_window(self):
         dialog = QtWidgets.QDialog()
         dialog.ui = Ui_FormAbout()
         dialog.ui.setupUi(dialog)
         dialog.exec_()
-        #dialog.show()
 
+    
     def loadData(self):
-        #print("\n load data restarted")
         self.readconfig()
-        #self.tableWidget = QtWidgets.QTableWidget(self.centralwidget)
-        #connection = sqlite3.connect('traffic.db3')
-        #query = """SELECT datetime, SRid, callsign, grid, prec, status, commpwr, pubwtr, med, ota, trav, net, fuel, food, crime, civil, political, comments FROM StatRep_Data where groupname = ?"""
-        #result = connection.execute(query,(selectedgroup,))
-
         global statelist
         global start
         global end
@@ -709,9 +574,9 @@ class Ui_MainWindow(QWidget):
         global red
         global grids
         global selectedgroup
-        print (start)
+        print(start)
         print(end)
-        print("colors :"+red+" "+yellow+" "+green)
+        print("colors :" + red + " " + yellow + " " + green)
         if "1" in green:
             greenstat = "ON"
         else:
@@ -728,59 +593,53 @@ class Ui_MainWindow(QWidget):
         self.label_start.setText("Filters : Start : " + start + "  |  End : " + end + "| Green : " + greenstat + " |  Yellow : " + yellowstat + " |")
         self.label_filters.setText(" Red : " + redstat + " |  Grids : " + grids)
 
+        try:
+            with sqlite3.connect('traffic.db3', timeout=10) as connection:
+                cursor = connection.cursor()
+                query = ("""
+                    SELECT StatRep_Data.datetime, StatRep_Data.SRid, StatRep_Data.callsign, StatRep_Data.grid,
+                           StatRep_Data.prec, StatRep_Data.status, StatRep_Data.commpwr, StatRep_Data.pubwtr,
+                           StatRep_Data.med, StatRep_Data.ota, StatRep_Data.trav, StatRep_Data.net,
+                           StatRep_Data.fuel, StatRep_Data.food, StatRep_Data.crime, StatRep_Data.civil,
+                           StatRep_Data.political, StatRep_Data.comments
+                    FROM StatRep_Data
+                    WHERE StatRep_Data.groupname = ? AND (StatRep_Data.status = ? OR StatRep_Data.status = ? OR StatRep_Data.status = ?)
+                    AND StatRep_Data.datetime BETWEEN ? AND ? AND substr(StatRep_Data.grid, 1, 2) IN ({})
+                """.format(', '.join('?' for _ in statelist)))
+                cursor.execute(query, [selectedgroup, green, yellow, red, start, end] + statelist)
+                result = cursor.fetchall()
 
-        connection = sqlite3.connect('traffic.db3')
-        cursor = connection.cursor()
+                self.tableWidget.setRowCount(0)
+                self.tableWidget.setColumnCount(18)
+                for row_number, row_data in enumerate(result):
+                    self.tableWidget.insertRow(row_number)
+                    for column_number, data in enumerate(row_data):  # Include all columns
+                        item = QTableWidgetItem(str(data) if data is not None else "")
+                        # Apply existing color logic for status columns
+                        if data in ["1", "2", "3", "4"]:
+                            if data == "1":
+                                item.setBackground(QColor(0, 128, 0))
+                                item.setForeground(QColor(0, 128, 0))
+                            elif data == "2":
+                                item.setBackground(QColor(255, 255, 0))
+                                item.setForeground(QColor(255, 255, 0))
+                            elif data == "3":
+                                item.setBackground(QColor(255, 0, 0))
+                                item.setForeground(QColor(255, 0, 0))
+                            elif data == "4":
+                                item.setBackground(QColor(128, 128, 128))
+                                item.setForeground(QColor(128, 128, 128))
+                        self.tableWidget.setItem(row_number, column_number, item)
 
-        query = ("SELECT datetime, SRid, callsign, grid, prec, status, commpwr, pubwtr, med, ota, trav, net, fuel, food, crime, civil, political, comments "
-                 "FROM StatRep_Data WHERE groupname = ? AND (status  = ? OR status = ? OR status = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(', '.join('?' for _ in statelist)))
-        result = cursor.execute(query, [selectedgroup, green, yellow, red, start, end] +statelist)
-
-
-
-
-
-        self.tableWidget.setRowCount(0)
-        self.tableWidget.setColumnCount(18)
-        for row_number, row_data in enumerate(result):
-            self.tableWidget.insertRow(row_number)
-            for column_number, data in enumerate(row_data):
-                self.tableWidget.setItem(row_number, column_number, QtWidgets.QTableWidgetItem(str(data)))
-                cellval = self.tableWidget.item(row_number, column_number).text()
-                if self.tableWidget.item(row_number, column_number).text() == "1":
-                    self.tableWidget.item(row_number, column_number).setBackground(QtGui.QColor(000, 128, 000))
-                    self.tableWidget.item(row_number, column_number).setForeground(QtGui.QColor(000, 128, 000))
-                if self.tableWidget.item(row_number, column_number).text() == "2":
-                    # print("if statement worked"+cellval)
-                    self.tableWidget.item(row_number, column_number).setBackground(QtGui.QColor(255, 255, 000))
-                    self.tableWidget.item(row_number, column_number).setForeground(QtGui.QColor(255, 255, 000))
-                if self.tableWidget.item(row_number, column_number).text() == "3":
-                    # print("if statement worked" + cellval)
-                    self.tableWidget.item(row_number, column_number).setBackground(QtGui.QColor(255, 000, 000))
-                    self.tableWidget.item(row_number, column_number).setForeground(QtGui.QColor(255, 000, 000))
-                # else:
-                #   print("if statement failed"+cellval)
-
-        table = self.tableWidget
-        table.setHorizontalHeaderLabels(
-            str("Date Time UTC ;ID ;Callsign; Grid ; Priority; Stat; Pow; H2O; Med; Com; Trv; Int; Fuel; Food; Cri; Civ; Pol; Remarks").split(
-                ";"))
-        header = table.horizontalHeader()
-        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-        self.tableWidget.verticalHeader().setVisible(False)
-        # header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        header.setStretchLastSection(False)
-        # header.horizontalHeaderStretchLastSection = True
-        # self.tableWidget = QtWidgets.QTableWidget()
-        # self.addWidget(QTableWidget(table),0, 0, 1, 2)
-        # self.tableWidget = QtWidgets.QTableWidget()
-        self.tableWidget.sortItems(0, QtCore.Qt.DescendingOrder)
-        #self.gridLayout_2.addWidget(self.tableWidget, 1, 0, 1, 4)
-        #print("loadData completed \n \n")
-        #self.filetest()
-        connection.close()
-        
-    
+                table = self.tableWidget
+                table.setHorizontalHeaderLabels(
+                    str("Date Time UTC ;ID ;Callsign; Grid ; Scope; Map Pin; Pow; H2O; Med; Com; Trv; Int; Fuel; Food; Cri; Civ; Pol; Remarks").split(";"))
+                header = table.horizontalHeader()
+                header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+                self.tableWidget.verticalHeader().setVisible(False)
+                self.tableWidget.sortItems(0, QtCore.Qt.DescendingOrder)
+        except sqlite3.Error as error:
+            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load StatRep data: {error}")
 
 
     def directedpi(self):
@@ -789,59 +648,39 @@ class Ui_MainWindow(QWidget):
             fout.writelines(reversed(f.readlines()))
         text = open('output.txt').read()
         text_edit_widget = QPlainTextEdit(text)
-        # text_edit_widget.setStyleSheet(
-        #     """QPlainTextEdit {background-color: #7E7C7A;
-        #                      color: #FCF55F;
-        #                     text-decoration: underline;
-        #                    font-family: Courier;}""")
         if directedcounter > 1:
             self.plainTextEdit.setPlainText(text)
         else:
             self.plainTextEdit.setPlainText(text)
-            #self.gridLayout_2.addWidget(text_edit_widget, 2, 0, 1, 4)
         directedcounter += 1
-        print("Directed completed : counter :"+str(directedcounter))
+        print("Directed completed : counter :" + str(directedcounter))
 
         self.loadbulletins()
         self.loadData()
-        #self.mapperWidget()
         self.run_mapper()
         self.thread()
-        
-        self.label_3.setText(" Active Group : "+selectedgroup)
-        #QtCore.QTimer.singleShot(30000, self.directed)
-        
+
+        self.label_3.setText(" Active Group : " + selectedgroup)
+
     def directed(self):
         global directedcounter
         with open(path) as f, open('output.txt', 'w') as fout:
             fout.writelines(reversed(f.readlines()))
         text = open('output.txt').read()
         text_edit_widget = QPlainTextEdit(text)
-        # text_edit_widget.setStyleSheet(
-        #     """QPlainTextEdit {background-color: #7E7C7A;
-        #                      color: #FCF55F;
-        #                     text-decoration: underline;
-        #                    font-family: Courier;}""")
         if directedcounter > 1:
             self.plainTextEdit.setPlainText(text)
         else:
             self.plainTextEdit.setPlainText(text)
-            #self.gridLayout_2.addWidget(text_edit_widget, 2, 0, 1, 4)
         directedcounter += 1
-        print("Directed completed : counter :"+str(directedcounter))
+        print("Directed completed : counter :" + str(directedcounter))
 
         self.loadbulletins()
         self.loadData()
-        #self.mapperWidget()
         self.run_mapper()
         self.thread()
-        
-        self.label_3.setText(" Active Group : "+selectedgroup)
-        #QtCore.QTimer.singleShot(30000, self.directed)
 
-
-
-
+        self.label_3.setText(" Active Group : " + selectedgroup)
 
     def mapperWidget(self):
         global mapper
@@ -857,40 +696,28 @@ class Ui_MainWindow(QWidget):
         global selectedgroup
 
         gridlist = []
-        radius = 6
-        filler = True
-        color = green
-
-        mapper = QWebEngineView()
-        coordinate = (38.8199286, -90.4782551)
+        coordinate = (38.8199286, -96.7782551)
         m = folium.Map(
-            #tiles='Stamen Terrain',
             zoom_start=4,
             location=coordinate
-
         )
 
-        
-        
-        #self.widget = QWebEngineView(self.centralwidget)
-        #self.setObjectName("widget") 
-        #self.gridLayout_2.addWidget(self.widget, 3, 0, 1, 1)
+        # Add local tile layer
+        folium.raster_layers.TileLayer(
+            tiles='http://localhost:8000/{z}/{x}/{y}.png',
+            name='Local Tiles',
+            attr='Local Tiles',
+            max_zoom=19,
+            control=True
+        ).add_to(m)
 
         try:
             connection = sqlite3.connect('traffic.db3')
             cursor = connection.cursor()
-            # print("Connected to SQLite")
-            #started new query here
             query = (
-                "SELECT callsign, SRid, status, grid  FROM StatRep_Data WHERE groupname = ? AND (status  = ? OR status = ? OR status = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(
+                "SELECT callsign, SRid, status, grid FROM StatRep_Data WHERE groupname = ? AND (status = ? OR status = ? OR status = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(
                     ', '.join('?' for _ in statelist)))
             cursor = connection.execute(query, [selectedgroup, green, yellow, red, start, end] + statelist)
-            #items = cursor.fetchall()
-
-
-            #query = (
-            #    "SELECT callsign, SRid, status FROM StatRep_Data WHERE groupname = ? AND datetime BETWEEN ? AND ?")
-            #cursor = connection.execute(query, (selectedgroup, start, end))
             items = cursor.fetchall()
 
             for item in items:
@@ -902,91 +729,44 @@ class Ui_MainWindow(QWidget):
                 testlat = float(coords[0])
                 testlong = float(coords[1])
                 count = gridlist.count(grid)
-                #print(call + " before lat  & Long " + str(testlat) + "  " + str(testlong))
                 if count > 0:
-                    #print("latbefore :"+str(testlat))
                     testlat = testlat + (count * .010)
-                    #print("latafter :" + str(testlat))
-                    testlong = testlong +(count * .010)
+                    testlong = testlong + (count * .010)
                 gridlist.append(grid)
-                #print(call+" After lat  & Long "+str(testlat)+"  "+str(testlong))
                 testlat = float(testlat)
                 testlong = float(testlong)
 
-                #glat = gridLatint
-                #glon = gridLongint
                 glat = testlat
                 glon = testlong
 
-                #ended new query here
                 pinstring = ("Callsign :")
-                html = '''<HTML> <BODY><p style="color:blue;font-size:14px;">%s %s<br>
-                                StatRep ID :
-                                %s  
-                                </p></BODY></HTML>''' % (pinstring, call, srid,)
-                iframe = folium.IFrame(html,
-                                       width=160,
-                                       height=70)
+                html = '''<HTML>
+                            <BODY>
+                                <p style="color:blue;font-size:14px;">
+                                    %s %s<br>
+                                    StatRep ID: %s<br>
+                                    <button onclick="window.location.href='http://localhost/statrep/%s'" style="color:#0000FF;font-family:Arial;font-size:12px;font-weight:bold;cursor:pointer;border:1px solid #000;padding:2px 5px;">View StatRep</button>
+                                </p>
+                            </BODY>
+                          </HTML>''' % (pinstring, call, srid, srid)
+                iframe = folium.IFrame(html, width=160, height=100)
+                popup = folium.Popup(iframe, min_width=100, max_width=160)
 
-                popup = folium.Popup(iframe,
-                                     min_width=100, max_width=160)
-                #print("status :"+status+" yellow: "+yellow+" red : "+red+" green : "+green)
-                #print("starting if loop")
+                color = "black"  # Default color
+                radius = 5
+                filler = True
 
-                if red == True:
-                    red = "3"
-                elif red == False:
-                    red = 0
-                if yellow == True:
-                    yellow = "2"
-                elif yellow == False:
-                    yellow = 0
-                if green == True:
-                    green = "1"
-                elif green == False:
-                    green = 0
-
-                if "2" in status and yellow == "2":
-                    color = "orange"
-                    radius = 40
-                    filler = True
-                    #print("this is yellow 2 "+yellow)
-                elif "2" in status and yellow == "0":
-                    color = ""
-                    radius = 40
-                    filler = False
-                    #print("this is NOT yellow 2 " +yellow)
-
-                elif "3" in status and red == "3":
-                    color = "red"
-                    radius = 40
-                    filler = True
-                    #print("this is red" +red)
-                elif "3" in status and red == "0":
-                    color = ""
-                    radius = 40
-                    filler = False
-                    #print("this is NOT red" + red)
-
-                elif "1" in status and green == "1":
+                if status == "1":
                     color = "green"
-                    radius = 6
-                    filler = True
-                    #print("this is green" +green)
-                elif "1" in status and green == "0":
-                    color = ""
-                    radius = 6
-                    filler = False
-                    #print("this is NOT green" +green)
+                    radius = 5
+                elif status == "2":
+                    color = "orange"
+                    radius = 10
+                elif status == "3":
+                    color = "red"
+                    radius = 10
 
-
-
-
-                #folium.Marker(location=[glat, glon], popup=popup).add_to(m)
-                #folium.CircleMarker(radius=6,fill=True, fill_color="darkblue",
-                #    location=[glat, glon], popup=popup, icon=folium.Icon(color="red")).add_to(m)
-                folium.CircleMarker(radius=radius,fill=filler, color=color, fill_color=color,location=[glat, glon], popup=popup, icon=folium.Icon(color="red")).add_to(m)
-
+                folium.CircleMarker(radius=radius, fill=filler, color=color, fill_color=color, location=[glat, glon], popup=popup).add_to(m)
 
             cursor.close()
 
@@ -995,56 +775,28 @@ class Ui_MainWindow(QWidget):
         finally:
             if (connection):
                 connection.close()
-        #       print("The SQLite connection is closed")
-        # return map
 
-        # folium.Marker(location=[38.655800, -87.274721],popup='<h3 style="color:green;">Marker2</h3>').add_to(m)
-        # save map data to data object
         data = io.BytesIO()
         m.save(data, close_file=False)
-        
 
-        #self.gridLayout.addWidget()widget = QWebEngineView()
         if map_flag == 1:
             self.widget.reload()
-            print("\n \n executed map reload \n \n")
-            
         else:
             self.widget.setHtml(data.getvalue().decode())
             map_flag = 0
-            print("\n \n executed map update \n \n")
-        #self.widget.update()
-        
-        
-        #self.gridLayout_2.addWidget(mapper, 3, 0, 1, 1)
-        #print("Mapping completed")
-        #QtCore.QTimer.singleShot(30000, self.widget.deleteLater)
-        #QtCore.QTimer.singleShot(30500, self.mapperWidget)
-        #QtCore.QTimer.singleShot(30000, self.run_mapper)
-    
-    
+
     def run_mapper(self):
         global mapper
         global data
         global os
         if "Pi" in OS:
-            #self.mapperWidgetpi()
             print("\n \n OS is Pi map is removed \n \n ")
-                  
         else:
             self.mapperWidget()
-            print("\n \n OS is not Pi \n \n ") 
-        #mapper.deleteLater()
-        #self.widget.deleteLater()
-        #print("stopped previous map")
-        #self.mapperWidget()
-        #self.widget.reload()
-        #print ("reloaded")
-            
-    
+            print("\n \n OS is not Pi \n \n ")
+
     def loadbulletins(self):
         self.readconfig()
-        #self.tableWidget_2 = QtWidgets.QTableWidget(self.centralwidget)
         connection = sqlite3.connect('traffic.db3')
         query = "SELECT datetime, idnum, callsign, message FROM bulletins_Data where groupid = ?"
         result = connection.execute(query, (selectedgroup,))
@@ -1053,7 +805,7 @@ class Ui_MainWindow(QWidget):
         for row_number, row_data in enumerate(result):
             self.tableWidget_2.insertRow(row_number)
             for column_number, data in enumerate(row_data):
-                self.tableWidget_2.setItem(row_number, column_number, QtWidgets.QTableWidgetItem(str(data)))
+                self.tableWidget_2.setItem(row_number, column_number, QTableWidgetItem(str(data)))
         table = self.tableWidget_2
         table.setHorizontalHeaderLabels(
             str("Date Time UTC ;ID ;Callsign; Bulletin ;").split(
@@ -1062,36 +814,17 @@ class Ui_MainWindow(QWidget):
         header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
         header.setStretchLastSection(True)
         table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-        # header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        # self.tableWidget = QtWidgets.QTableWidget()
-        # self.addWidget(QTableWidget(table),0, 0, 1, 2)
-        # self.tableWidget = QtWidgets.QTableWidget()
         self.tableWidget_2.verticalHeader().setVisible(False)
         self.tableWidget_2.sortItems(0, QtCore.Qt.DescendingOrder)
-        #self.gridLayout_2.addWidget(self.tableWidget_2, 3, 1, 1, 3)
-
-        #print("Load Bulletins & Marquee Completed")
-        #QtCore.QTimer.singleShot(30000, self.loadbulletins)
-
-
-        #print("Load Bulletins & Marquee Completed")
-        #QtCore.QTimer.singleShot(30000, self.loadbulletins)
-
-
+        connection.close()
 
     def thread_second():
         call(["python", "datareader.py"])
 
-    #processThread = threading.Thread(target=thread_second)  # <- note extra ','
-    #processThread.daemon = True
-    #processThread.start()
-
     def showTime(self):
-        #currentTime = QTime.currentTime()
-        #currentTime = QTime.toUTC()
         now = QDateTime.currentDateTime()
-        displayTxt = (now.toUTC().toString(Qt.ISODate))
-        self.label_2.setText(" "+displayTxt+" ")
+        displayTxt = now.toUTC().toString("yy-MM-dd-hh:mm'Z'")
+        self.label_2.setText(" " + displayTxt + " ")
 
     def thread(self):
         t1 = threading.Thread(target=self.Operation)
@@ -1101,27 +834,19 @@ class Ui_MainWindow(QWidget):
         global counter
         now = QDateTime.currentDateTime()
         displayTxt = (now.toUTC().toString(Qt.ISODate))
-        
-        print("Time Datatreader Start :"+displayTxt)
+        print("Time Datatreader Start :" + displayTxt)
         counter += 1
-        print("Thread counter = "+str(counter))
-        #call(["python", "datareader.py"])
+        print("Thread counter = " + str(counter))
         subprocess.call([sys.executable, "datareader.py"])
 
-        #time.sleep(10)
-        #print("Datareader stopped :"+displayTxt)
-
-
     def feed(self):
-        #QtCore.QTimer.singleShot(30000, self.loadbulletins)
         marqueegreen = "color: rgb(0, 200, 0);"
         marqueeyellow = "color: rgb(255, 255, 0);"
         marqueered = "color: rgb(255, 0, 0);"
         connection = sqlite3.connect('traffic.db3')
-        query = "SELECT* FROM marquees_data WHERE groupname = ? ORDER BY date DESC LIMIT 1"
+        query = "SELECT * FROM marquees_data WHERE groupname = ? ORDER BY date DESC LIMIT 1"
         result = connection.execute(query, (selectedgroup,))
         result = result.fetchall()
-        
 
         callSend = (result[0][2])
         id = (result[0][1])
@@ -1132,29 +857,28 @@ class Ui_MainWindow(QWidget):
         if (color == "2"):
             self.label.setStyleSheet("background-color: rgb(0, 0, 0);\n"
                                      "" + marqueered + "")
-        elif(color == "1"):
+        elif (color == "1"):
             self.label.setStyleSheet("background-color: rgb(0, 0, 0);\n"
                                      "" + marqueeyellow + "")
         else:
             self.label.setStyleSheet("background-color: rgb(0, 0, 0);\n"
                                      "" + marqueegreen + "")
 
-        marqueetext = (" ID "+id+" Received  : "+date+"  From : "+group+" by : "+callSend+" MSG : "+msg )
+        marqueetext = (" ID " + id + " Received  : " + date + "  From : " + group + " by : " + callSend + " MSG : " + msg)
         connection.close()
         fm = self.label.fontMetrics()
-        self.nl = int(self.label.width()/fm.averageCharWidth())     # shown stringlength
+        self.nl = int(self.label.width() / fm.averageCharWidth())
         news = [marqueetext]
-        appendix = ' '*self.nl                      # add some spaces at the end
+        appendix = ' ' * self.nl
         news.append(appendix)
-        delimiter = '      +++      '                   # shown between the messages
+        delimiter = '      +++      '
         self.news = delimiter.join(news)
-        newsLength = len(self.news)                 # number of letters in news = frameRange
-        lps = 6                                 # letters per second
-        dur = newsLength*500/lps               # duration until the whole string is shown in milliseconds
+        newsLength = len(self.news)
+        lps = 5
+        dur = newsLength * 500 / lps
         self.timeLine.setDuration(20000)
         self.timeLine.setFrameRange(0, newsLength)
         self.timeLine.start()
-
 
     def setText(self, number_of_frame):
         if number_of_frame < self.nl:
@@ -1166,7 +890,8 @@ class Ui_MainWindow(QWidget):
         self.label.setFixedWidth(400)
 
     def nextNews(self):
-        self.feed()                             # start again
+        self.feed()
+        self.timeLine.start()
 
     def setTlText(self, text):
         string = '{} pressed'.format(text)
@@ -1174,9 +899,6 @@ class Ui_MainWindow(QWidget):
 
     def open_webbrowser(self):
         webbrowser.open('CommStat_Help.pdf')
-
-
-
 
 if __name__ == "__main__":
     import sys
