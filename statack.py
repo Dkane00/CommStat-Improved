@@ -165,7 +165,7 @@ class Ui_FormStatack(object):
 
         table = self.tableWidget
         table.setHorizontalHeaderLabels(
-            str("Date Time UTC ;ID ;Callsign; Grid ; Priority; Stat; Remarks").split(
+            str("Date Time UTC ;ID ;Callsign; Grid ; Scope; Stat; Remarks").split(
                 ";"))
         header = table.horizontalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
@@ -225,14 +225,16 @@ class Ui_FormStatack(object):
             precq = "SELECT prec FROM StatRep_Data Where SRid  = '" + selectedfwd + "'"
             cur.execute(precq)
             precq = cur.fetchone()[0]
-            if (precq == "Routine"):
+            if (precq == "My Location"):
                 precq = "1"
-            elif (precq == "Priority"):
+            elif (precq == "My Community"):
                 precq = "2"
-            elif (precq == "Immediate"):
+            elif (precq == "My County"):
                 precq = "3"
-            elif (precq == "Flash"):
+            elif (precq == "My Region"):
                 precq = "4"
+            elif (precq == "Other Location"):
+                precq = "5"              
             else:
                 msg = QMessageBox()
                 msg.setWindowTitle("CommStat error")

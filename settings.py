@@ -466,7 +466,7 @@ class Ui_FormSettings(object):
             bull2 = 4
         if winos in (platform.platform()):
             print("This is Windows OS")
-            OS_Directed = "\DIRECTED.TXT"
+            OS_Directed = r"\DIRECTED.TXT"
         # sudo apt install ./python-pyqt5.qtwebengine_5.15.2-2_arm64.deb
         if linuxos in (platform.platform()):
             print("This is Linux OS")
