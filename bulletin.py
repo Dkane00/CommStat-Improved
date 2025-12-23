@@ -166,7 +166,7 @@ class Ui_FormBull(object):
         call = format(self.lineEdit_3.text())
         call = call.upper()
         comments1 = format(self.lineEdit_2.text())
-        comments = re.sub("[^A-Za-z0-9*\-\s]+", " ", comments1)
+        comments = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", comments1)
 
         if len(comments) < 4 :
             msg = QMessageBox()
@@ -251,7 +251,7 @@ class Ui_FormBull(object):
         global bull_id
 
         comments1 = format(self.lineEdit_2.text())
-        comments = re.sub("[^A-Za-z0-9*\-\s]+", " ", comments1)
+        comments = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", comments1)
 
         if len(comments) < 4 :
             msg = QMessageBox()

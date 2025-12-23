@@ -167,7 +167,7 @@ class Ui_FormMarquee(object):
 
         comments1 = format(self.lineEdit_2.text())
         comments1 = comments1.upper()
-        comments = re.sub("[^A-Za-z0-9*\-\s]+", " ", comments1)
+        comments = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", comments1)
         call = format(self.lineEdit_3.text())
         call = call.upper()
 
@@ -267,7 +267,7 @@ class Ui_FormMarquee(object):
         global callsign
 
         comments1 = format(self.lineEdit_2.text())
-        comments = re.sub("[^A-Za-z0-9*\-\s]+", " ", comments1)
+        comments = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", comments1)
 
         if len(comments) < 12 :
             msg = QMessageBox()

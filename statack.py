@@ -363,7 +363,7 @@ class Ui_FormStatack(object):
         
 
         comments1 = "StatRep Received   "+ acklist
-        comments = re.sub("[^A-Za-z0-9*\-\s]+", " ", comments1)
+        comments = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", comments1)
 
         if len(comments) < 5 :
             msg = QMessageBox()
