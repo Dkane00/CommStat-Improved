@@ -1,0 +1,31 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database files
+*.db3
+*.sqlite
+*.sqlite3
+
+# Config (use config.ini.template instead)
+config.ini
+
+# Generated HTML reports
+CommStat*.html
+map.html
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+*.log
+output.txt
