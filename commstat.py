@@ -153,7 +153,7 @@ class Ui_MainWindow(QWidget):
         self.label.setFont(font)
         self.label.setAutoFillBackground(False)
 
-        self.label.setStyleSheet("background-color: rgb(0, 0, 0);\n"
+        self.label.setStyleSheet("background-color: #222632;\n"
                                    "color: rgb(0, 200, 0);")
 
         self.label.setObjectName("label")
@@ -166,8 +166,8 @@ class Ui_MainWindow(QWidget):
         font.setBold(False)
         self.label_2.setFont(font)
         self.label_2.setAutoFillBackground(False)
-        self.label_2.setStyleSheet("background-color: rgb(0, 0, 0);\n"
-                                   "color: rgb(0, 200, 0);")
+        self.label_2.setStyleSheet("background-color: #222632;\n"
+                                   "color: #8BBFEF;")
         self.label_2.setObjectName("label_2")
 
         # Time label
@@ -835,7 +835,7 @@ class Ui_MainWindow(QWidget):
 
     def showTime(self):
         now = QDateTime.currentDateTime()
-        displayTxt = now.toUTC().toString(" yyyy-MM-dd   hh:mm:ss 'Z'")
+        displayTxt = now.toUTC().toString(" yyyy-MM-dd   hh:mm:ss 'UTC'")
         self.label_2.setText(" " + displayTxt + " ")
 
     def thread(self):
@@ -867,13 +867,13 @@ class Ui_MainWindow(QWidget):
         msg = (result[0][6])
         color = (result[0][5])
         if (color == "2"):
-            self.label.setStyleSheet("background-color: rgb(0, 0, 0);\n"
+            self.label.setStyleSheet("background-color: #222632;\n"
                                      "" + marqueered + "")
         elif (color == "1"):
-            self.label.setStyleSheet("background-color: rgb(0, 0, 0);\n"
+            self.label.setStyleSheet("background-color: #222632;\n"
                                      "" + marqueeyellow + "")
         else:
-            self.label.setStyleSheet("background-color: rgb(0, 0, 0);\n"
+            self.label.setStyleSheet("background-color: #222632;\n"
                                      "" + marqueegreen + "")
 
         marqueetext = (" ID " + id + " Received  : " + date + "  From : " + group + " by : " + callSend + " MSG : " + msg)
