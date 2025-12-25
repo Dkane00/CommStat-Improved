@@ -1,83 +1,113 @@
+# Copyright (c) 2025 Manuel Ochoa
+# This file is part of CommStat-Improved.
+# Licensed under the GNU General Public License v3.0.
+# AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
+
+"""
+JS8 SMS Dialog for CommStat-Improved
+Allows sending SMS messages via JS8Call APRS gateway.
+"""
 
 import os
 from configparser import ConfigParser
-import re
-from PyQt5.QtWidgets import QMessageBox
 from PyQt5 import QtCore, QtGui, QtWidgets
-
-
+from PyQt5.QtWidgets import QMessageBox
 import js8callAPIsupport
 
-serverip = ""
-serverport = ""
+
+# Constants
+MIN_PHONE_LENGTH = 11  # 10 digits + 2 dashes (xxx-xxx-xxxx)
+MIN_MESSAGE_LENGTH = 8
 
 
-class Ui_FormJS8SMS(object):
-    def setupUi(self, FormJS8SMS):
+class Ui_FormJS8SMS:
+    """JS8 SMS form for sending text messages via APRS gateway."""
+
+    def setupUi(self, FormJS8SMS: QtWidgets.QWidget) -> None:
+        """Initialize the UI components."""
         self.MainWindow = FormJS8SMS
         FormJS8SMS.setObjectName("FormJS8SMS")
         FormJS8SMS.resize(835, 215)
+
+        # Set font
         font = QtGui.QFont()
         font.setFamily("Arial")
         font.setPointSize(10)
         FormJS8SMS.setFont(font)
+
+        # Set icon
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("USA-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap("radiation-32.jpg"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         FormJS8SMS.setWindowIcon(icon)
+
+        # Warning message
+        self.warning_label = QtWidgets.QLabel(FormJS8SMS)
+        self.warning_label.setGeometry(QtCore.QRect(58, 15, 700, 25))
+        bold_font = QtGui.QFont()
+        bold_font.setFamily("Arial")
+        bold_font.setPointSize(12)
+        bold_font.setBold(True)
+        self.warning_label.setFont(bold_font)
+        self.warning_label.setText("Sending SMS depends on APRS services being available.")
+        self.warning_label.setObjectName("warning_label")
+
+        # Phone number input
         self.lineEdit = QtWidgets.QLineEdit(FormJS8SMS)
-        self.lineEdit.setGeometry(QtCore.QRect(160, 50, 113, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.lineEdit.setGeometry(QtCore.QRect(160, 55, 113, 22))
         self.lineEdit.setFont(font)
         self.lineEdit.setObjectName("lineEdit")
+
+        # Text message input
         self.lineEdit_2 = QtWidgets.QLineEdit(FormJS8SMS)
-        self.lineEdit_2.setGeometry(QtCore.QRect(160, 100, 481, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.lineEdit_2.setGeometry(QtCore.QRect(160, 105, 481, 22))
         self.lineEdit_2.setFont(font)
         self.lineEdit_2.setMaxLength(67)
         self.lineEdit_2.setObjectName("lineEdit_2")
+
+        # Labels
         self.label = QtWidgets.QLabel(FormJS8SMS)
-        self.label.setGeometry(QtCore.QRect(8, 50, 141, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.label.setGeometry(QtCore.QRect(58, 55, 101, 20))
         self.label.setFont(font)
         self.label.setObjectName("label")
+
         self.label_2 = QtWidgets.QLabel(FormJS8SMS)
-        self.label_2.setGeometry(QtCore.QRect(48, 100, 101, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.label_2.setGeometry(QtCore.QRect(58, 105, 101, 20))
         self.label_2.setFont(font)
         self.label_2.setObjectName("label_2")
+
+        # APRS SMS info link
+        self.link_label = QtWidgets.QLabel(FormJS8SMS)
+        self.link_label.setGeometry(QtCore.QRect(58, 155, 412, 24))
+        self.link_label.setFont(font)
+        self.link_label.setText(
+            'Learn more about APRS SMS here: '
+            '<a href="https://smsgte.wixsite.com/smsgte">https://smsgte.wixsite.com/smsgte</a>'
+        )
+        self.link_label.setOpenExternalLinks(True)
+        self.link_label.setObjectName("link_label")
+
+        # Transmit button
         self.pushButton = QtWidgets.QPushButton(FormJS8SMS)
-        self.pushButton.setGeometry(QtCore.QRect(530, 150, 75, 24))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.pushButton.setGeometry(QtCore.QRect(510, 155, 111, 24))
         self.pushButton.setFont(font)
         self.pushButton.setObjectName("pushButton")
         self.pushButton.clicked.connect(self.transmit)
 
+        # Cancel button
         self.pushButton_2 = QtWidgets.QPushButton(FormJS8SMS)
-        self.pushButton_2.setGeometry(QtCore.QRect(630, 150, 75, 24))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.pushButton_2.setGeometry(QtCore.QRect(630, 155, 75, 24))
         self.pushButton_2.setFont(font)
         self.pushButton_2.setObjectName("pushButton_2")
         self.pushButton_2.clicked.connect(self.MainWindow.close)
 
         self.retranslateUi(FormJS8SMS)
         QtCore.QMetaObject.connectSlotsByName(FormJS8SMS)
-        self.getConfig()
-        self.serveripad = serverip
-        self.servport = int(serverport)
-        self.api = js8callAPIsupport.js8CallUDPAPICalls((self.serveripad),
-                                                        int(self.servport))
+
+        # Load config and initialize API
+        self._load_config()
+        self.api = js8callAPIsupport.js8CallUDPAPICalls(
+            self.server_ip, int(self.server_port)
+        )
 
         self.MainWindow.setWindowFlags(
             QtCore.Qt.Window |
@@ -87,84 +117,75 @@ class Ui_FormJS8SMS(object):
             QtCore.Qt.WindowStaysOnTopHint
         )
 
-
-
-    def retranslateUi(self, FormJS8SMS):
+    def retranslateUi(self, FormJS8SMS: QtWidgets.QWidget) -> None:
+        """Set UI text labels."""
         _translate = QtCore.QCoreApplication.translate
-        FormJS8SMS.setWindowTitle(_translate("FormJS8SMS", "CommStat JS8SMS "))
+        FormJS8SMS.setWindowTitle(_translate("FormJS8SMS", "CommStat-Improved JS8SMS"))
         self.lineEdit.setInputMask(_translate("FormJS8SMS", "999-999-9999"))
-        self.label.setText(_translate("FormJS8SMS", "Cellular Phone Number : "))
+        self.label.setText(_translate("FormJS8SMS", "Phone Number : "))
         self.label_2.setText(_translate("FormJS8SMS", "Text Message : "))
         self.pushButton.setText(_translate("FormJS8SMS", "Transmit"))
         self.pushButton_2.setText(_translate("FormJS8SMS", "Cancel"))
-    def getConfig(self):
-        global serverip
-        global serverport
+
+    def _load_config(self) -> None:
+        """Load server configuration from config.ini."""
+        self.server_ip = "127.0.0.1"
+        self.server_port = "2242"
+
         if os.path.exists("config.ini"):
-            config_object = ConfigParser()
-            config_object.read("config.ini")
-            userinfo = config_object["USERINFO"]
-            systeminfo = config_object["DIRECTEDCONFIG"]
-            callsign = format(userinfo["callsign"])
-            callsignSuffix = format(userinfo["callsignsuffix"])
-            group1 = format(userinfo["group1"])
-            group2 = format(userinfo["group2"])
-            grid = format(userinfo["grid"])
-            path = format(systeminfo["path"])
-            serverip = format(systeminfo["server"])
-            serverport = format(systeminfo["UDP_port"])
-            selectedgroup = format(userinfo["selectedgroup"])
+            config = ConfigParser()
+            config.read("config.ini")
+            if "DIRECTEDCONFIG" in config:
+                self.server_ip = config["DIRECTEDCONFIG"].get("server", "127.0.0.1")
+                self.server_port = config["DIRECTEDCONFIG"].get("UDP_port", "2242")
 
-    def transmit(self):
+    def _show_error(self, message: str) -> None:
+        """Display an error message box."""
+        msg = QMessageBox()
+        msg.setWindowTitle("CommStat-Improved Error")
+        msg.setText(message)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
+        msg.exec_()
 
-        phone = format(self.lineEdit.text())
-        txtmsg = self.lineEdit_2.text()
-        if len(phone) > 10:
-            #if re.match("^.+@(\[?)[a-zA-Z0-9-.]+.([a-zA-Z]{2,3}|[0-9]{1,3})(]?)$", email) != None:
-            print("This is a valid phone number")
+    def _show_info(self, message: str) -> None:
+        """Display an info message box."""
+        msg = QMessageBox()
+        msg.setWindowTitle("CommStat-Improved TX")
+        msg.setText(message)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
+        msg.exec_()
 
+    def transmit(self) -> None:
+        """Validate and transmit the SMS message."""
+        phone = self.lineEdit.text().strip()
+        message_text = self.lineEdit_2.text().strip()
 
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("email address is not valid!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
+        # Validate phone number (format: xxx-xxx-xxxx = 12 chars with dashes)
+        if len(phone) < MIN_PHONE_LENGTH:
+            self._show_error("Phone number is not valid!")
             return
-        if len(txtmsg) < 8:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("email body is too short min 8 characters!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
+
+        # Validate message length
+        if len(message_text) < MIN_MESSAGE_LENGTH:
+            self._show_error(f"Text message is too short (minimum {MIN_MESSAGE_LENGTH} characters)!")
             return
-        else:
 
-            smscmd = "@APRSIS CMD :SMSGTE   :@"
-            smstail = "{04}";
-            message = "" + smscmd + "" + phone + "  " + txtmsg + " " + smstail+""
-            messageType = js8callAPIsupport.TYPE_TX_SETMESSAGE
-            mode = "EMAIL-2"
-            mode = mode.ljust(9)
-            messageString = message  # mode+" "+self.tocall.get()+" "+text
-            print("we got this far"+message)
+        # Build and send message
+        sms_cmd = "@APRSIS CMD :SMSGTE   :@"
+        sms_tail = "{04}"
+        message = f"{sms_cmd}{phone}  {message_text} {sms_tail}"
 
-            self.sendMessage(messageType, messageString)
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX TX")
-            msg.setText("CommStatX will transmit : " + message)
-            msg.setIcon(QMessageBox.Information)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
-            self.closeapp()
+        message_type = js8callAPIsupport.TYPE_TX_SETMESSAGE
+        self._send_message(message_type, message)
 
-    def closeapp(self):
+        self._show_info(f"CommStat-Improved will transmit:\n{message}")
         self.MainWindow.close()
 
-    def sendMessage(self, messageType, messageText):
-        self.api.sendMessage(messageType, messageText)
+    def _send_message(self, message_type: str, message_text: str) -> None:
+        """Send message via JS8Call API."""
+        self.api.sendMessage(message_type, message_text)
 
 
 if __name__ == "__main__":

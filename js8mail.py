@@ -1,177 +1,186 @@
+# Copyright (c) 2025 Manuel Ochoa
+# This file is part of CommStat-Improved.
+# Licensed under the GNU General Public License v3.0.
+# AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
+
+"""
+JS8 Email Dialog for CommStat-Improved
+Allows sending emails via JS8Call APRS gateway.
+"""
 
 import re
-
-from PyQt5.QtWidgets import QMessageBox
-from PyQt5 import QtCore, QtGui, QtWidgets
-import js8callAPIsupport
-from configparser import ConfigParser
 import os
+from configparser import ConfigParser
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtWidgets import QMessageBox
+import js8callAPIsupport
 
 
-serverip = ""
-serverport = ""
+# Constants
+MIN_EMAIL_LENGTH = 8
+MIN_BODY_LENGTH = 8
+EMAIL_PATTERN = r"^.+@(\[?)[a-zA-Z0-9-.]+\.([a-zA-Z]{2,3}|[0-9]{1,3})(]?)$"
 
-class Ui_FormJS8Mail(object):
-    def setupUi(self, FormJS8Mail):
+
+class Ui_FormJS8Mail:
+    """JS8 Email form for sending emails via APRS gateway."""
+
+    def setupUi(self, FormJS8Mail: QtWidgets.QWidget) -> None:
+        """Initialize the UI components."""
         self.MainWindow = FormJS8Mail
         FormJS8Mail.setObjectName("FormJS8Mail")
         FormJS8Mail.resize(835, 215)
+
+        # Set font
         font = QtGui.QFont()
         font.setFamily("Arial")
         font.setPointSize(10)
         FormJS8Mail.setFont(font)
+
+        # Set icon
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("USA-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap("radiation-32.jpg"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         FormJS8Mail.setWindowIcon(icon)
+
+        # Warning message
+        self.warning_label = QtWidgets.QLabel(FormJS8Mail)
+        self.warning_label.setGeometry(QtCore.QRect(58, 15, 700, 25))
+        bold_font = QtGui.QFont()
+        bold_font.setFamily("Arial")
+        bold_font.setPointSize(12)
+        bold_font.setBold(True)
+        self.warning_label.setFont(bold_font)
+        self.warning_label.setText("Sending email depends on APRS services being available.")
+        self.warning_label.setObjectName("warning_label")
+
+        # Email address input
         self.lineEdit = QtWidgets.QLineEdit(FormJS8Mail)
-        self.lineEdit.setGeometry(QtCore.QRect(160, 50, 221, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.lineEdit.setGeometry(QtCore.QRect(160, 55, 221, 22))
         self.lineEdit.setFont(font)
         self.lineEdit.setInputMethodHints(QtCore.Qt.ImhEmailCharactersOnly)
         self.lineEdit.setMaxLength(40)
         self.lineEdit.setObjectName("lineEdit")
+
+        # Email body input
         self.lineEdit_2 = QtWidgets.QLineEdit(FormJS8Mail)
-        self.lineEdit_2.setGeometry(QtCore.QRect(160, 100, 481, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.lineEdit_2.setGeometry(QtCore.QRect(160, 105, 481, 22))
         self.lineEdit_2.setFont(font)
         self.lineEdit_2.setMaxLength(60)
         self.lineEdit_2.setObjectName("lineEdit_2")
+
+        # Labels
         self.label = QtWidgets.QLabel(FormJS8Mail)
-        self.label.setGeometry(QtCore.QRect(58, 50, 91, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.label.setGeometry(QtCore.QRect(58, 55, 91, 20))
         self.label.setFont(font)
         self.label.setObjectName("label")
+
         self.label_2 = QtWidgets.QLabel(FormJS8Mail)
-        self.label_2.setGeometry(QtCore.QRect(70, 100, 81, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.label_2.setGeometry(QtCore.QRect(58, 105, 91, 20))
         self.label_2.setFont(font)
         self.label_2.setObjectName("label_2")
+
+        # APRS email info link
+        self.link_label = QtWidgets.QLabel(FormJS8Mail)
+        self.link_label.setGeometry(QtCore.QRect(58, 155, 412, 24))
+        self.link_label.setFont(font)
+        self.link_label.setText(
+            'Learn more about APRS email here: '
+            '<a href="https://www.aprs-is.net/email.aspx">https://www.aprs-is.net/email.aspx</a>'
+        )
+        self.link_label.setOpenExternalLinks(True)
+        self.link_label.setObjectName("link_label")
+
+        # Transmit button
         self.pushButton = QtWidgets.QPushButton(FormJS8Mail)
-        self.pushButton.setGeometry(QtCore.QRect(494, 150, 111, 24))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.pushButton.setGeometry(QtCore.QRect(510, 155, 111, 24))
         self.pushButton.setFont(font)
         self.pushButton.setObjectName("pushButton")
         self.pushButton.clicked.connect(self.transmit)
+
+        # Cancel button
         self.pushButton_2 = QtWidgets.QPushButton(FormJS8Mail)
-        self.pushButton_2.setGeometry(QtCore.QRect(630, 150, 75, 24))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
+        self.pushButton_2.setGeometry(QtCore.QRect(630, 155, 75, 24))
         self.pushButton_2.setFont(font)
         self.pushButton_2.setObjectName("pushButton_2")
         self.pushButton_2.clicked.connect(self.MainWindow.close)
 
         self.retranslateUi(FormJS8Mail)
         QtCore.QMetaObject.connectSlotsByName(FormJS8Mail)
-        self.getConfig()
-        self.serveripad = serverip
-        self.servport = int(serverport)
-        self.api = js8callAPIsupport.js8CallUDPAPICalls((self.serveripad),
-                                                        int(self.servport))
 
+        # Load config and initialize API
+        self._load_config()
+        self.api = js8callAPIsupport.js8CallUDPAPICalls(
+            self.server_ip, int(self.server_port)
+        )
 
-
-
-
-    def retranslateUi(self, FormJS8Mail):
+    def retranslateUi(self, FormJS8Mail: QtWidgets.QWidget) -> None:
+        """Set UI text labels."""
         _translate = QtCore.QCoreApplication.translate
-        FormJS8Mail.setWindowTitle(_translate("FormJS8Mail", "CommStat JS8Mail "))
+        FormJS8Mail.setWindowTitle(_translate("FormJS8Mail", "CommStat-Improved JS8Mail"))
         self.label.setText(_translate("FormJS8Mail", "Email Address : "))
         self.label_2.setText(_translate("FormJS8Mail", "Email Body :"))
         self.pushButton.setText(_translate("FormJS8Mail", "Transmit"))
         self.pushButton_2.setText(_translate("FormJS8Mail", "Cancel"))
 
+    def _load_config(self) -> None:
+        """Load server configuration from config.ini."""
+        self.server_ip = "127.0.0.1"
+        self.server_port = "2242"
 
-    def getConfig(self):
-        global serverip
-        global serverport
         if os.path.exists("config.ini"):
-            config_object = ConfigParser()
-            config_object.read("config.ini")
-            userinfo = config_object["USERINFO"]
-            systeminfo = config_object["DIRECTEDCONFIG"]
-            callsign = format(userinfo["callsign"])
-            callsignSuffix = format(userinfo["callsignsuffix"])
-            group1 = format(userinfo["group1"])
-            group2 = format(userinfo["group2"])
-            grid = format(userinfo["grid"])
-            path = format(systeminfo["path"])
-            serverip = format(systeminfo["server"])
-            serverport = format(systeminfo["UDP_port"])
-            selectedgroup = format(userinfo["selectedgroup"])
+            config = ConfigParser()
+            config.read("config.ini")
+            if "DIRECTEDCONFIG" in config:
+                self.server_ip = config["DIRECTEDCONFIG"].get("server", "127.0.0.1")
+                self.server_port = config["DIRECTEDCONFIG"].get("UDP_port", "2242")
 
+    def _show_error(self, message: str) -> None:
+        """Display an error message box."""
+        msg = QMessageBox()
+        msg.setWindowTitle("CommStat-Improved Error")
+        msg.setText(message)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
+        msg.exec_()
 
-    def transmit(self):
+    def _show_info(self, message: str) -> None:
+        """Display an info message box."""
+        msg = QMessageBox()
+        msg.setWindowTitle("CommStat-Improved TX")
+        msg.setText(message)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
+        msg.exec_()
 
-        email = format(self.lineEdit.text())
-        body = self.lineEdit_2.text()
-        if len(email) > 7:
-            if re.match(r"^.+@(\[?)[a-zA-Z0-9-.]+\.([a-zA-Z]{2,3}|[0-9]{1,3})(]?)$", email) != None:
-                print("This is a valid email address")
+    def transmit(self) -> None:
+        """Validate and transmit the email."""
+        email = self.lineEdit.text().strip()
+        body = self.lineEdit_2.text().strip()
 
-            else:
-                msg = QMessageBox()
-                msg.setWindowTitle("CommStatX error")
-                msg.setText("email address is not valid!")
-                msg.setIcon(QMessageBox.Critical)
-                msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-                x = msg.exec_()  # this will show our messagebox
-                return
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("email address is not valid!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
+        # Validate email address
+        if len(email) < MIN_EMAIL_LENGTH or not re.match(EMAIL_PATTERN, email):
+            self._show_error("Email address is not valid!")
             return
-        if len(body) < 8:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("email body is too short min 8 characters!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
-            return
-        else:
-            emailcmd = "@APRSIS CMD :EMAIL-2  :";
-            emailtail = "{03}";
-            message = ""+emailcmd+""+email+" "+body+""+emailtail+""
-            messageType = js8callAPIsupport.TYPE_TX_SETMESSAGE
-            mode = "EMAIL-2"
-            mode = mode.ljust(9)
-            messageString = message  # mode+" "+self.tocall.get()+" "+text
 
-            self.sendMessage(messageType, messageString)
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX TX")
-            msg.setText("CommStatX will transmit : "+message)
-            msg.setIcon(QMessageBox.Information)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
-            self.closeapp()
-    def closeapp(self):
+        # Validate body length
+        if len(body) < MIN_BODY_LENGTH:
+            self._show_error(f"Email body is too short (minimum {MIN_BODY_LENGTH} characters)!")
+            return
+
+        # Build and send message
+        email_cmd = "@APRSIS CMD :EMAIL-2  :"
+        email_tail = "{03}"
+        message = f"{email_cmd}{email} {body}{email_tail}"
+
+        message_type = js8callAPIsupport.TYPE_TX_SETMESSAGE
+        self._send_message(message_type, message)
+
+        self._show_info(f"CommStat-Improved will transmit:\n{message}")
         self.MainWindow.close()
 
-
-
-
-
-
-    def sendMessage(self, messageType, messageText):
-        self.api.sendMessage(messageType, messageText)
-
-
+    def _send_message(self, message_type: str, message_text: str) -> None:
+        """Send message via JS8Call API."""
+        self.api.sendMessage(message_type, message_text)
 
 
 if __name__ == "__main__":
@@ -182,7 +191,3 @@ if __name__ == "__main__":
     ui.setupUi(FormJS8Mail)
     FormJS8Mail.show()
     sys.exit(app.exec_())
-
-
-
-

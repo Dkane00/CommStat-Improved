@@ -35,6 +35,8 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 from about import Ui_FormAbout
 from settings2 import SettingsDialog
 from colors import ColorsDialog
+from js8mail import Ui_FormJS8Mail
+from js8sms import Ui_FormJS8SMS
 
 
 # =============================================================================
@@ -1092,11 +1094,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_js8email(self) -> None:
         """Open JS8 Email window."""
-        print("JS8EMAIL clicked - window not yet implemented")
+        dialog = QtWidgets.QDialog()
+        dialog.ui = Ui_FormJS8Mail()
+        dialog.ui.setupUi(dialog)
+        dialog.exec_()
 
     def _on_js8sms(self) -> None:
         """Open JS8 SMS window."""
-        print("JS8SMS clicked - window not yet implemented")
+        dialog = QtWidgets.QDialog()
+        dialog.ui = Ui_FormJS8SMS()
+        dialog.ui.setupUi(dialog)
+        dialog.exec_()
 
     def _on_statrep(self) -> None:
         """Open StatRep window."""
