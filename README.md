@@ -19,7 +19,7 @@ Commstat One is a Python version of the CommStat software <b>designed to run on 
 
 # CommStat-Improved Ver 2.5.0 Released 12/25/2025
 - Author: Manuel G Ochoa ~N0DDK
-- AI Code Assistant: ﻿Claude (Anthropic)
+- AI Code Assistant: ﻿Claude (Anthropic), ChatGPT (OpenAI)
 <br>
 
 <h3>CommStat-Improved - Summary of Changes and Improvements</h3>
@@ -182,3 +182,17 @@ NOTE : Saavy users can "git clone https://github.com/W5DMH/commstatone.git"<br>
 
 I must give credit to m0iax for his JS8CallAPISupport Script as that is what makes the transmitting possible.See the rest of his JS8Call Tools here : https://github.com/m0iax
 <br>
+
+---
+
+## License & Copyright
+
+Copyright (c) 2025 Manuel Ochoa
+
+This project is licensed under the GNU General Public License v3.0.
+
+CommStat-Improved is based on CommStatX, originally created by Dan Hurd W5DMH and designed by AmRRON, MPURN and PREPPERNET.
+
+AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
+
+For questions, comments or suggestions, email: mochoa@protonmail.com
