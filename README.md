@@ -19,6 +19,7 @@ Commstat One is a Python version of the CommStat software <b>designed to run on 
 
 # CommStat-Improved Ver 2.5.0 Released 12/25/2025
 - Author: Manuel G Ochoa ~N0DDK
+- AI Code Assistant: ﻿Claude (Anthropic)
 <br>
 
 <h3>CommStat-Improved - Summary of Changes and Improvements</h3>
