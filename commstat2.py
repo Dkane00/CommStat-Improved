@@ -218,15 +218,20 @@ class ConfigManager:
 
     def get_color(self, key: str) -> str:
         """
-        Get a color value by key.
+        Get a color value by key with validation.
 
         Args:
             key: The color key name
 
         Returns:
-            The hex color value
+            The hex color value, or default if invalid
         """
-        return self.colors.get(key, '#FFFFFF')
+        color = self.colors.get(key, '#FFFFFF')
+        if not QColor(color).isValid():
+            default = DEFAULT_COLORS.get(key, '#FFFFFF')
+            print(f"Warning: Invalid color '{color}' for '{key}', using default '{default}'")
+            return default
+        return color
 
     def get_selected_group(self) -> str:
         """Get the currently selected group name."""
@@ -439,13 +444,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def _setup_menu(self) -> None:
         """Create the menu bar with all actions."""
         self.menubar = QtWidgets.QMenuBar(self)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 886, 22))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 886, 24))
+        self.menubar.setFixedHeight(24)
         menu_bg = self.config.get_color('menu_background')
         menu_fg = self.config.get_color('menu_foreground')
         self.menubar.setStyleSheet(f"""
             QMenuBar {{
                 background-color: {menu_bg};
                 color: {menu_fg};
+            }}
+            QMenuBar::item {{
+                padding: 4px 8px;
             }}
             QMenuBar::item:selected {{
                 background-color: {menu_bg};
