@@ -97,6 +97,46 @@ red = True
 grids = statelist
 loadflag = 0
 
+# Color scheme (loaded from config.ini)
+colors = {
+    'program_background': '#A52A2A',
+    'program_foreground': '#FFFFFF',
+    'marquee_background': '#242424',
+    'marquee_foreground_green': '#00FF00',
+    'marquee_foreground_yellow': '#FFFF00',
+    'marquee_foreground_red': '#FF00FF',
+    'time_background': '#282864',
+    'time_foreground': '#88CCFF',
+    'condition_green': '#108010',
+    'condition_yellow': '#FFFF77',
+    'condition_red': '#BB0000',
+    'condition_gray': '#808080',
+    'title_bar_background': '#F07800',
+    'title_bar_foreground': '#FFFFFF',
+    'data_background': '#EEEEEE',
+    'data_foreground': '#000000',
+    'feed_background': '#000000',
+    'feed_foreground': '#FFFFFF'
+}
+
+def load_colors():
+    """Load color scheme from config.ini"""
+    global colors
+    config = ConfigParser()
+    config.read("config.ini")
+    if config.has_section("COLORS"):
+        for key in colors.keys():
+            if config.has_option("COLORS", key):
+                colors[key] = config.get("COLORS", key)
+
+def hex_to_rgb(hex_color):
+    """Convert hex color to RGB tuple"""
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+# Load colors at startup
+load_colors()
+
 class CustomWebEnginePage(QWebEnginePage):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -142,54 +182,84 @@ class Ui_MainWindow(QWidget):
         MainWindow.setWindowIcon(icon)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
+        self.centralwidget.setStyleSheet(f"background-color: {colors['program_background']};")
         self.gridLayout_2 = QtWidgets.QGridLayout(self.centralwidget)
         self.gridLayout_2.setObjectName("gridLayout_2")
-        self.label = QtWidgets.QLabel(self.centralwidget)
-        self.label.setMinimumSize(QtCore.QSize(400, 30))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(12)
-        font.setBold(False)
-        self.label.setFont(font)
-        self.label.setAutoFillBackground(False)
 
-        self.label.setStyleSheet("background-color: #222632;\n"
-                                   "color: rgb(0, 200, 0);")
+        # Header row using horizontal layout for precise control
+        self.header_widget = QtWidgets.QWidget(self.centralwidget)
+        self.header_layout = QtWidgets.QHBoxLayout(self.header_widget)
+        self.header_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.label.setObjectName("label")
-        self.gridLayout_2.addWidget(self.label, 0,0, 1, 3, QtCore.Qt.AlignCenter)
-        self.label_2 = QtWidgets.QLabel(self.centralwidget)
-
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(12)
-        font.setBold(False)
-        self.label_2.setFont(font)
-        self.label_2.setAutoFillBackground(False)
-        self.label_2.setStyleSheet("background-color: #222632;\n"
-                                   "color: #8BBFEF;")
-        self.label_2.setObjectName("label_2")
-
-        # Time label
-        self.label_time = QtWidgets.QLabel(self.centralwidget)
-        font_time = QtGui.QFont()
-        font_time.setFamily("Arial")
-        font_time.setPointSize(10)
-        font_time.setBold(True)
-        self.label_time.setFont(font_time)
-        self.label_time.setStyleSheet("color: rgb(0, 0, 0);")
-        self.label_time.setText("Time:        ")
-        self.gridLayout_2.addWidget(self.label_time, 0, 2, 1, 1, QtCore.Qt.AlignRight)
-        self.gridLayout_2.addWidget(self.label_2, 0, 3, 1, 1)
-        self.label_3 = QtWidgets.QLabel(self.centralwidget)
+        # Active Group label
+        self.label_3 = QtWidgets.QLabel(self.header_widget)
         font = QtGui.QFont()
         font.setFamily("Arial")
         font.setPointSize(10)
         font.setBold(True)
         self.label_3.setFont(font)
         self.label_3.setObjectName("label_3")
-        self.gridLayout_2.addWidget(self.label_3, 0, 0, 1, 1)
-        self.label_3.setText("Current Group : AMMRRON")
+        self.label_3.setStyleSheet(f"color: {colors['program_foreground']};")
+        self.label_3.setText("Active Group : AMMRRON")
+        self.header_layout.addWidget(self.label_3)
+
+        self.header_layout.addStretch()
+
+        # Marquee label
+        self.label_marquee = QtWidgets.QLabel(self.header_widget)
+        font_marquee = QtGui.QFont()
+        font_marquee.setFamily("Arial")
+        font_marquee.setPointSize(10)
+        font_marquee.setBold(True)
+        self.label_marquee.setFont(font_marquee)
+        self.label_marquee.setStyleSheet(f"color: {colors['program_foreground']};")
+        self.label_marquee.setText("Marquee:")
+        self.header_layout.addWidget(self.label_marquee)
+
+        # Marquee banner
+        self.label = QtWidgets.QLabel(self.header_widget)
+        self.label.setMinimumSize(QtCore.QSize(200, 30))
+        font = QtGui.QFont()
+        font.setFamily("Arial")
+        font.setPointSize(12)
+        font.setBold(False)
+        self.label.setFont(font)
+        self.label.setAutoFillBackground(False)
+        self.label.setStyleSheet(f"background-color: {colors['marquee_background']};\n"
+                                   f"color: {colors['marquee_foreground_green']};")
+        self.label.setObjectName("label")
+        self.header_layout.addWidget(self.label)
+
+        # Spacer to push Time to the right
+        self.header_layout.addStretch()
+
+        # Time label
+        self.label_time = QtWidgets.QLabel(self.header_widget)
+        font_time = QtGui.QFont()
+        font_time.setFamily("Arial")
+        font_time.setPointSize(10)
+        font_time.setBold(True)
+        self.label_time.setFont(font_time)
+        self.label_time.setStyleSheet(f"color: {colors['program_foreground']};")
+        self.label_time.setText("Time:")
+        self.header_layout.addWidget(self.label_time)
+
+        # Time banner
+        self.label_2 = QtWidgets.QLabel(self.header_widget)
+        font = QtGui.QFont()
+        font.setFamily("Arial")
+        font.setPointSize(12)
+        font.setBold(False)
+        self.label_2.setFont(font)
+        self.label_2.setAutoFillBackground(False)
+        self.label_2.setStyleSheet(f"background-color: {colors['time_background']};\n"
+                                   f"color: {colors['time_foreground']};")
+        self.label_2.setObjectName("label_2")
+        self.label_2.setMinimumWidth(150)
+        self.header_layout.addWidget(self.label_2)
+
+        # Add header to grid spanning all columns
+        self.gridLayout_2.addWidget(self.header_widget, 0, 0, 1, 5)
 
         self.readconfig()
 
@@ -197,6 +267,18 @@ class Ui_MainWindow(QWidget):
         self.tableWidget.setObjectName("tableWidget")
         self.tableWidget.setColumnCount(0)
         self.tableWidget.setRowCount(0)
+        self.tableWidget.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {colors['data_background']};
+                color: {colors['data_foreground']};
+            }}
+            QHeaderView::section {{
+                background-color: {colors['title_bar_background']};
+                color: {colors['title_bar_foreground']};
+                font-weight: bold;
+                padding: 4px;
+            }}
+        """)
         # Connect itemClicked signal for left-click with chooser
         self.tableWidget.itemClicked.connect(self.handleTableClick)
         self.gridLayout_2.addWidget(self.tableWidget, 1, 0, 1, 5)
@@ -221,6 +303,7 @@ class Ui_MainWindow(QWidget):
         font.setBold(False)
         self.label_start.setFont(font)
         self.label_start.setObjectName("label_start")
+        self.label_start.setStyleSheet(f"color: {colors['program_foreground']};")
         self.gridLayout_2.addWidget(self.label_start, 2, 0, 1, 1)
         self.label_start.setText("Filters : Start : "+start+"  |  End : "+end+"| Green : "+greenstat+" |  Yellow : "+yellowstat+" |")
 
@@ -231,12 +314,32 @@ class Ui_MainWindow(QWidget):
         font.setBold(False)
         self.label_filters.setFont(font)
         self.label_filters.setObjectName("label_start")
+        self.label_filters.setStyleSheet(f"color: {colors['program_foreground']};")
         self.gridLayout_2.addWidget(self.label_filters, 2, 1, 1, 3)
         self.label_filters.setText(" Red : "+redstat+" |  Grids : "+grids)
 
-        self.plainTextEdit = QtWidgets.QPlainTextEdit(self.centralwidget)
+        # Feed section with title label
+        self.feed_container = QtWidgets.QWidget(self.centralwidget)
+        self.feed_layout = QtWidgets.QVBoxLayout(self.feed_container)
+        self.feed_layout.setContentsMargins(0, 0, 0, 0)
+        self.feed_layout.setSpacing(0)
+
+        # Feed title label
+        self.label_feed_title = QtWidgets.QLabel(self.feed_container)
+        font_feed = QtGui.QFont()
+        font_feed.setFamily("Arial")
+        font_feed.setPointSize(10)
+        font_feed.setBold(True)
+        self.label_feed_title.setFont(font_feed)
+        self.label_feed_title.setStyleSheet(f"color: {colors['program_foreground']};")
+        self.label_feed_title.setText(" JS8Call Live Data Feed")
+        self.feed_layout.addWidget(self.label_feed_title)
+
+        # Feed text area
+        self.plainTextEdit = QtWidgets.QPlainTextEdit(self.feed_container)
         self.plainTextEdit.setObjectName("plainTextEdit")
         self.plainTextEdit.setFont(font)
+        self.plainTextEdit.setStyleSheet(f"background-color: {colors['feed_background']}; color: {colors['feed_foreground']};")
 
         # Set word wrap mode to NoWrap
         self.plainTextEdit.setWordWrapMode(QtGui.QTextOption.NoWrap)
@@ -244,8 +347,9 @@ class Ui_MainWindow(QWidget):
         # Enable vertical and horizontal scrollbars
         self.plainTextEdit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.plainTextEdit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.feed_layout.addWidget(self.plainTextEdit)
 
-        self.gridLayout_2.addWidget(self.plainTextEdit, 3, 2, 1, 3)
+        self.gridLayout_2.addWidget(self.feed_container, 3, 2, 1, 3)
 
         self.widget = QWebEngineView(self.centralwidget)
         self.setObjectName("widget")
@@ -258,6 +362,18 @@ class Ui_MainWindow(QWidget):
         self.tableWidget_2.setObjectName("tableWidget_2")
         self.tableWidget_2.setColumnCount(0)
         self.tableWidget_2.setRowCount(0)
+        self.tableWidget_2.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {colors['data_background']};
+                color: {colors['data_foreground']};
+            }}
+            QHeaderView::section {{
+                background-color: {colors['title_bar_background']};
+                color: {colors['title_bar_foreground']};
+                font-weight: bold;
+                padding: 4px;
+            }}
+        """)
         self.gridLayout_2.addWidget(self.tableWidget_2, 4, 2, 1, 3)
 
         self.gridLayout_2.setRowStretch(0, 0)
@@ -629,17 +745,17 @@ class Ui_MainWindow(QWidget):
                         # Apply existing color logic for status columns
                         if data in ["1", "2", "3", "4"]:
                             if data == "1":
-                                item.setBackground(QColor(0, 128, 0))
-                                item.setForeground(QColor(0, 128, 0))
+                                item.setBackground(QColor(colors['condition_green']))
+                                item.setForeground(QColor(colors['condition_green']))
                             elif data == "2":
-                                item.setBackground(QColor(255, 255, 0))
-                                item.setForeground(QColor(255, 255, 0))
+                                item.setBackground(QColor(colors['condition_yellow']))
+                                item.setForeground(QColor(colors['condition_yellow']))
                             elif data == "3":
-                                item.setBackground(QColor(255, 0, 0))
-                                item.setForeground(QColor(255, 0, 0))
+                                item.setBackground(QColor(colors['condition_red']))
+                                item.setForeground(QColor(colors['condition_red']))
                             elif data == "4":
-                                item.setBackground(QColor(128, 128, 128))
-                                item.setForeground(QColor(128, 128, 128))
+                                item.setBackground(QColor(colors['condition_gray']))
+                                item.setForeground(QColor(colors['condition_gray']))
                         self.tableWidget.setItem(row_number, column_number, item)
 
                 table = self.tableWidget
@@ -659,11 +775,7 @@ class Ui_MainWindow(QWidget):
         with open(path) as f, open('output.txt', 'w') as fout:
             fout.writelines(reversed(f.readlines()))
         text = open('output.txt').read()
-        text_edit_widget = QPlainTextEdit(text)
-        if directedcounter > 1:
-            self.plainTextEdit.setPlainText(text)
-        else:
-            self.plainTextEdit.setPlainText(text)
+        self.plainTextEdit.setPlainText(text)
         directedcounter += 1
         print("Directed completed : counter :" + str(directedcounter))
 
@@ -679,11 +791,7 @@ class Ui_MainWindow(QWidget):
         with open(path) as f, open('output.txt', 'w') as fout:
             fout.writelines(reversed(f.readlines()))
         text = open('output.txt').read()
-        text_edit_widget = QPlainTextEdit(text)
-        if directedcounter > 1:
-            self.plainTextEdit.setPlainText(text)
-        else:
-            self.plainTextEdit.setPlainText(text)
+        self.plainTextEdit.setPlainText(text)
         directedcounter += 1
         print("Directed completed : counter :" + str(directedcounter))
 
@@ -835,7 +943,7 @@ class Ui_MainWindow(QWidget):
 
     def showTime(self):
         now = QDateTime.currentDateTime()
-        displayTxt = now.toUTC().toString(" yyyy-MM-dd   hh:mm:ss 'UTC'")
+        displayTxt = now.toUTC().toString("  yyyy-MM-dd   hh:mm:ss 'UTC'  ")
         self.label_2.setText(" " + displayTxt + " ")
 
     def thread(self):
@@ -852,9 +960,9 @@ class Ui_MainWindow(QWidget):
         subprocess.call([sys.executable, "datareader.py"])
 
     def feed(self):
-        marqueegreen = "color: rgb(0, 200, 0);"
-        marqueeyellow = "color: rgb(255, 255, 0);"
-        marqueered = "color: rgb(255, 0, 0);"
+        marqueegreen = f"color: {colors['marquee_foreground_green']};"
+        marqueeyellow = f"color: {colors['marquee_foreground_yellow']};"
+        marqueered = f"color: {colors['marquee_foreground_red']};"
         connection = sqlite3.connect('traffic.db3')
         query = "SELECT * FROM marquees_data WHERE groupname = ? ORDER BY date DESC LIMIT 1"
         result = connection.execute(query, (selectedgroup,))
@@ -867,13 +975,13 @@ class Ui_MainWindow(QWidget):
         msg = (result[0][6])
         color = (result[0][5])
         if (color == "2"):
-            self.label.setStyleSheet("background-color: #222632;\n"
+            self.label.setStyleSheet(f"background-color: {colors['marquee_background']};\n"
                                      "" + marqueered + "")
         elif (color == "1"):
-            self.label.setStyleSheet("background-color: #222632;\n"
+            self.label.setStyleSheet(f"background-color: {colors['marquee_background']};\n"
                                      "" + marqueeyellow + "")
         else:
-            self.label.setStyleSheet("background-color: #222632;\n"
+            self.label.setStyleSheet(f"background-color: {colors['marquee_background']};\n"
                                      "" + marqueegreen + "")
 
         marqueetext = (" ID " + id + " Received  : " + date + "  From : " + group + " by : " + callSend + " MSG : " + msg)
@@ -899,7 +1007,7 @@ class Ui_MainWindow(QWidget):
             start = number_of_frame - self.nl
         text = '{}'.format(self.news[start:number_of_frame])
         self.label.setText(text)
-        self.label.setFixedWidth(400)
+        self.label.setFixedWidth(600)
 
     def nextNews(self):
         self.feed()
