@@ -719,11 +719,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         # Build full path to DIRECTED.TXT
-        import platform
-        if "Windows" in platform.platform():
-            full_path = directed_path + "\\DIRECTED.TXT"
-        else:
-            full_path = directed_path + "/DIRECTED.TXT"
+        full_path = os.path.join(directed_path, "DIRECTED.TXT")
 
         try:
             with open(full_path, 'r') as f:
@@ -961,12 +957,17 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"StatRep clicked: ID = {sr_id.text()}")
 
     def _setup_timers(self) -> None:
-        """Setup timers for clock and marquee animation."""
+        """Setup timers for clock, data refresh, and marquee animation."""
         # Clock timer - updates every second
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self._update_time)
         self.clock_timer.start(1000)
         self._update_time()  # Initial display
+
+        # Data refresh timer - updates every 20 seconds
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self._refresh_data)
+        self.refresh_timer.start(20000)
 
         # Marquee animation timeline
         self.marquee_timeline = QtCore.QTimeLine()
@@ -977,6 +978,14 @@ class MainWindow(QtWidgets.QMainWindow):
         # Marquee state
         self.marquee_text = ""
         self.marquee_chars = 0
+
+    def _refresh_data(self) -> None:
+        """Refresh StatRep, live feed, and bulletin data."""
+        self._load_statrep_data()
+        self._load_live_feed()
+        self._load_bulletin_data()
+        self._load_map()
+        print("Data refreshed")
 
     def _update_time(self) -> None:
         """Update the time display with current UTC time."""

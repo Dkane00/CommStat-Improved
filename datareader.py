@@ -1,3 +1,6 @@
+# Copyright (c) 2025 Manuel Ochoa
+# This file is part of CommStat-Improved.
+# Licensed under the GNU General Public License v3.0.
 """
 datareader.py - Message parser for CommStat-Improved
 
@@ -92,34 +95,18 @@ class Config:
         self.grid: str = ""
         self.path: str = ""
         self.selected_group: str = ""
-        self.os_directed: str = ""
-
-        self._detect_os()
+        self._log_os_info()
         self.load()
 
-    def _detect_os(self) -> None:
-        """Detect operating system and set path separator."""
-        platform_str = platform.platform()
-
-        if "Windows" in platform_str:
-            print("Datareader: Windows OS detected")
-            self.os_directed = r"\DIRECTED.TXT"
-        elif "Linux" in platform_str:
-            print("Datareader: Linux OS detected")
-            self.os_directed = "/DIRECTED.TXT"
-        elif "aarch64" in platform_str:
-            print("Datareader: Pi 64bit OS detected")
-            self.os_directed = "/DIRECTED.TXT"
-        else:
-            print(f"Datareader: OS is {platform_str}")
-            print(f"Datareader: Python version is {platform.python_version()}")
-            self.os_directed = "/DIRECTED.TXT"
+    def _log_os_info(self) -> None:
+        """Log operating system information."""
+        print(f"Datareader: {platform.system()} OS detected")
 
     def load(self) -> bool:
         """Load configuration from config.ini."""
         if not os.path.exists(CONFIG_FILE):
             msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
+            msg.setWindowTitle("CommStat-Improved error")
             msg.setText("Config file is missing!")
             msg.setIcon(QMessageBox.Critical)
             msg.exec_()
@@ -148,7 +135,7 @@ class Config:
     @property
     def directed_path(self) -> str:
         """Full path to DIRECTED.TXT file."""
-        return self.path + self.os_directed
+        return os.path.join(self.path, "DIRECTED.TXT")
 
 
 class MessageParser:
@@ -492,7 +479,7 @@ class MessageParser:
         print_green(f"Added Marquee from: {callsign} ID: {id_num}")
 
     def _process_cs_request(self, line: str) -> None:
-        """Process a CS (CommStat) request."""
+        """Process a CS (CommStat-Improved) request."""
         arr = line.split('\t')
         utc = arr[0]
         callsignmix = arr[4]
@@ -519,7 +506,7 @@ class MessageParser:
         count = len(arr) + len(arr2)
         if count != FIELD_COUNT_CHECKIN:
             print_red(line.rstrip())
-            print_red(f"Check in field count: {count} - 10 fields required, CommStatX cannot process this check in\n")
+            print_red(f"Check in field count: {count} - 10 fields required, CommStat-Improved cannot process this check in\n")
             return
 
         callsign = self.extract_callsign(arr2[0])
@@ -578,7 +565,7 @@ class MessageParser:
 
                 if 3 < len(callsign) < 7:
                     print_red(line.rstrip())
-                    print_red("Failed CommStatX msg criteria, incorrect group or possibly not a CommStatX msg")
+                    print_red("Failed CommStat-Improved msg criteria, incorrect group or possibly not a CommStat-Improved msg")
         except Exception:
             print(line)
             print("An exception occurred with the above string, nothing could be done with this")
@@ -594,13 +581,13 @@ class MessageParser:
 
                 if 3 < len(callsign) < 7:
                     print_red(line.rstrip())
-                    print_red("Failed CommStatX criteria, probably not a CommStatX msg")
+                    print_red("Failed CommStat-Improved criteria, probably not a CommStat-Improved msg")
                 else:
                     print_red(line.rstrip())
                     print_red("Failed callsign structure criteria, msg not parsed into database\n")
         except IndexError:
             print_red(line.rstrip())
-            print_red(f"Failed CommStatX index criteria, probably not a CommStatX msg not parsed into database")
+            print_red(f"Failed CommStat-Improved index criteria, probably not a CommStat-Improved msg not parsed into database")
 
 
 def run() -> None:
