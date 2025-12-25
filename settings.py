@@ -22,7 +22,7 @@ class Ui_FormSettings(object):
         FormSettings.setObjectName("FormSettings")
         FormSettings.resize(678, 360)
         icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("USA-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        icon.addPixmap(QtGui.QPixmap("radiation-32.jpg"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         FormSettings.setWindowIcon(icon)
         self.lineEdit = QtWidgets.QLineEdit(FormSettings)
         self.lineEdit.setGeometry(QtCore.QRect(170, 20, 113, 20))
@@ -366,7 +366,7 @@ class Ui_FormSettings(object):
 
     def retranslateUi(self, FormSettings):
         _translate = QtCore.QCoreApplication.translate
-        FormSettings.setWindowTitle(_translate("FormSettings", "Commstat Settings"))
+        FormSettings.setWindowTitle(_translate("FormSettings", "Commstat-Improved Settings"))
         self.label.setText(_translate("FormSettings", "Enter Legal Callsign :"))
         self.label_2.setText(_translate("FormSettings", "Enter Callsign Suffix :"))
         self.label_5.setText(_translate("FormSettings", "Enter 4 or 6 digit Grid :"))

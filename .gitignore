@@ -18,6 +18,7 @@ CommStat*.html
 map.html
 
 # IDE
+.vs/
 .vscode/
 .idea/
 *.swp

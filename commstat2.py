@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Manuel Ochoa
 # This file is part of CommStat-Improved.
 # Licensed under the GNU General Public License v3.0.
+# AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
 
 """
 CommStat-Improved v2.5.0 - Rebuilt with best practices
@@ -31,6 +32,9 @@ from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import QTimer, QDateTime, Qt
 from PyQt5.QtWidgets import qApp
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
+from about import Ui_FormAbout
+from settings2 import SettingsDialog
+from colors import ColorsDialog
 
 
 # =============================================================================
@@ -494,6 +498,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("filter", "DISPLAY FILTER", self._on_filter),
             ("data", "DATA MANAGER", self._on_data),
             ("settings", "SETTINGS", self._on_settings),
+            ("colors", "COLORS", self._on_colors),
             ("help", "HELP", self._on_help),
             ("about", "ABOUT", self._on_about),
             None,  # Separator
@@ -1131,15 +1136,39 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_settings(self) -> None:
         """Open Settings window."""
-        print("SETTINGS clicked - window not yet implemented")
+        dialog = SettingsDialog(self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Reload config after settings are saved
+            self.config = ConfigManager()
+
+    def _on_colors(self) -> None:
+        """Open Colors customization window."""
+        dialog = ColorsDialog(self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Reload config - colors apply on restart
+            self.config = ConfigManager()
+            QtWidgets.QMessageBox.information(
+                self, "Colors Saved",
+                "Color changes will apply when you restart the application."
+            )
 
     def _on_help(self) -> None:
         """Open Help documentation."""
-        print("HELP clicked - would open CommStat_Help.pdf")
+        pdf_path = Path("CommStat_Help.pdf").resolve()
+        if pdf_path.exists():
+            os.startfile(str(pdf_path))
+        else:
+            QtWidgets.QMessageBox.warning(
+                self, "Help Not Found",
+                "CommStat_Help.pdf not found in application directory."
+            )
 
     def _on_about(self) -> None:
         """Open About window."""
-        print("ABOUT clicked - window not yet implemented")
+        dialog = QtWidgets.QDialog()
+        dialog.ui = Ui_FormAbout()
+        dialog.ui.setupUi(dialog)
+        dialog.exec_()
 
 
 # =============================================================================
