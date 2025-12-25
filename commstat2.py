@@ -41,14 +41,14 @@ VERSION = "2.5.0"
 WINDOW_TITLE = f"CommStat-Improved (v{VERSION}) by N0DDK"
 WINDOW_SIZE = (1400, 818)
 CONFIG_FILE = "config.ini"
-ICON_FILE = "RAD-32.jpg"
+ICON_FILE = "radiation-32.jpg"
 DATABASE_FILE = "traffic.db3"
 
 # StatRep table column headers
 STATREP_HEADERS = [
     "Date Time UTC", "ID", "Callsign", "Grid", "Scope", "Map Pin",
     "Powr", "H2O", "Med", "Comm", "Trvl", "Inet", "Fuel", "Food",
-    "Crime", "Civil", "Polit", "Remarks"
+    "Crime", "Civil", "Pol", "Remarks"
 ]
 
 # Default grid filter (US state grid prefixes)
