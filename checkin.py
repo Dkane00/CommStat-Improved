@@ -113,7 +113,7 @@ class Ui_FormCheckin(object):
             grid = format(userinfo["grid"])
             path = format(systeminfo["path"])
             serverip = format(systeminfo["server"])
-            serverport = format(systeminfo["port"])
+            serverport = format(systeminfo["UDP_port"])
             state = format(systeminfo["state"])
             selectedgroup = format(userinfo["selectedgroup"])
 

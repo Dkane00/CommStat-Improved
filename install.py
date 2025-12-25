@@ -7,9 +7,14 @@ import subprocess
 import sys
 import os
 import platform
+import shutil
+
+CONFIG_FILE = "config.ini"
+CONFIG_TEMPLATE = "config.ini.template"
+DATABASE_FILE = "traffic.db3"
+DATABASE_TEMPLATE = "traffic.db3.template"
 
 pyver = ""
-
 osver = ""
 
 
@@ -47,7 +52,24 @@ def oscheck():
         return
 
 
+def create_from_template(target: str, template: str) -> None:
+    """Create a file from template if it doesn't exist."""
+    if not os.path.exists(target):
+        if os.path.exists(template):
+            shutil.copy(template, target)
+            print(f"Created {target} from template")
+        else:
+            print(f"Warning: {template} not found, cannot create {target}")
+
+
+def setup_files():
+    """Create config and database from templates if missing."""
+    create_from_template(CONFIG_FILE, CONFIG_TEMPLATE)
+    create_from_template(DATABASE_FILE, DATABASE_TEMPLATE)
+
+
 def runsettings():
+    setup_files()
     subprocess.call([sys.executable, "settings.py"])
 
 

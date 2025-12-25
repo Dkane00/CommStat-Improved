@@ -1,0 +1,58 @@
+[USERINFO]
+callsign = YOURCALL
+callsignsuffix =
+group1 = MAGNET
+group2 = AMRRON
+grid = AA00
+selectedgroup = MAGNET
+
+[DIRECTEDCONFIG]
+path = C:\Users\YourUser\AppData\Local\JS8Call
+server = 127.0.0.1
+UDP_port = 2242
+state = XX
+
+[FILTER]
+start = 2023-01-01 00:00
+end = 2030-12-31 23:59
+green = 1
+yellow = 2
+red = 3
+grids = ['AP', 'AO', 'BO', 'CN', 'CM', 'CO', 'DN', 'DM', 'DL', 'DO', 'EN', 'EM', 'EL', 'EO', 'FN', 'FM']
+
+[COLORS]
+# Color of overall program
+program_background = #A52A2A
+program_foreground = #FFFFFF
+
+# Menu bar colors
+menu_background = #3050CC
+menu_foreground = #FFFFFF
+
+# Table header colors (StatRep Data & Bulletins)
+title_bar_background = #F07800
+title_bar_foreground = #FFFFFF
+
+# Marquee banner
+marquee_background = #242424
+marquee_foreground_green = #00FF00
+marquee_foreground_yellow = #FFFF00
+marquee_foreground_red = #FF00FF
+
+# Time banner
+time_background = #282864
+time_foreground = #88CCFF
+
+# StatRep condition colors (used for table cells)
+condition_green = #108010
+condition_yellow = #FFFF77
+condition_red = #BB0000
+condition_gray = #808080
+
+# StatRep and Bulletin data colors
+data_background = #EEEEEE
+data_foreground = #000000
+
+# Live feed colors
+feed_background = #000000
+feed_foreground = #FFFFFF

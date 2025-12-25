@@ -431,7 +431,7 @@ class Ui_FormSettings(object):
             grid = format(userinfo["grid"])
             path = format(systeminfo["path"])
             server = format(systeminfo["server"])
-            port = format(systeminfo["port"])
+            port = format(systeminfo["UDP_port"])
             state = format(systeminfo["state"])
             selectedgroup = format(userinfo["selectedgroup"])
             if (selectedgroup == group2):
@@ -647,7 +647,7 @@ class Ui_FormSettings(object):
         config_object["DIRECTEDCONFIG"] = {
             "path": path,
             "server": server,
-            "port": port,
+            "UDP_port": port,
             "state": state
 
         }

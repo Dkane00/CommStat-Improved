@@ -154,7 +154,7 @@ class Ui_FormMarquee(object):
             grid = format(userinfo["grid"])
             path = format(systeminfo["path"])
             serverip = format(systeminfo["server"])
-            serverport = format(systeminfo["port"])
+            serverport = format(systeminfo["UDP_port"])
             selectedgroup = format(userinfo["selectedgroup"])
             self.lineEdit_3.setText(callsign)
 

@@ -355,7 +355,7 @@ class Ui_FilterForm(object):
             grid = format(userinfo["grid"])
             path = format(systeminfo["path"])
             serverip = format(systeminfo["server"])
-            serverport = format(systeminfo["port"])
+            serverport = format(systeminfo["UDP_port"])
             state = format(systeminfo["state"])
             selectedgroup = format(userinfo["selectedgroup"])
             start = format(filter["start"])
@@ -405,7 +405,7 @@ class Ui_FilterForm(object):
         config_object["DIRECTEDCONFIG"] = {
             "path": path,
             "server": serverip,
-            "port": serverport,
+            "UDP_port": serverport,
             "state": state
 
         }

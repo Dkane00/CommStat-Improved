@@ -125,7 +125,7 @@ class Ui_FormJS8Mail(object):
             state = format(systeminfo["state"])
             path = format(systeminfo["path"])
             serverip = format(systeminfo["server"])
-            serverport = format(systeminfo["port"])
+            serverport = format(systeminfo["UDP_port"])
             selectedgroup = format(userinfo["selectedgroup"])
             print("\nIncoming CS Responder Request Timestamp:", sys.argv[1])
             timestamp = (sys.argv[1])

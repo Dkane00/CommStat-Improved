@@ -47,7 +47,7 @@ DATABASE_FILE = "traffic.db3"
 STATREP_HEADERS = [
     "Date Time UTC", "ID", "Callsign", "Grid", "Scope", "Map Pin",
     "Pwr", "H2O", "Med", "Comm", "Trvl", "Int", "Fuel", "Food",
-    "Cri", "Civl", "Pol", "Remarks"
+    "Crime", "Civil", "Poli", "Remarks"
 ]
 
 # Default grid filter (US state grid prefixes)
@@ -193,7 +193,7 @@ class ConfigManager:
             self.directed_config = {
                 'path': config.get("DIRECTEDCONFIG", "path", fallback=""),
                 'server': config.get("DIRECTEDCONFIG", "server", fallback="127.0.0.1"),
-                'port': config.get("DIRECTEDCONFIG", "port", fallback="2442"),
+                'UDP_port': config.get("DIRECTEDCONFIG", "UDP_port", fallback="2442"),
                 'state': config.get("DIRECTEDCONFIG", "state", fallback=""),
             }
 

@@ -468,7 +468,7 @@ class Ui_Form_Net_Manager(object):
             grid = format(userinfo["grid"])
             path = format(systeminfo["path"])
             serverip = format(systeminfo["server"])
-            serverport = format(systeminfo["port"])
+            serverport = format(systeminfo["UDP_port"])
             selectedgroup = format(userinfo["selectedgroup"])
             labeltext = ("Currently Active Group : " + selectedgroup)
             #print(labeltext)
