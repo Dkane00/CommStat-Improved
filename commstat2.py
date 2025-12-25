@@ -636,6 +636,12 @@ class MainWindow(QtWidgets.QMainWindow):
         yellow_stat = "ON" if "2" in filters.get('yellow', '2') else "OFF"
         red_stat = "ON" if "3" in filters.get('red', '3') else "OFF"
 
+        # Size policy that allows labels to shrink
+        shrink_policy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Ignored,
+            QtWidgets.QSizePolicy.Preferred
+        )
+
         # First filter label (start, end, green, yellow)
         self.label_filter1 = QtWidgets.QLabel(self.central_widget)
         self.label_filter1.setFont(font)
@@ -645,7 +651,7 @@ class MainWindow(QtWidgets.QMainWindow):
             f"End: {filters.get('end', '')}  |  "
             f"Green: {green_stat}  |  Yellow: {yellow_stat}  |"
         )
-        self.label_filter1.setMinimumWidth(0)
+        self.label_filter1.setSizePolicy(shrink_policy)
         self.main_layout.addWidget(self.label_filter1, 2, 0, 1, 2)
 
         # Second filter label (red, grids)
@@ -655,7 +661,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_filter2.setText(
             f"Red: {red_stat}  |  Grids: {filters.get('grids', '')}"
         )
-        self.label_filter2.setMinimumWidth(0)
+        self.label_filter2.setSizePolicy(shrink_policy)
         self.main_layout.addWidget(self.label_filter2, 2, 2, 1, 3)
 
         # Row 2 (filter labels) doesn't stretch
@@ -989,12 +995,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.marquee_chars = 0
 
     def _refresh_data(self) -> None:
-        """Refresh StatRep, live feed, and bulletin data."""
+        """Run datareader and refresh StatRep, live feed, and bulletin data."""
+        # Run datareader to parse new messages from DIRECTED.TXT
+        subprocess.call([sys.executable, "datareader.py"])
+
+        # Reload data from database
         self._load_statrep_data()
         self._load_live_feed()
         self._load_bulletin_data()
         self._load_map()
-        print("Data refreshed")
 
     def _update_time(self) -> None:
         """Update the time display with current UTC time."""
