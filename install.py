@@ -1,3 +1,7 @@
+# Copyright (c) 2025 Manuel Ochoa
+# This file is part of CommStat-Improved.
+# Licensed under the GNU General Public License v3.0.
+
 #!/usr/bin/env python3
 import subprocess
 import sys
@@ -93,38 +97,34 @@ def test_python():
 
 
 def lininstall():
-    # firstmodule = "pyqt5"
-    # secondmodule = "PyQtWebEngine"
-    thirdmodule = "feedparser"
-    forthmodule = "file-read-backwards"
-    fifthmodule = "folium"
-    sixthmodule = "pandas"
-    seventhmodule = "maidenhead"
-    # install(firstmodule)
-    # install(secondmodule)
-    install(thirdmodule)
-    install(forthmodule)
-    install(fifthmodule)
-    install(sixthmodule)
-    install(seventhmodule)
+    """Install dependencies for Linux/Pi systems."""
+    packages = [
+        "feedparser",
+        "file-read-backwards",
+        "folium",
+        "pandas",
+        "maidenhead",
+        "psutil",
+    ]
+    for package in packages:
+        install(package)
     runsettings()
 
 
 def wininstall():
-    firstmodule = "pyqt5"
-    secondmodule = "PyQtWebEngine"
-    thirdmodule = "feedparser"
-    forthmodule = "file-read-backwards"
-    fifthmodule = "folium"
-    sixthmodule = "pandas"
-    seventhmodule = "maidenhead"
-    install(firstmodule)
-    install(secondmodule)
-    install(thirdmodule)
-    install(forthmodule)
-    install(fifthmodule)
-    install(sixthmodule)
-    install(seventhmodule)
+    """Install dependencies for Windows systems."""
+    packages = [
+        "pyqt5",
+        "PyQtWebEngine",
+        "feedparser",
+        "file-read-backwards",
+        "folium",
+        "pandas",
+        "maidenhead",
+        "psutil",
+    ]
+    for package in packages:
+        install(package)
     runsettings()
 
 
