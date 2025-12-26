@@ -36,6 +36,7 @@ from about import Ui_FormAbout
 from settings2 import SettingsDialog
 from colors import ColorsDialog
 from filter2 import FilterDialog
+from groups import GroupsDialog
 from js8mail import Ui_FormJS8Mail
 
 
@@ -53,6 +54,10 @@ DATABASE_FILE = "traffic.db3"
 # Default filter date range
 DEFAULT_FILTER_START = "2023-01-01"
 DEFAULT_FILTER_END = "2030-01-01"
+
+# Group settings
+MAX_GROUP_NAME_LENGTH = 15
+DEFAULT_GROUPS = ["MAGNET", "AMRRON", "PREPPERNET"]
 
 # StatRep table column headers
 STATREP_HEADERS = [
@@ -186,10 +191,7 @@ class ConfigManager:
             self.user_info = {
                 'callsign': config.get("USERINFO", "callsign", fallback=""),
                 'callsign_suffix': config.get("USERINFO", "callsignsuffix", fallback=""),
-                'group1': config.get("USERINFO", "group1", fallback=""),
-                'group2': config.get("USERINFO", "group2", fallback=""),
                 'grid': config.get("USERINFO", "grid", fallback=""),
-                'selected_group': config.get("USERINFO", "selectedgroup", fallback=""),
             }
 
     def _load_directed_config(self, config: ConfigParser) -> None:
@@ -233,10 +235,6 @@ class ConfigManager:
             print(f"Warning: Invalid color '{color}' for '{key}', using default '{default}'")
             return default
         return color
-
-    def get_selected_group(self) -> str:
-        """Get the currently selected group name."""
-        return self.user_info.get('selected_group', '')
 
     def get_callsign(self) -> str:
         """Get the user's callsign with optional suffix."""
@@ -341,6 +339,138 @@ class DatabaseManager:
         except sqlite3.Error as error:
             print(f"Database error: {error}")
             return None
+
+    def init_groups_table(self) -> None:
+        """Create Groups table if it doesn't exist and seed default groups."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS Groups (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT UNIQUE NOT NULL,
+                        is_active INTEGER DEFAULT 0
+                    )
+                """)
+                connection.commit()
+
+                # Check if table is empty
+                cursor.execute("SELECT COUNT(*) FROM Groups")
+                if cursor.fetchone()[0] == 0:
+                    # Seed default groups, first one is active
+                    for i, group_name in enumerate(DEFAULT_GROUPS):
+                        cursor.execute(
+                            "INSERT INTO Groups (name, is_active) VALUES (?, ?)",
+                            (group_name.upper(), 1 if i == 0 else 0)
+                        )
+                    connection.commit()
+        except sqlite3.Error as error:
+            print(f"Database error initializing Groups table: {error}")
+
+    def get_all_groups(self) -> List[str]:
+        """Get all group names."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("SELECT name FROM Groups ORDER BY name")
+                return [row[0] for row in cursor.fetchall()]
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return []
+
+    def get_active_group(self) -> str:
+        """Get the currently active group name."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("SELECT name FROM Groups WHERE is_active = 1")
+                result = cursor.fetchone()
+                return result[0] if result else ""
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return ""
+
+    def set_active_group(self, group_name: str) -> bool:
+        """Set a group as the active group."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                # Deactivate all groups
+                cursor.execute("UPDATE Groups SET is_active = 0")
+                # Activate the selected group
+                cursor.execute(
+                    "UPDATE Groups SET is_active = 1 WHERE name = ?",
+                    (group_name.upper(),)
+                )
+                connection.commit()
+                return cursor.rowcount > 0
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return False
+
+    def add_group(self, group_name: str) -> bool:
+        """Add a new group. Returns True if successful."""
+        name = group_name.strip().upper()[:MAX_GROUP_NAME_LENGTH]
+        if not name:
+            return False
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute(
+                    "INSERT INTO Groups (name, is_active) VALUES (?, 0)",
+                    (name,)
+                )
+                connection.commit()
+                return True
+        except sqlite3.IntegrityError:
+            # Duplicate name
+            return False
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return False
+
+    def remove_group(self, group_name: str) -> bool:
+        """Remove a group. Returns False if it's the last group."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                # Check if this is the last group
+                cursor.execute("SELECT COUNT(*) FROM Groups")
+                if cursor.fetchone()[0] <= 1:
+                    return False
+                # Check if this group is active
+                cursor.execute(
+                    "SELECT is_active FROM Groups WHERE name = ?",
+                    (group_name.upper(),)
+                )
+                result = cursor.fetchone()
+                was_active = result and result[0] == 1
+                # Delete the group
+                cursor.execute(
+                    "DELETE FROM Groups WHERE name = ?",
+                    (group_name.upper(),)
+                )
+                # If deleted group was active, activate another one
+                if was_active and cursor.rowcount > 0:
+                    cursor.execute(
+                        "UPDATE Groups SET is_active = 1 WHERE id = (SELECT MIN(id) FROM Groups)"
+                    )
+                connection.commit()
+                return cursor.rowcount > 0
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return False
+
+    def get_group_count(self) -> int:
+        """Get the number of groups."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("SELECT COUNT(*) FROM Groups")
+                return cursor.fetchone()[0]
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return 0
 
 
 # =============================================================================
@@ -472,6 +602,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("flash_bulletin", "FLASH BULLETIN", self._on_flash_bulletin),
             None,  # Separator
             ("filter", "DISPLAY FILTER", self._on_filter),
+            ("groups", "MANAGE GROUPS", self._on_groups),
             ("settings", "SETTINGS", self._on_settings),
             ("colors", "COLORS", self._on_colors),
             ("help", "HELP", self._on_help),
@@ -509,7 +640,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Active Group label
         self.label_active_group = QtWidgets.QLabel(self.header_widget)
         self.label_active_group.setStyleSheet(f"color: {fg_color};")
-        self.label_active_group.setText(f"Active Group: {self.config.get_selected_group()}")
+        self.label_active_group.setText(f"Active Group: {self.db.get_active_group()}")
         font = QtGui.QFont("Arial", 12, QtGui.QFont.Bold)
         self.label_active_group.setFont(font)
         self.header_layout.addWidget(self.label_active_group)
@@ -769,7 +900,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _load_bulletin_data(self) -> None:
         """Load bulletin data from database into the table."""
-        group = self.config.get_selected_group()
+        group = self.db.get_active_group()
         data = self.db.get_bulletin_data(group)
 
         # Clear and populate table
@@ -786,7 +917,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _load_map(self) -> None:
         """Generate and display the folium map with StatRep pins."""
         filters = self.config.filter_settings
-        group = self.config.get_selected_group()
+        group = self.db.get_active_group()
 
         # Use saved map position or default to US center
         if not hasattr(self, 'map_center'):
@@ -925,7 +1056,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Load StatRep data from database into the table."""
         # Get filter settings
         filters = self.config.filter_settings
-        group = self.config.get_selected_group()
+        group = self.db.get_active_group()
 
         # Fetch data from database
         data = self.db.get_statrep_data(
@@ -1025,7 +1156,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _load_marquee(self) -> None:
         """Load the latest marquee message from database and start animation."""
-        group = self.config.get_selected_group()
+        group = self.db.get_active_group()
         result = self.db.get_latest_marquee(group)
 
         if result:
@@ -1127,6 +1258,22 @@ class MainWindow(QtWidgets.QMainWindow):
             # Save map position before refresh, then reload map
             self._save_map_position(callback=self._load_map)
 
+    def _on_groups(self) -> None:
+        """Open Manage Groups window."""
+        dialog = GroupsDialog(self.db, self)
+        dialog.exec_()
+        # Refresh header to show new active group
+        self._update_active_group_label()
+        # Refresh data for new group
+        self._load_statrep_data()
+        self._load_bulletin_data()
+        self._load_marquee()
+        self._save_map_position(callback=self._load_map)
+
+    def _update_active_group_label(self) -> None:
+        """Update the Active Group label in the header."""
+        self.label_active_group.setText(f"Active Group: {self.db.get_active_group()}")
+
     def _on_settings(self) -> None:
         """Open Settings window."""
         dialog = SettingsDialog(self)
@@ -1175,6 +1322,9 @@ def main() -> None:
     # Load configuration and database
     config = ConfigManager()
     db = DatabaseManager()
+
+    # Initialize Groups table (creates if needed, seeds defaults)
+    db.init_groups_table()
 
     # Create and show main window
     window = MainWindow(config, db)

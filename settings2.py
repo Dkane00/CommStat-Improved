@@ -16,7 +16,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QGroupBox,
-    QGridLayout, QRadioButton, QMessageBox
+    QGridLayout, QMessageBox
 )
 
 
@@ -28,7 +28,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("CommStat-Improved Settings")
-        self.setFixedSize(550, 480)
+        self.setFixedSize(550, 350)
         self.setWindowFlags(
             Qt.Window |
             Qt.CustomizeWindowHint |
@@ -110,39 +110,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(station_group)
 
-        # Groups
-        groups_group = QGroupBox("Groups")
-        groups_layout = QGridLayout(groups_group)
-        groups_layout.setSpacing(10)
-        groups_layout.setContentsMargins(15, 20, 15, 15)
-
-        groups_layout.addWidget(QLabel("Group 1:"), 0, 0)
-        self.group1_edit = QLineEdit()
-        self.group1_edit.setMaxLength(9)
-        self.group1_edit.setMinimumHeight(28)
-        self.group1_edit.setPlaceholderText("Primary group")
-        groups_layout.addWidget(self.group1_edit, 0, 1)
-
-        groups_layout.addWidget(QLabel("Group 2:"), 1, 0)
-        self.group2_edit = QLineEdit()
-        self.group2_edit.setMaxLength(9)
-        self.group2_edit.setMinimumHeight(28)
-        self.group2_edit.setPlaceholderText("Secondary group (optional)")
-        groups_layout.addWidget(self.group2_edit, 1, 1)
-
-        # Active group selection
-        groups_layout.addWidget(QLabel("Active Group:"), 2, 0)
-        active_layout = QHBoxLayout()
-        self.group1_radio = QRadioButton("Group 1")
-        self.group1_radio.setChecked(True)
-        self.group2_radio = QRadioButton("Group 2")
-        active_layout.addWidget(self.group1_radio)
-        active_layout.addWidget(self.group2_radio)
-        active_layout.addStretch()
-        groups_layout.addLayout(active_layout, 2, 1)
-
-        layout.addWidget(groups_group)
-
         # Connection Settings
         connection_group = QGroupBox("Connection Settings")
         connection_layout = QGridLayout(connection_group)
@@ -199,16 +166,7 @@ class SettingsDialog(QDialog):
             userinfo = config["USERINFO"]
             self.callsign_edit.setText(userinfo.get("callsign", ""))
             self.suffix_edit.setText(userinfo.get("callsignsuffix", ""))
-            self.group1_edit.setText(userinfo.get("group1", ""))
-            self.group2_edit.setText(userinfo.get("group2", ""))
             self.grid_edit.setText(userinfo.get("grid", ""))
-
-            selected = userinfo.get("selectedgroup", "")
-            group2 = userinfo.get("group2", "")
-            if selected == group2 and group2:
-                self.group2_radio.setChecked(True)
-            else:
-                self.group1_radio.setChecked(True)
 
         # Load connection settings
         if "DIRECTEDCONFIG" in config:
@@ -224,16 +182,6 @@ class SettingsDialog(QDialog):
         callsign = self.callsign_edit.text().strip().upper()
         if len(callsign) < 4:
             self._show_error("Callsign must be at least 4 characters!")
-            return
-
-        group1 = self.group1_edit.text().strip().upper()
-        if len(group1) < 4:
-            self._show_error("Group 1 must be at least 4 characters!")
-            return
-
-        group2 = self.group2_edit.text().strip().upper()
-        if group2 and len(group2) < 4:
-            self._show_error("Group 2 must be at least 4 characters!")
             return
 
         grid = self.grid_edit.text().strip().upper()
@@ -252,9 +200,6 @@ class SettingsDialog(QDialog):
             self._show_error(f"JS8Call DIRECTED.TXT not found at:\n{directed_path}")
             return
 
-        # Determine selected group
-        selected_group = group1 if self.group1_radio.isChecked() else group2
-
         # Load existing config to preserve other sections
         config = ConfigParser()
         if os.path.exists("config.ini"):
@@ -263,10 +208,7 @@ class SettingsDialog(QDialog):
         config["USERINFO"] = {
             "callsign": callsign,
             "callsignsuffix": self.suffix_edit.text().strip().upper(),
-            "group1": group1,
-            "group2": group2,
             "grid": grid,
-            "selectedgroup": selected_group
         }
 
         config["DIRECTEDCONFIG"] = {
@@ -275,18 +217,6 @@ class SettingsDialog(QDialog):
             "UDP_port": self.port_edit.text().strip() or "2242",
             "state": self.state_edit.text().strip().upper()
         }
-
-        # Preserve FILTER section or create default
-        if "FILTER" not in config:
-            config["FILTER"] = {
-                "start": "2023-01-01 00:28",
-                "end": "2030-03-04 00:28",
-                "green": "1",
-                "yellow": "2",
-                "red": "3",
-                "grids": str(['AP', 'AO', 'BO', 'CN', 'CM', 'CO', 'DN', 'DM', 'DL', 'DO',
-                             'EN', 'EM', 'EL', 'EO', 'FN', 'FM', 'FO'])
-            }
 
         # Write to file
         with open("config.ini", "w") as f:
