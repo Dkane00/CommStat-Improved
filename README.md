@@ -1,29 +1,29 @@
-# CommStatOne Ver 1.0.5 Released 10/15/2023
-CommStat One Ver 1.0.5 add on software for JS8Call groups
+# CommStatOne Version 1.0.5 Released 10/15/2023
+CommStat One Version 1.0.5 add on software for JS8Call groups<br>
 Commstat One is a Python version of the CommStat software <b>designed to run on on Win10 AND Linux</b><br>
 - Author: Daniel M Hurd ~W5DMH
 - Repository: https://github.com/W5DMH/commstatone
 <br><br>
 
-# CommStat Ver 2.0.0
-- Author: uknown
-- Repository: unkown
-- Release Date: uknown
+# CommStat Version 2.0.0 Released 6/05/2025
+- Author: Rick W Whittington ~KD9DSS
+- Repository: https://amrron.com/wp-content/uploads/2025/07/Download-2025-07-18T18_31_39.zip
+- Highlight: Added the AmRRON StatRep 5.1 form
 <br><br>
 
-# CommStat Ver 2.3.0 Released 11/17/2025
+# CommStat Version 2.3.0 Released 11/17/2025
 - Author: Rick W Whittington ~KD9DSS
 - Repository: https://amrron.com/2025/11/17/commstat-v2-3-offline-mapping/
 - Highlight: Introduced Offline Maps
 <br><br>
 
-# CommStat-Improved Ver 2.5.0 Released 12/25/2025
+# CommStat-Improved Version 2.5.0 Released 12/25/2025
 - Author: Manuel G Ochoa ~N0DDK
 - AI Code Assistant: ﻿Claude (Anthropic), ChatGPT (OpenAI)
 <br>
 
-<h3>CommStat-Improved - Summary of Changes and Improvements</h3>
-<h3>Project rebuild and modernization effort - December 2025</h3>
+<h3>Project rebuild and modernization effort - December 2025<br>
+Summary of Changes and Improvements</h3>
 <br>
 
 1. NEW MAIN APPLICATION
