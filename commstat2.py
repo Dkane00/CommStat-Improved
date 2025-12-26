@@ -50,6 +50,10 @@ CONFIG_FILE = "config.ini"
 ICON_FILE = "radiation-32.jpg"
 DATABASE_FILE = "traffic.db3"
 
+# Default filter date range
+DEFAULT_FILTER_START = "2023-01-01"
+DEFAULT_FILTER_END = "2030-01-01"
+
 # StatRep table column headers
 STATREP_HEADERS = [
     "Date Time UTC", "ID", "Callsign", "Grid", "Scope", "Map Pin",
@@ -202,8 +206,8 @@ class ConfigManager:
         """Load filter settings section."""
         if config.has_section("FILTER"):
             self.filter_settings = {
-                'start': config.get("FILTER", "start", fallback="2023-01-01 00:00"),
-                'end': config.get("FILTER", "end", fallback="2030-01-01 00:00")
+                'start': config.get("FILTER", "start", fallback=DEFAULT_FILTER_START),
+                'end': config.get("FILTER", "end", fallback=DEFAULT_FILTER_END)
             }
 
     def _load_colors(self, config: ConfigParser) -> None:
@@ -804,8 +808,8 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             data = self.db.get_statrep_data(
                 group=group,
-                start=filters.get('start', '2023-01-01 00:00'),
-                end=filters.get('end', '2030-01-01 00:00')
+                start=filters.get('start', DEFAULT_FILTER_START),
+                end=filters.get('end', DEFAULT_FILTER_END)
             )
 
             gridlist = []
@@ -926,8 +930,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Fetch data from database
         data = self.db.get_statrep_data(
             group=group,
-            start=filters.get('start', '2023-01-01 00:00'),
-            end=filters.get('end', '2030-01-01 00:00')
+            start=filters.get('start', DEFAULT_FILTER_START),
+            end=filters.get('end', DEFAULT_FILTER_END)
         )
 
         # Clear and populate table
