@@ -213,7 +213,10 @@ class ConfigManager:
                 'server': config.get("DIRECTEDCONFIG", "server", fallback="127.0.0.1"),
                 'UDP_port': config.get("DIRECTEDCONFIG", "UDP_port", fallback="2442"),
                 'state': config.get("DIRECTEDCONFIG", "state", fallback=""),
+                'hide_heartbeat': config.getboolean("DIRECTEDCONFIG", "hide_heartbeat", fallback=False),
             }
+        else:
+            self.directed_config = {'hide_heartbeat': False}
 
     def _load_filter_settings(self, config: ConfigParser) -> None:
         """Load filter settings section."""
@@ -254,6 +257,22 @@ class ConfigManager:
         if suffix:
             return f"{callsign}/{suffix}"
         return callsign
+
+    def get_hide_heartbeat(self) -> bool:
+        """Get the hide heartbeat setting."""
+        return self.directed_config.get('hide_heartbeat', False)
+
+    def set_hide_heartbeat(self, value: bool) -> None:
+        """Set and save the hide heartbeat setting."""
+        self.directed_config['hide_heartbeat'] = value
+        # Save to config file
+        config = ConfigParser()
+        config.read(self.config_path)
+        if not config.has_section("DIRECTEDCONFIG"):
+            config.add_section("DIRECTEDCONFIG")
+        config.set("DIRECTEDCONFIG", "hide_heartbeat", str(value))
+        with open(self.config_path, 'w') as f:
+            config.write(f)
 
 
 # =============================================================================
@@ -543,12 +562,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_layout = QtWidgets.QGridLayout(self.central_widget)
         self.main_layout.setObjectName("mainLayout")
 
-        # Row stretches: header doesn't stretch, others do
+        # Row stretches: header and labels don't stretch
         self.main_layout.setRowStretch(0, 0)  # Header
         self.main_layout.setRowStretch(1, 1)  # StatRep table (50%)
-        self.main_layout.setRowStretch(2, 1)  # Live feed (50%)
-        self.main_layout.setRowStretch(3, 0)  # Map row 1 / Filter (fixed heights)
-        self.main_layout.setRowStretch(4, 0)  # Map row 2 / Bulletin (fixed heights)
+        self.main_layout.setRowStretch(2, 1)  # Feed text (50%)
+        self.main_layout.setRowStretch(3, 0)  # Map row 1 / Filter (fixed)
+        self.main_layout.setRowStretch(4, 0)  # Map row 2 / Bulletin (fixed)
 
         # Setup components
         self._setup_menu()
@@ -616,6 +635,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("groups", "MANAGE GROUPS", self._on_groups),
             ("settings", "SETTINGS", self._on_settings),
             ("colors", "COLORS", self._on_colors),
+            None,  # Separator
         ]
 
         # Create actions for dropdown menu
@@ -629,6 +649,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 action.triggered.connect(handler)
                 self.menu.addAction(action)
                 self.actions[name] = action
+
+        # Add checkable toggle for hiding heartbeat messages
+        self.hide_heartbeat_action = QtWidgets.QAction("HIDE HEARTBEAT", self)
+        self.hide_heartbeat_action.setCheckable(True)
+        self.hide_heartbeat_action.setChecked(self.config.get_hide_heartbeat())
+        self.hide_heartbeat_action.triggered.connect(self._on_toggle_heartbeat)
+        self.menu.addAction(self.hide_heartbeat_action)
+        self.actions["hide_heartbeat"] = self.hide_heartbeat_action
 
         # Add About, Help, Exit directly to menu bar
         about_action = QtWidgets.QAction("About", self)
@@ -710,7 +738,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.header_layout.addWidget(self.time_label)
 
         # Add header to main layout (row 0, spans all columns)
-        self.main_layout.addWidget(self.header_widget, 0, 0, 1, 5)
+        self.main_layout.addWidget(self.header_widget, 0, 0, 1, 2)
 
     def _setup_statrep_table(self) -> None:
         """Create the StatRep data table."""
@@ -762,7 +790,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statrep_table.itemClicked.connect(self._on_statrep_click)
 
         # Add to layout (row 1, spans all columns)
-        self.main_layout.addWidget(self.statrep_table, 1, 0, 1, 5)
+        self.main_layout.addWidget(self.statrep_table, 1, 0, 1, 2)
 
     def _setup_filter_labels(self) -> None:
         """Create the filter status labels below the StatRep table."""
@@ -785,48 +813,29 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.label_filter.setSizePolicy(shrink_policy)
         self.label_filter.setFixedHeight(FILTER_HEIGHT)
-        self.main_layout.addWidget(self.label_filter, 3, 3, 1, 2)
+        self.main_layout.addWidget(self.label_filter, 3, 1, 1, 1)
 
     def _setup_map_widget(self) -> None:
         """Create the map widget using QWebEngineView."""
         self.map_widget = QWebEngineView(self.central_widget)
         self.map_widget.setObjectName("mapWidget")
-        self.map_widget.setMinimumWidth(MAP_WIDTH)
-        self.map_widget.setFixedHeight(MAP_HEIGHT)
+        self.map_widget.setFixedSize(MAP_WIDTH, MAP_HEIGHT)
 
         # Set custom page to handle statrep links
         custom_page = CustomWebEnginePage(self)
         self.map_widget.setPage(custom_page)
 
-        # Add to layout (row 3-4, columns 0-2, spanning 2 rows)
-        self.main_layout.addWidget(self.map_widget, 3, 0, 2, 3)
+        # Add to layout (row 3-4, column 0 only, spanning 2 rows)
+        self.main_layout.addWidget(self.map_widget, 3, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
 
-        # Set column stretches for proportional resizing
-        self.main_layout.setColumnStretch(0, 2)
-        self.main_layout.setColumnStretch(1, 2)
-        self.main_layout.setColumnStretch(2, 2)
-        self.main_layout.setColumnStretch(3, 3)
-        self.main_layout.setColumnStretch(4, 3)
+        # Set column stretches: map column fixed, bulletin column stretches
+        self.main_layout.setColumnStretch(0, 0)  # Map (fixed)
+        self.main_layout.setColumnStretch(1, 1)  # Bulletin (stretches)
 
     def _setup_live_feed(self) -> None:
-        """Create the live feed container with title and text area."""
-        # Container widget
-        self.feed_container = QtWidgets.QWidget(self.central_widget)
-        self.feed_layout = QtWidgets.QVBoxLayout(self.feed_container)
-        self.feed_layout.setContentsMargins(0, 0, 0, 0)
-        self.feed_layout.setSpacing(0)
-
-        # Feed title label
-        self.label_feed_title = QtWidgets.QLabel(self.feed_container)
-        self.label_feed_title.setFont(QtGui.QFont("Arial", 10, QtGui.QFont.Bold))
-        self.label_feed_title.setStyleSheet(
-            f"color: {self.config.get_color('program_foreground')};"
-        )
-        self.label_feed_title.setText(" JS8Call Live Data Feed")
-        self.feed_layout.addWidget(self.label_feed_title)
-
+        """Create the live feed text area."""
         # Feed text area
-        self.feed_text = QtWidgets.QPlainTextEdit(self.feed_container)
+        self.feed_text = QtWidgets.QPlainTextEdit(self.central_widget)
         self.feed_text.setObjectName("feedText")
         self.feed_text.setFont(QtGui.QFont("Source Code Pro", 10))
         self.feed_text.setStyleSheet(
@@ -840,10 +849,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.feed_text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.feed_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
-        self.feed_layout.addWidget(self.feed_text)
-
         # Add to layout (row 2, full width)
-        self.main_layout.addWidget(self.feed_container, 2, 0, 1, 5)
+        self.main_layout.addWidget(self.feed_text, 2, 0, 1, 2)
 
     def _load_live_feed(self) -> None:
         """Load DIRECTED.TXT content into the live feed (reversed order)."""
@@ -858,6 +865,9 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             with open(full_path, 'r') as f:
                 lines = f.readlines()
+            # Filter out heartbeat messages if setting is enabled
+            if self.config.get_hide_heartbeat():
+                lines = [line for line in lines if 'HEARTBEAT' not in line.upper()]
             # Reverse the lines so newest is at top
             reversed_text = ''.join(reversed(lines))
             self.feed_text.setPlainText(reversed_text)
@@ -916,8 +926,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.bulletin_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.bulletin_table.setFixedHeight(MAP_HEIGHT - FILTER_HEIGHT)
 
-        # Add to layout (row 4, columns 3-4)
-        self.main_layout.addWidget(self.bulletin_table, 4, 3, 1, 2)
+        # Add to layout (row 4, column 1)
+        self.main_layout.addWidget(self.bulletin_table, 4, 1, 1, 1)
 
     def _load_bulletin_data(self) -> None:
         """Load bulletin data from database into the table."""
@@ -1281,6 +1291,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self._load_statrep_data()
             # Save map position before refresh, then reload map
             self._save_map_position(callback=self._load_map)
+
+    def _on_toggle_heartbeat(self, checked: bool) -> None:
+        """Toggle heartbeat message filtering in live feed."""
+        self.config.set_hide_heartbeat(checked)
+        self._load_live_feed()
 
     def _on_groups(self) -> None:
         """Open Manage Groups window."""
