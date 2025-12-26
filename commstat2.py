@@ -39,6 +39,8 @@ from filter2 import FilterDialog
 from groups import GroupsDialog
 from js8mail import Ui_FormJS8Mail
 from js8sms import Ui_FormJS8SMS
+from marquee import Ui_FormMarquee
+from bulletin import Ui_FormBull
 
 
 # =============================================================================
@@ -1275,11 +1277,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_new_marquee(self) -> None:
         """Open New Marquee window."""
-        print("NEW MARQUEE clicked - window not yet implemented")
+        dialog = QtWidgets.QDialog()
+        dialog.ui = Ui_FormMarquee()
+        dialog.ui.setupUi(dialog)
+        dialog.exec_()
 
     def _on_flash_bulletin(self) -> None:
         """Open Flash Bulletin window."""
-        print("FLASH BULLETIN clicked - window not yet implemented")
+        dialog = QtWidgets.QDialog()
+        dialog.ui = Ui_FormBull()
+        dialog.ui.setupUi(dialog)
+        dialog.exec_()
 
     def _on_filter(self) -> None:
         """Open Display Filter window."""

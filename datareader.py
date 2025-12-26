@@ -16,7 +16,6 @@ import sys
 import subprocess
 from configparser import ConfigParser
 from datetime import datetime
-from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 
 from PyQt5.QtWidgets import QMessageBox
@@ -121,7 +120,9 @@ class Config:
         self.group1 = userinfo.get("group1", "")
         self.group2 = userinfo.get("group2", "")
         self.grid = userinfo.get("grid", "")
-        self.selected_group = userinfo.get("selectedgroup", "")
+
+        # Get active group from database
+        self.selected_group = self._get_active_group_from_db()
 
         # If group2 is too short, use group1
         if len(self.group2) < 4:
@@ -131,6 +132,21 @@ class Config:
         self.path = systeminfo.get("path", "")
 
         return True
+
+    def _get_active_group_from_db(self) -> str:
+        """Get the active group from the database."""
+        try:
+            conn = sqlite3.connect(DATABASE_FILE)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM Groups WHERE is_active = 1")
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            if result:
+                return result[0]
+        except sqlite3.Error as e:
+            print(f"Error reading active group from database: {e}")
+        return ""
 
     @property
     def directed_path(self) -> str:
@@ -563,8 +579,7 @@ class MessageParser:
         testlong = float(coords[1])
 
         # Check for duplicate grids and offset
-        rows_query = f"SELECT Count() FROM members_Data WHERE grid = '{grid}'"
-        self.cursor.execute(rows_query)
+        self.cursor.execute("SELECT Count() FROM members_Data WHERE grid = ?", (grid,))
         num_rows = self.cursor.fetchone()[0]
 
         if num_rows > 1:
