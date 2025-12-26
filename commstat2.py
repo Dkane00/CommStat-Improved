@@ -60,6 +60,11 @@ DEFAULT_FILTER_END = "2030-01-01"
 MAX_GROUP_NAME_LENGTH = 15
 DEFAULT_GROUPS = ["MAGNET", "AMRRON", "PREPPERNET"]
 
+# Map and layout dimensions
+MAP_WIDTH = 640
+MAP_HEIGHT = 350
+FILTER_HEIGHT = 20
+
 # StatRep table column headers
 STATREP_HEADERS = [
     "Date Time UTC", "ID", "Callsign", "Grid", "Scope", "Map Pin",
@@ -533,12 +538,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_layout = QtWidgets.QGridLayout(self.central_widget)
         self.main_layout.setObjectName("mainLayout")
 
-        # Row stretches: header and filter labels don't stretch
+        # Row stretches: header doesn't stretch, others do
         self.main_layout.setRowStretch(0, 0)  # Header
         self.main_layout.setRowStretch(1, 2)  # StatRep table (more space)
-        self.main_layout.setRowStretch(2, 0)  # Filter labels
-        self.main_layout.setRowStretch(3, 1)  # Map and feed area (reduced)
-        self.main_layout.setRowStretch(4, 1)  # Bulletin table
+        self.main_layout.setRowStretch(2, 1)  # Live feed (full width)
+        self.main_layout.setRowStretch(3, 0)  # Map row 1 / Filter (fixed heights)
+        self.main_layout.setRowStretch(4, 0)  # Map row 2 / Bulletin (fixed heights)
 
         # Setup components
         self._setup_menu()
@@ -766,7 +771,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QSizePolicy.Preferred
         )
 
-        # Filter label (date range only)
+        # Filter label (date range only) - positioned above bulletin
         self.label_filter = QtWidgets.QLabel(self.central_widget)
         self.label_filter.setFont(font)
         self.label_filter.setStyleSheet(f"color: {fg_color};")
@@ -774,16 +779,15 @@ class MainWindow(QtWidgets.QMainWindow):
             f"Filters:  Start: {filters.get('start', '')}  |  End: {filters.get('end', '')}"
         )
         self.label_filter.setSizePolicy(shrink_policy)
-        self.main_layout.addWidget(self.label_filter, 2, 0, 1, 5)
-
-        # Row 2 (filter labels) doesn't stretch
-        self.main_layout.setRowStretch(2, 0)
+        self.label_filter.setFixedHeight(FILTER_HEIGHT)
+        self.main_layout.addWidget(self.label_filter, 3, 3, 1, 2)
 
     def _setup_map_widget(self) -> None:
         """Create the map widget using QWebEngineView."""
         self.map_widget = QWebEngineView(self.central_widget)
         self.map_widget.setObjectName("mapWidget")
-        self.map_widget.setMinimumHeight(444)
+        self.map_widget.setMinimumWidth(MAP_WIDTH)
+        self.map_widget.setFixedHeight(MAP_HEIGHT)
 
         # Set custom page to handle statrep links
         custom_page = CustomWebEnginePage(self)
@@ -792,9 +796,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add to layout (row 3-4, columns 0-2, spanning 2 rows)
         self.main_layout.addWidget(self.map_widget, 3, 0, 2, 3)
 
-        # Set column stretches for 50/50 split (map vs feed/bulletin)
-        # Map spans 3 cols, feed/bulletin spans 2 cols
-        # 3 cols × 2 = 6, 2 cols × 3 = 6 → equal width
+        # Set column stretches for proportional resizing
         self.main_layout.setColumnStretch(0, 2)
         self.main_layout.setColumnStretch(1, 2)
         self.main_layout.setColumnStretch(2, 2)
@@ -821,7 +823,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Feed text area
         self.feed_text = QtWidgets.QPlainTextEdit(self.feed_container)
         self.feed_text.setObjectName("feedText")
-        self.feed_text.setFont(QtGui.QFont("Arial", 10))
+        self.feed_text.setFont(QtGui.QFont("Arial", 9))
         self.feed_text.setStyleSheet(
             f"background-color: {self.config.get_color('feed_background')};"
             f"color: {self.config.get_color('feed_foreground')};"
@@ -835,8 +837,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.feed_layout.addWidget(self.feed_text)
 
-        # Add to layout (row 3, columns 3-4)
-        self.main_layout.addWidget(self.feed_container, 3, 3, 1, 2)
+        # Add to layout (row 2, full width)
+        self.main_layout.addWidget(self.feed_container, 2, 0, 1, 5)
 
     def _load_live_feed(self) -> None:
         """Load DIRECTED.TXT content into the live feed (reversed order)."""
@@ -907,8 +909,9 @@ class MainWindow(QtWidgets.QMainWindow):
         header.setStretchLastSection(True)
         self.bulletin_table.verticalHeader().setVisible(False)
         self.bulletin_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.bulletin_table.setFixedHeight(MAP_HEIGHT - FILTER_HEIGHT)
 
-        # Add to layout (row 4, columns 3-4, below live feed)
+        # Add to layout (row 4, columns 3-4)
         self.main_layout.addWidget(self.bulletin_table, 4, 3, 1, 2)
 
     def _load_bulletin_data(self) -> None:
