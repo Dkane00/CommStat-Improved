@@ -1,726 +1,245 @@
-#!/usr/bin/env python3
+# Copyright (c) 2025 Manuel Ochoa
+# This file is part of CommStat-Improved.
+# Licensed under the GNU General Public License v3.0.
+# AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
+
+"""
+Modern Settings Dialog for CommStat-Improved
+User settings only - colors are in a separate dialog.
+"""
+
+import os
+import platform
 from configparser import ConfigParser
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtCore import QRegExp
-from PyQt5.QtGui import QRegExpValidator
-from PyQt5.QtWidgets import QMessageBox
-import os.path
-import sqlite3
-import random
-from PyQt5.QtCore import QDateTime, Qt
-import re
-import platform
-import os
-from os.path import exists
-selgrp = ""
-OS_Directed = ""
-directory = os.getcwd()
-
-class Ui_FormSettings(object):
-    def setupUi(self, FormSettings):
-        self.MainWindow = FormSettings
-        FormSettings.setObjectName("FormSettings")
-        FormSettings.resize(678, 360)
-        icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("radiation-32.jpg"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        FormSettings.setWindowIcon(icon)
-        self.lineEdit = QtWidgets.QLineEdit(FormSettings)
-        self.lineEdit.setGeometry(QtCore.QRect(170, 20, 113, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit.setFont(font)
-        self.lineEdit.setObjectName("lineEdit")
-
-
-        self.label = QtWidgets.QLabel(FormSettings)
-        self.label.setGeometry(QtCore.QRect(30, 20, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label.setFont(font)
-        self.label.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label.setObjectName("label")
-        self.label_2 = QtWidgets.QLabel(FormSettings)
-        self.label_2.setGeometry(QtCore.QRect(30, 50, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_2.setFont(font)
-        self.label_2.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_2.setObjectName("label_2")
-        self.lineEdit_2 = QtWidgets.QLineEdit(FormSettings)
-        self.lineEdit_2.setGeometry(QtCore.QRect(170, 50, 41, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit_2.setFont(font)
-        self.lineEdit_2.setObjectName("lineEdit_2")
-
-
-        self.label_5 = QtWidgets.QLabel(FormSettings)
-        self.label_5.setGeometry(QtCore.QRect(30, 80, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_5.setFont(font)
-        self.label_5.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignTrailing | QtCore.Qt.AlignVCenter)
-        self.label_5.setObjectName("label_5")
-
-        self.lineEdit_5 = QtWidgets.QLineEdit(FormSettings)
-        self.lineEdit_5.setGeometry(QtCore.QRect(170, 80, 51, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit_5.setFont(font)
-        self.lineEdit_5.setObjectName("lineEdit_5")
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QGroupBox,
+    QGridLayout, QMessageBox
+)
 
 
 
 
-        self.label_11 = QtWidgets.QLabel(FormSettings)
-        self.label_11.setGeometry(QtCore.QRect(30, 110, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_11.setFont(font)
-        self.label_11.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignTrailing | QtCore.Qt.AlignVCenter)
-        self.label_11.setObjectName("label_11")
+class SettingsDialog(QDialog):
+    """Modern settings dialog for user configuration."""
 
-        self.comboBoxState = QtWidgets.QComboBox(FormSettings)
-        self.comboBoxState.setGeometry(QtCore.QRect(170, 110, 50, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxState.setFont(font)
-        self.comboBoxState.setObjectName("comboBoxState")
-        self.comboBoxState.addItem('AL')
-        self.comboBoxState.addItem('AK')
-        self.comboBoxState.addItem('AZ')
-        self.comboBoxState.addItem('AR')
-        self.comboBoxState.addItem('CA')
-        self.comboBoxState.addItem('CO')
-        self.comboBoxState.addItem('CT')
-        self.comboBoxState.addItem('DE')
-        self.comboBoxState.addItem('FL')
-        self.comboBoxState.addItem('GA')
-        self.comboBoxState.addItem('HI')
-        self.comboBoxState.addItem('ID')
-        self.comboBoxState.addItem('IL')
-        self.comboBoxState.addItem('IN')
-        self.comboBoxState.addItem('IA')
-        self.comboBoxState.addItem('KS')
-        self.comboBoxState.addItem('KY')
-        self.comboBoxState.addItem('LA')
-        self.comboBoxState.addItem('ME')
-        self.comboBoxState.addItem('MD')
-        self.comboBoxState.addItem('MA')
-        self.comboBoxState.addItem('MI')
-        self.comboBoxState.addItem('MN')
-        self.comboBoxState.addItem('MS')
-        self.comboBoxState.addItem('MO')
-        self.comboBoxState.addItem('MT')
-        self.comboBoxState.addItem('NE')
-        self.comboBoxState.addItem('NV')
-        self.comboBoxState.addItem('NH')
-        self.comboBoxState.addItem('NJ')
-        self.comboBoxState.addItem('NM')
-        self.comboBoxState.addItem('NY')
-        self.comboBoxState.addItem('NC')
-        self.comboBoxState.addItem('ND')
-        self.comboBoxState.addItem('OH')
-        self.comboBoxState.addItem('OK')
-        self.comboBoxState.addItem('OR')
-        self.comboBoxState.addItem('PA')
-        self.comboBoxState.addItem('RI')
-        self.comboBoxState.addItem('SC')
-        self.comboBoxState.addItem('SD')
-        self.comboBoxState.addItem('TN')
-        self.comboBoxState.addItem('TX')
-        self.comboBoxState.addItem('UT')
-        self.comboBoxState.addItem('VT')
-        self.comboBoxState.addItem('VA')
-        self.comboBoxState.addItem('WA')
-        self.comboBoxState.addItem('WV')
-        self.comboBoxState.addItem('WI')
-        self.comboBoxState.addItem('WY')
-
-
-
-
-
-
-        self.label_3 = QtWidgets.QLabel(FormSettings)
-        self.label_3.setGeometry(QtCore.QRect(30, 170, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_3.setFont(font)
-        self.label_3.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_3.setObjectName("label_3")
-        self.label_4 = QtWidgets.QLabel(FormSettings)
-        self.label_4.setGeometry(QtCore.QRect(30, 140, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_4.setFont(font)
-        self.label_4.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_4.setObjectName("label_4")
-        self.lineEdit_3 = QtWidgets.QLineEdit(FormSettings)
-        self.lineEdit_3.setGeometry(QtCore.QRect(170, 140, 113, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit_3.setFont(font)
-        self.lineEdit_3.setObjectName("lineEdit_3")
-
-
-
-        self.lineEdit_4 = QtWidgets.QLineEdit(FormSettings)
-        self.lineEdit_4.setGeometry(QtCore.QRect(170, 170, 113, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit_4.setFont(font)
-        self.lineEdit_4.setObjectName("lineEdit_4")
-
-
-
-
-
-
-        self.label_6 = QtWidgets.QLabel(FormSettings)
-        self.label_6.setGeometry(QtCore.QRect(10, 270, 241, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_6.setFont(font)
-        self.label_6.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_6.setObjectName("label_6")
-        self.lineEdit_6 = QtWidgets.QLineEdit(FormSettings)
-        self.lineEdit_6.setGeometry(QtCore.QRect(260, 270, 311, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit_6.setFont(font)
-        self.lineEdit_6.setObjectName("lineEdit_6")
-        self.pushButton = QtWidgets.QPushButton(FormSettings)
-        self.pushButton.setGeometry(QtCore.QRect(444, 320, 111, 23))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.pushButton.setFont(font)
-        self.pushButton.setObjectName("pushButton")
-        self.pushButton.clicked.connect(self.setInfo)
-        self.pushButton_2 = QtWidgets.QPushButton(FormSettings)
-        self.pushButton_2.setGeometry(QtCore.QRect(580, 320, 75, 23))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.pushButton_2.setFont(font)
-        self.pushButton_2.setObjectName("pushButton_2")
-        self.pushButton_2.clicked.connect(self.MainWindow.close)
-        self.radioButton = QtWidgets.QRadioButton(FormSettings)
-        self.radioButton.setGeometry(QtCore.QRect(530, 60, 89, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.radioButton.setFont(font)
-        self.radioButton.setChecked(True)
-        self.radioButton.setObjectName("radioButton")
-        self.radioButton_2 = QtWidgets.QRadioButton(FormSettings)
-        self.radioButton_2.setGeometry(QtCore.QRect(530, 80, 89, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.radioButton_2.setFont(font)
-        self.radioButton_2.setObjectName("radioButton_2")
-        self.label_7 = QtWidgets.QLabel(FormSettings)
-        self.label_7.setGeometry(QtCore.QRect(510, 40, 81, 16))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_7.setFont(font)
-        self.label_7.setObjectName("label_7")
-        self.lineEdit_7 = QtWidgets.QLineEdit(FormSettings)
-        self.lineEdit_7.setGeometry(QtCore.QRect(170, 200, 113, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit_7.setFont(font)
-        self.lineEdit_7.setObjectName("lineEdit_7")
-        self.label_8 = QtWidgets.QLabel(FormSettings)
-        self.label_8.setGeometry(QtCore.QRect(30, 200, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_8.setFont(font)
-        self.label_8.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_8.setObjectName("label_8")
-        self.label_9 = QtWidgets.QLabel(FormSettings)
-        self.label_9.setGeometry(QtCore.QRect(30, 230, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_9.setFont(font)
-        self.label_9.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.label_9.setObjectName("label_9")
-        self.lineEdit_8 = QtWidgets.QLineEdit(FormSettings)
-        self.lineEdit_8.setGeometry(QtCore.QRect(170, 230, 113, 20))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit_8.setFont(font)
-        self.lineEdit_8.setObjectName("lineEdit_8")
-
-        self.label_11 = QtWidgets.QLabel(FormSettings)
-        self.label_11.setGeometry(QtCore.QRect(30, 110, 131, 21))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.label_11.setFont(font)
-        self.label_11.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignTrailing | QtCore.Qt.AlignVCenter)
-        self.label_11.setObjectName("label_11")
-
-        self.comboBoxState = QtWidgets.QComboBox(FormSettings)
-        self.comboBoxState.setGeometry(QtCore.QRect(170, 110, 50, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxState.setFont(font)
-        self.comboBoxState.setObjectName("comboBoxState")
-        self.comboBoxState.addItem('AL')
-        self.comboBoxState.addItem('AK')
-        self.comboBoxState.addItem('AZ')
-        self.comboBoxState.addItem('AR')
-        self.comboBoxState.addItem('CA')
-        self.comboBoxState.addItem('CO')
-        self.comboBoxState.addItem('CT')
-        self.comboBoxState.addItem('DE')
-        self.comboBoxState.addItem('FL')
-        self.comboBoxState.addItem('GA')
-        self.comboBoxState.addItem('HI')
-        self.comboBoxState.addItem('ID')
-        self.comboBoxState.addItem('IL')
-        self.comboBoxState.addItem('IN')
-        self.comboBoxState.addItem('IA')
-        self.comboBoxState.addItem('KS')
-        self.comboBoxState.addItem('KY')
-        self.comboBoxState.addItem('LA')
-        self.comboBoxState.addItem('ME')
-        self.comboBoxState.addItem('MD')
-        self.comboBoxState.addItem('MA')
-        self.comboBoxState.addItem('MI')
-        self.comboBoxState.addItem('MN')
-        self.comboBoxState.addItem('MS')
-        self.comboBoxState.addItem('MO')
-        self.comboBoxState.addItem('MT')
-        self.comboBoxState.addItem('NE')
-        self.comboBoxState.addItem('NV')
-        self.comboBoxState.addItem('NH')
-        self.comboBoxState.addItem('NJ')
-        self.comboBoxState.addItem('NM')
-        self.comboBoxState.addItem('NY')
-        self.comboBoxState.addItem('NC')
-        self.comboBoxState.addItem('ND')
-        self.comboBoxState.addItem('OH')
-        self.comboBoxState.addItem('OK')
-        self.comboBoxState.addItem('OR')
-        self.comboBoxState.addItem('PA')
-        self.comboBoxState.addItem('RI')
-        self.comboBoxState.addItem('SC')
-        self.comboBoxState.addItem('SD')
-        self.comboBoxState.addItem('TN')
-        self.comboBoxState.addItem('TX')
-        self.comboBoxState.addItem('UT')
-        self.comboBoxState.addItem('VT')
-        self.comboBoxState.addItem('VA')
-        self.comboBoxState.addItem('WA')
-        self.comboBoxState.addItem('WV')
-        self.comboBoxState.addItem('WI')
-        self.comboBoxState.addItem('WY')
-        self.comboBoxState.addItem('ON')
-        self.comboBoxState.addItem('PE')
-        self.comboBoxState.addItem('NS')
-        self.comboBoxState.addItem('NB')
-        self.comboBoxState.addItem('QC')
-        self.comboBoxState.addItem('MB')
-        self.comboBoxState.addItem('SK')
-        self.comboBoxState.addItem('AB')
-        self.comboBoxState.addItem('BC')
-        self.comboBoxState.addItem('YT')
-        self.comboBoxState.addItem('NT')
-        self.comboBoxState.addItem('NU')
-
-        self.retranslateUi(FormSettings)
-        QtCore.QMetaObject.connectSlotsByName(FormSettings)
-
-        self.MainWindow.setWindowFlags(
-            QtCore.Qt.Window |
-            QtCore.Qt.CustomizeWindowHint |
-            QtCore.Qt.WindowTitleHint |
-            QtCore.Qt.WindowCloseButtonHint |
-            QtCore.Qt.WindowStaysOnTopHint
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("CommStat-Improved Settings")
+        self.setFixedSize(550, 350)
+        self.setWindowFlags(
+            Qt.Window |
+            Qt.CustomizeWindowHint |
+            Qt.WindowTitleHint |
+            Qt.WindowCloseButtonHint |
+            Qt.WindowStaysOnTopHint
         )
 
+        # Set window icon
+        icon = QtGui.QIcon()
+        icon.addPixmap(QtGui.QPixmap("radiation-32.jpg"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+        self.setWindowIcon(icon)
 
-    def retranslateUi(self, FormSettings):
-        _translate = QtCore.QCoreApplication.translate
-        FormSettings.setWindowTitle(_translate("FormSettings", "Commstat-Improved Settings"))
-        self.label.setText(_translate("FormSettings", "Enter Legal Callsign :"))
-        self.label_2.setText(_translate("FormSettings", "Enter Callsign Suffix :"))
-        self.label_5.setText(_translate("FormSettings", "Enter 4 or 6 digit Grid :"))
-        self.label_3.setText(_translate("FormSettings", "Enter Group 2 :"))
-        self.label_4.setText(_translate("FormSettings", "Enter Group 1 :"))
+        # Set font size to match main program
+        font = QtGui.QFont()
+        font.setFamily("Arial")
+        font.setPointSize(10)
+        self.setFont(font)
 
-        self.label_6.setText(_translate("FormSettings", "Enter Path to JS8Call Directed.TXT"))
-        self.pushButton.setText(_translate("FormSettings", "Save Settings"))
-        self.pushButton_2.setText(_translate("FormSettings", "Cancel"))
-        self.radioButton.setText(_translate("FormSettings", "Group1"))
-        self.radioButton_2.setText(_translate("FormSettings", "Group2"))
-        self.label_7.setText(_translate("FormSettings", "Active Group"))
-        self.lineEdit_7.setText(_translate("FormSettings", "127.0.0.1"))
-        self.label_8.setText(_translate("FormSettings", "Server :"))
-        self.label_9.setText(_translate("FormSettings", "UDP Port :"))
-        self.lineEdit_8.setText(_translate("FormSettings", "2242"))
-        self.label_11.setText(_translate("FormSettings", "Enter State or Prov :"))
+        # Detect OS for path separator
+        self._detect_os()
 
+        # Setup UI
+        self._setup_ui()
 
-        self.lineEdit.textChanged.connect(self.callval)
-        self.lineEdit_2.textChanged.connect(self.suffval)
-        self.lineEdit_5.textChanged.connect(self.gridval)
-        self.lineEdit_3.textChanged.connect(self.grp1val)
-        self.lineEdit_4.textChanged.connect(self.grp2val)
+        # Load current settings
+        self._load_config()
 
-
-        call = self.lineEdit
-        call.setMaxLength(6)
-        suff = self.lineEdit_2
-        suff.setMaxLength(2)
-        grd = self.lineEdit_5
-        grd.setMaxLength(6)
-        grp1 = self.lineEdit_3
-        grp1.setMaxLength(9)
-        grp2 = self.lineEdit_4
-        grp2.setMaxLength(9)
-
-        self.oscheck()
-        self.getConfig()
-
-
-
-    def on_close(self):
-        self.MainWindow.close()
-
-    def getConfig(self):
-        if os.path.exists("config.ini"):
-            config_object = ConfigParser()
-            config_object.read("config.ini")
-            userinfo = config_object["USERINFO"]
-            # print("callsign is {}".format(userinfo["callsign"]))
-            #print("callsignsuffix is {}".format(userinfo["callsignsuffix"]))
-            #print("group1 is {}".format(userinfo["group1"]))
-            #print("group2 is {}".format(userinfo["group2"]))
-            #print("grid is {}".format(userinfo["grid"]))
-            systeminfo = config_object["DIRECTEDCONFIG"]
-            #print("file path  is {}".format(systeminfo["path"]))
-            callsign = format(userinfo["callsign"])
-            callsignSuffix = format(userinfo["callsignsuffix"])
-            group1 = format(userinfo["group1"])
-            group2 = format(userinfo["group2"])
-            grid = format(userinfo["grid"])
-            path = format(systeminfo["path"])
-            server = format(systeminfo["server"])
-            port = format(systeminfo["UDP_port"])
-            state = format(systeminfo["state"])
-            selectedgroup = format(userinfo["selectedgroup"])
-            if (selectedgroup == group2):
-                self.radioButton_2.setChecked(True)
-            else:
-                self.radioButton.setChecked(True)
-            self.lineEdit.setText(str(callsign))
-            self.lineEdit_2.setText(str(callsignSuffix))
-            self.lineEdit_3.setText(str(group1))
-            self.lineEdit_4.setText(str(group2))
-            self.lineEdit_5.setText(str(grid))
-            self.lineEdit_6.setText(str(path))
-            self.lineEdit_7.setText(str(server))
-            self.lineEdit_8.setText(str(port))
-            self.comboBoxState.setCurrentText(str(state))
-            if not os.path.exists('reports'):
-                os.makedirs('reports')
-
-
-    def oscheck(self):
-        global OS
-        global bull1
-        global bull2
-        global OS_Directed
-        pios = "aarch64"
-        winos = "Windows"
-        linuxos = "Linux"
-        if pios in (platform.platform()):
-            print("This is Pi 64bit OS")
-            OS = "pi"
-            bull1 = 0
-            bull2 = 4
-        if winos in (platform.platform()):
-            print("This is Windows OS")
-            OS_Directed = r"\DIRECTED.TXT"
-        # sudo apt install ./python-pyqt5.qtwebengine_5.15.2-2_arm64.deb
-        if linuxos in (platform.platform()):
-            print("This is Linux OS")
-            OS_Directed = "/DIRECTED.TXT"
-
+    def _detect_os(self):
+        """Detect operating system for path handling."""
+        if "Windows" in platform.platform():
+            self.os_directed = r"\DIRECTED.TXT"
         else:
-            # print("This is not 64bit PiOS")
-            # OS = "Mint"
-            print("Operating System is :" + platform.platform())
-            print("Python version is :" + platform.python_version())
+            self.os_directed = "/DIRECTED.TXT"
 
+    def _setup_ui(self):
+        """Setup the main UI layout."""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
 
+        # Station Info Group
+        station_group = QGroupBox("Station Information")
+        station_layout = QGridLayout(station_group)
+        station_layout.setSpacing(10)
+        station_layout.setContentsMargins(15, 20, 15, 15)
 
+        # Callsign
+        station_layout.addWidget(QLabel("Callsign:"), 0, 0)
+        self.callsign_edit = QLineEdit()
+        self.callsign_edit.setMaxLength(6)
+        self.callsign_edit.setMinimumHeight(28)
+        self.callsign_edit.setPlaceholderText("e.g., W1ABC")
+        station_layout.addWidget(self.callsign_edit, 0, 1)
 
+        # Suffix
+        station_layout.addWidget(QLabel("Suffix:"), 0, 2)
+        self.suffix_edit = QLineEdit()
+        self.suffix_edit.setMaxLength(2)
+        self.suffix_edit.setFixedWidth(60)
+        self.suffix_edit.setMinimumHeight(28)
+        station_layout.addWidget(self.suffix_edit, 0, 3)
 
+        # Grid
+        station_layout.addWidget(QLabel("Grid Square:"), 1, 0)
+        self.grid_edit = QLineEdit()
+        self.grid_edit.setMaxLength(6)
+        self.grid_edit.setMinimumHeight(28)
+        self.grid_edit.setPlaceholderText("e.g., EM83")
+        station_layout.addWidget(self.grid_edit, 1, 1)
 
-    def setInfo(self):
-        # printing the form information
-        print("legal Callsign : {0}".format(self.lineEdit.text()))
-        print("Callsign Suffix : {0}".format(self.lineEdit_2.text()))
-        print("Group 1 : {0} ".format(self.lineEdit_3.text()))
-        print("Group 2 : {0}".format(self.lineEdit_4.text()))
-        print("GRID: {0}".format(self.lineEdit_5.text()))
-        print("State: {0}".format(self.comboBoxState.currentText()))
-        print("PATH : {0} ".format(self.lineEdit_6.text()))
-        #print("Path will print incorrectly at install")
-        callsign = self.lineEdit.text()
-        callsign = callsign.upper()
-        callsignSuffix = self.lineEdit_2.text()
-        callsignSuffix = callsignSuffix.upper()
-        group1 = self.lineEdit_3.text()
-        group1 = group1.upper()
-        group2 = self.lineEdit_4.text()
-        group2 = group2.upper()
-        grid = self.lineEdit_5.text()
-        grid = grid.upper()
-        path = self.lineEdit_6.text()
-        server = self.lineEdit_7.text()
-        port = self.lineEdit_8.text()
-        state = self.comboBoxState.currentText()
+        # State/Province
+        station_layout.addWidget(QLabel("State/Province:"), 2, 0)
+        self.state_edit = QLineEdit()
+        self.state_edit.setMaxLength(8)
+        self.state_edit.setMinimumHeight(28)
+        self.state_edit.setPlaceholderText("e.g., GA")
+        station_layout.addWidget(self.state_edit, 2, 1)
 
-        global selgrp
-        if (self.radioButton.isChecked() == True):
-            randnum = random.randint(100, 999)
-            idrand = str(randnum)
-            selgrp = group1
-            now = QDateTime.currentDateTime()
-            date = (now.toUTC().toString("yyyy-MM-dd HH:mm:ss"))
-            conn = sqlite3.connect("traffic.db3")
-            cur = conn.cursor()
-            #conn.set_trace_callback(print)
-            cur.execute(
-                "INSERT OR REPLACE INTO marquees_Data (idnum,callsign,groupname,date,color, message) VALUES(?,?,?,?,?,?)",
-                (idrand, callsign, selgrp, date, "green", "initial comment"))
-            conn.commit()
-            
-            print("Selected Group : "+selgrp)
-            
-        
-        
+        layout.addWidget(station_group)
 
-        if (self.radioButton_2.isChecked() == True):
-            randnum = random.randint(100, 999)
-            idrand = str(randnum)
-            if len(group2) < 4:
-                msg = QMessageBox()
-                msg.setWindowTitle("CommStatX error")
-                msg.setText(" Group 2 Minimum 4 characters required!")
-                msg.setIcon(QMessageBox.Critical)
-                x = msg.exec_()  # this will show our messagebox
-                selgrp = group1
-                return
-            selgrp = group2
-            now = QDateTime.currentDateTime()
-            date = (now.toUTC().toString("yyyy-MM-dd HH:mm:ss"))
-            conn = sqlite3.connect("traffic.db3")
-            cur = conn.cursor()
-            conn.set_trace_callback(print)
-            cur.execute(
-                "INSERT OR REPLACE INTO marquees_Data (idnum,callsign,groupname,date,color, message) VALUES(?,?,?,?,?,?)",
-                (idrand, callsign, selgrp, date, "green", "initial comment"))
-            conn.commit()
+        # Connection Settings
+        connection_group = QGroupBox("Connection Settings")
+        connection_layout = QGridLayout(connection_group)
+        connection_layout.setSpacing(10)
+        connection_layout.setContentsMargins(15, 20, 15, 15)
 
+        connection_layout.addWidget(QLabel("Server:"), 0, 0)
+        self.server_edit = QLineEdit()
+        self.server_edit.setMinimumHeight(28)
+        self.server_edit.setPlaceholderText("127.0.0.1")
+        connection_layout.addWidget(self.server_edit, 0, 1)
 
-            print("Selected Group : "+selgrp)
+        connection_layout.addWidget(QLabel("UDP Port:"), 0, 2)
+        self.port_edit = QLineEdit()
+        self.port_edit.setFixedWidth(80)
+        self.port_edit.setMinimumHeight(28)
+        self.port_edit.setPlaceholderText("2242")
+        connection_layout.addWidget(self.port_edit, 0, 3)
 
+        connection_layout.addWidget(QLabel("JS8Call Path:"), 1, 0)
+        self.path_edit = QLineEdit()
+        self.path_edit.setMinimumHeight(28)
+        self.path_edit.setPlaceholderText("Path to JS8Call data folder")
+        connection_layout.addWidget(self.path_edit, 1, 1, 1, 3)
+
+        layout.addWidget(connection_group)
+
+        # Button row
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        self.save_btn = QPushButton("Save Settings")
+        self.save_btn.setObjectName("saveButton")
+        self.save_btn.clicked.connect(self._save_settings)
+        button_layout.addWidget(self.save_btn)
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setObjectName("cancelButton")
+        self.cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(self.cancel_btn)
+
+        layout.addLayout(button_layout)
+
+    def _load_config(self):
+        """Load settings from config.ini."""
+        if not os.path.exists("config.ini"):
+            return
+
+        config = ConfigParser()
+        config.read("config.ini")
+
+        # Load user info
+        if "USERINFO" in config:
+            userinfo = config["USERINFO"]
+            self.callsign_edit.setText(userinfo.get("callsign", ""))
+            self.suffix_edit.setText(userinfo.get("callsignsuffix", ""))
+            self.grid_edit.setText(userinfo.get("grid", ""))
+
+        # Load connection settings
+        if "DIRECTEDCONFIG" in config:
+            dirconfig = config["DIRECTEDCONFIG"]
+            self.path_edit.setText(dirconfig.get("path", ""))
+            self.server_edit.setText(dirconfig.get("server", "127.0.0.1"))
+            self.port_edit.setText(dirconfig.get("UDP_port", "2242"))
+            self.state_edit.setText(dirconfig.get("state", ""))
+
+    def _save_settings(self):
+        """Validate and save settings to config.ini."""
+        # Validation
+        callsign = self.callsign_edit.text().strip().upper()
         if len(callsign) < 4:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Minimum 4 characters required!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
+            self._show_error("Callsign must be at least 4 characters!")
             return
-        if len(group1) < 4:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Minimum 4 characters required for Group 1!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
-            return        
-        
-        if len(group2) > 0 and len(group2) < 4:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Minimum 4 characters required for Group 2!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
-            return
-        #if lengroup2 > 0 and (bool(re.match('[A-Z]+$', group2))) == False:
-        #    msg = QMessageBox()
-        #    msg.setWindowTitle("CommStatX error")
-        #    msg.setText("Capital letters required for Group 2!")
-        #    msg.setIcon(QMessageBox.Critical)
-        #    msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-        #    x = msg.exec_()  # this will show our messagebox
-        #    return
-        
+
+        grid = self.grid_edit.text().strip().upper()
         if len(grid) < 4:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("4 characters required for Grid!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
+            self._show_error("Grid must be at least 4 characters!")
             return
 
+        path = self.path_edit.text().strip()
         if len(path) < 8:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Path must be populated with JS8Call DIRECTED.TXT Path!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
-            return
-        if len(state) < 2:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("You must select a State!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
+            self._show_error("Path must be populated with JS8Call folder path!")
             return
 
-
-        path_to_file = (path+""+OS_Directed)
-        if not os.path.exists(path_to_file):
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("JS8Call DIRECTED.TXT not found!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()  # this will show our messagebox
+        # Check if DIRECTED.TXT exists
+        directed_path = path + self.os_directed
+        if not os.path.exists(directed_path):
+            self._show_error(f"JS8Call DIRECTED.TXT not found at:\n{directed_path}")
             return
 
-        # Get the configparser object
-        config_object = ConfigParser()
-        start = "2023-01-01 00:28"
-        end = "2030-03-04 00:28"
-        green = "1"
-        yellow = "2"
-        red = "3"
-        grids = ['AP', 'AO', 'BO', 'CN', 'CM', 'CO', 'DN', 'DM', 'DL', 'DO', 'EN', 'EM','EL','EO','FN','FM','FO''AP', 'AO', 'AO', 'BO', 'CN', 'CM', 'DN', 'DM', 'DL', 'EN', 'EM', 'EL', 'FN', 'FM']
+        # Load existing config to preserve other sections
+        config = ConfigParser()
+        if os.path.exists("config.ini"):
+            config.read("config.ini")
 
-
-        # Assume we need 2 sections in the config file, let's call them USERINFO and SERVERCONFIG
-        config_object["USERINFO"] = {
+        config["USERINFO"] = {
             "callsign": callsign,
-            "callsignsuffix": callsignSuffix,
-            "group1": group1,
-            "group2": group2,
+            "callsignsuffix": self.suffix_edit.text().strip().upper(),
             "grid": grid,
-            "selectedgroup": selgrp
         }
 
-        config_object["DIRECTEDCONFIG"] = {
+        config["DIRECTEDCONFIG"] = {
             "path": path,
-            "server": server,
-            "UDP_port": port,
-            "state": state
-
+            "server": self.server_edit.text().strip() or "127.0.0.1",
+            "UDP_port": self.port_edit.text().strip() or "2242",
+            "state": self.state_edit.text().strip().upper()
         }
 
-        config_object["FILTER"] = {
-            "start": start,
-            "end": end,
-            "green": green,
-            "yellow": yellow,
-            "red": red,
-            "grids": grids
+        # Write to file
+        with open("config.ini", "w") as f:
+            config.write(f)
 
-        }
+        # Create reports folder if needed
+        if not os.path.exists("reports"):
+            os.makedirs("reports")
 
-        # Write the above sections to config.ini file
-        with open('config.ini', 'w') as conf:
-            config_object.write(conf)
-        self.on_close()
+        self.accept()
 
-    def callval(self):
-        le_callsign = self.lineEdit
-        # !! ReGex implementation !!
-        # For more details about ReGex search on google: regex rules or something similar
-        reg_ex = QRegExp("[a-z-A-Z0-9_]+")  # @"[^A-Za-z0-9\s]+"
-        #reg_ex = QRegExp("[A-Z0-9_]+")  # @"[^A-Za-z0-9\s]+"
-        
-        le_callsign_validator = QRegExpValidator(reg_ex, le_callsign)
-        le_callsign.setValidator(le_callsign_validator)
-        # !! ReGex implementation End !!
-
-    def suffval(self):
-        le_callsign = self.lineEdit_2
-        # !! ReGex implementation !!
-        # For more details about ReGex search on google: regex rules or something similar
-        reg_ex = QRegExp("[a-z-A-Z0-9_]+")  # @"[^A-Za-z0-9\s]+"
-        le_callsign_validator = QRegExpValidator(reg_ex, le_callsign)
-        le_callsign.setValidator(le_callsign_validator)
-        # !! ReGex implementation End !!
-
-    def grp1val(self):
-        le_callsign = self.lineEdit_3
-        # !! ReGex implementation !!
-        # For more details about ReGex search on google: regex rules or something similar
-        reg_ex = QRegExp("[a-z-A-Z0-9_]+")  # @"[^A-Za-z0-9\s]+"
-        le_callsign_validator = QRegExpValidator(reg_ex, le_callsign)
-        le_callsign.setValidator(le_callsign_validator)
-        # !! ReGex implementation End !!
-
-    def grp2val(self):
-        le_callsign = self.lineEdit_4
-        # !! ReGex implementation !!
-        # For more details about ReGex search on google: regex rules or something similar
-        reg_ex = QRegExp("[a-z-A-Z0-9_]+")  # @"[^A-Za-z0-9\s]+"
-        le_callsign_validator = QRegExpValidator(reg_ex, le_callsign)
-        le_callsign.setValidator(le_callsign_validator)
-        # !! ReGex implementation End !
-
-    def gridval(self):
-        le_callsign = self.lineEdit_5
-        # !! ReGex implementation !!
-        # For more details about ReGex search on google: regex rules or something similar
-        reg_ex = QRegExp("[a-z-A-Z0-9_]+")  # @"[^A-Za-z0-9\s]+"
-        le_callsign_validator = QRegExpValidator(reg_ex, le_callsign)
-        le_callsign.setValidator(le_callsign_validator)
-        # !! ReGex implementation End !!
-
+    def _show_error(self, message: str):
+        """Show an error message box."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("CommStat-Improved Error")
+        msg.setText(message)
+        msg.setIcon(QMessageBox.Critical)
+        msg.exec_()
 
 
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    FormSettings = QtWidgets.QWidget()
-    ui = Ui_FormSettings()
-    ui.setupUi(FormSettings)
-    FormSettings.show()
+    dialog = SettingsDialog()
+    dialog.show()
     sys.exit(app.exec_())

@@ -1,1239 +1,575 @@
-#!/usr/bin/python
-#modified to allow launching Brevity1 and GridFinder with All Gray button and Cancel button ensured.
+# Copyright (c) 2025 Manuel Ochoa
+# This file is part of CommStat-Improved.
+# Licensed under the GNU General Public License v3.0.
+# AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
+
+"""
+StatRep Dialog for CommStat-Improved
+Allows creating and transmitting AMRRON Status Reports via JS8Call.
+"""
+
 import os
+import re
+import random
 import sqlite3
 from configparser import ConfigParser
-import re
-from time import strftime
-from PyQt5.QtCore import QDateTime, Qt
-from PyQt5.QtWidgets import QMessageBox
+from typing import Optional, Dict, List
+from dataclasses import dataclass
+
 from PyQt5 import QtCore, QtGui, QtWidgets
-import random
-import datetime
+from PyQt5.QtCore import QDateTime, Qt
+from PyQt5.QtWidgets import QMessageBox, QDialog, QComboBox
 import js8callAPIsupport
-import subprocess
-import sys
-serverip = ""
-serverport = ""
-callsign = ""
-grid = ""
-selectedgroup = ""
-stat_id = ""
-class Ui_FormStatRep(object):
-    def setupUi(self, FormStatRep):
-        self.MainWindow = FormStatRep
-        FormStatRep.setObjectName("FormStatRep")
-        FormStatRep.resize(808, 768)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(FormStatRep.sizePolicy().hasHeightForWidth())
-        FormStatRep.setSizePolicy(sizePolicy)
-        icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("USA-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        FormStatRep.setWindowIcon(icon)
-        self.pushButton = QtWidgets.QPushButton(FormStatRep)
-        self.pushButton.setGeometry(QtCore.QRect(540, 475, 100, 31))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.pushButton.setFont(font)
-        self.pushButton.setObjectName("pushButton")
-        self.pushButton.setStyleSheet("border: 1px solid rgb(100, 100, 100); border-radius: 4px;")
-        self.pushButton_3 = QtWidgets.QPushButton(FormStatRep)
-        self.pushButton_3.setGeometry(QtCore.QRect(250, 475, 81, 31))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.pushButton_3.setFont(font)
-        self.pushButton_3.setObjectName("pushButton_3")
-        self.pushButton_3.setStyleSheet("border: 1px solid rgb(100, 100, 100); border-radius: 4px;")
-        self.pushButton_4 = QtWidgets.QPushButton(FormStatRep)
-        self.pushButton_4.setGeometry(QtCore.QRect(340, 475, 100, 31))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.pushButton_4.setFont(font)
-        self.pushButton_4.setObjectName("pushButton_4")
-        self.pushButton_4.setStyleSheet("border: 1px solid rgb(100, 100, 100); border-radius: 4px;")
-        self.pushButton_5 = QtWidgets.QPushButton(FormStatRep)
-        self.pushButton_5.setGeometry(QtCore.QRect(450, 475, 81, 31))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.pushButton_5.setFont(font)
-        self.pushButton_5.setObjectName("pushButton_5")
-        self.pushButton_5.setStyleSheet("border: 1px solid rgb(100, 100, 100); border-radius: 4px;")
-        self.pushButton_2 = QtWidgets.QPushButton(FormStatRep)
-        self.pushButton_2.setGeometry(QtCore.QRect(650, 475, 81, 31))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.pushButton_2.setFont(font)
-        self.pushButton_2.setObjectName("pushButton_2")
-        self.pushButton_2.setStyleSheet("border: 1px solid rgb(100, 100, 100); border-radius: 4px;")
-        self.label = QtWidgets.QLabel(FormStatRep)
-        self.label.setGeometry(QtCore.QRect(20, 0, 781, 541))
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.label.sizePolicy().hasHeightForWidth())
-        self.label.setSizePolicy(sizePolicy)
-        self.label.setText("")
-        self.label.setPixmap(QtGui.QPixmap("statrep-5v-top.png"))
-        self.label.setObjectName("label")
-        self.lineEditToGrp = QtWidgets.QLineEdit(FormStatRep)
-        self.lineEditToGrp.setGeometry(QtCore.QRect(29, 142, 214, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEditToGrp.setFont(font)
-        self.lineEditToGrp.setObjectName("lineEditToGrp")
-        self.lineEditToGrp.setEnabled(False)
-        self.lineEditFrom = QtWidgets.QLineEdit(FormStatRep)
-        self.lineEditFrom.setGeometry(QtCore.QRect(281, 141, 213, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEditFrom.setFont(font)
-        self.lineEditFrom.setObjectName("lineEditFrom")
-        self.lineEditID = QtWidgets.QLineEdit(FormStatRep)
-        self.lineEditID.setGeometry(QtCore.QRect(28, 193, 354, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEditID.setFont(font)
-        self.lineEditID.setObjectName("lineEditID")
-        self.lineEditID.setEnabled(False)
-        self.comboBoxPrecedent = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxPrecedent.setGeometry(QtCore.QRect(534, 142, 152, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxPrecedent.setFont(font)
-        self.comboBoxPrecedent.setObjectName("comboBoxPrecedent")
-        self.comboBoxPrecedent.addItem('My Location')
-        self.comboBoxPrecedent.addItem('My Community')
-        self.comboBoxPrecedent.addItem('My County')
-        self.comboBoxPrecedent.addItem('My Region')
-        self.comboBoxPrecedent.addItem('Other Location')
-        self.gridFinderButton = QtWidgets.QPushButton(FormStatRep)
-        self.gridFinderButton.setGeometry(QtCore.QRect(450, 193, 80, 23))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.gridFinderButton.setFont(font)
-        self.gridFinderButton.setText("GridFinder")
-        self.gridFinderButton.setStyleSheet(
-            "QPushButton { border: 1px solid rgb(100, 100, 100); background-color: #28a745; color: black; padding: 5px; border-radius: 4px; }"
-            "QPushButton:hover { background-color: #34c759; }"
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+DATABASE_FILE = "traffic.db3"
+CONFIG_FILE = "config.ini"
+
+# Status codes
+STATUS_GREEN = "1"
+STATUS_YELLOW = "2"
+STATUS_RED = "3"
+STATUS_UNKNOWN = "4"
+
+# Status display names and their codes
+STATUS_OPTIONS = [
+    ("", ""),           # Empty/unselected
+    ("Green", STATUS_GREEN),
+    ("Yellow", STATUS_YELLOW),
+    ("Red", STATUS_RED),
+    ("Unknown", STATUS_UNKNOWN),
+]
+
+# Scope options
+SCOPE_OPTIONS = [
+    ("My Location", "1"),
+    ("My Community", "2"),
+    ("My County", "3"),
+    ("My Region", "4"),
+    ("Other Location", "5"),
+]
+
+# Status categories in display order (label, internal_name)
+STATUS_CATEGORIES = [
+    ("Overall Status", "status"),
+    ("Power", "power"),
+    ("Water", "water"),
+    ("Medical", "medical"),
+    ("Comms", "comms"),
+    ("Travel", "travel"),
+    ("Internet", "internet"),
+    ("Fuel", "fuel"),
+    ("Food", "food"),
+    ("Crime", "crime"),
+    ("Civil", "civil"),
+    ("Political", "political"),
+]
+
+# Colors for status indicators
+STATUS_COLORS = {
+    "Green": "#28a745",
+    "Yellow": "#ffc107",
+    "Red": "#dc3545",
+    "Unknown": "#6c757d",
+}
+
+# Styling
+FONT_FAMILY = "Arial"
+FONT_SIZE = 10
+WINDOW_WIDTH = 520
+WINDOW_HEIGHT = 480
+
+
+# =============================================================================
+# StatRep Dialog
+# =============================================================================
+
+class StatRepDialog(QDialog):
+    """Modern StatRep form for creating and transmitting status reports."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("CommStat-Improved STATREP")
+        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.setWindowFlags(
+            Qt.Window |
+            Qt.CustomizeWindowHint |
+            Qt.WindowTitleHint |
+            Qt.WindowCloseButtonHint |
+            Qt.WindowStaysOnTopHint
         )
-        self.gridFinderButton.setToolTip("Launch GridFinder tool to find a grid and paste here")
-        self.gridFinderButton.setObjectName("gridFinderButton")
-        self.gridFinderButton.clicked.connect(self.launch_gridfinder)
-        self.lineEditGrid = QtWidgets.QLineEdit(FormStatRep)
-        self.lineEditGrid.setGeometry(QtCore.QRect(533, 193, 190, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEditGrid.setFont(font)
-        self.lineEditGrid.setStyleSheet("border: 1px solid rgb(100, 100, 100); border-radius: 4px;")
-        self.lineEditGrid.setObjectName("lineEditGrid")
-        self.comboBoxStatus = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxStatus.setGeometry(QtCore.QRect(30, 244, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxStatus.setFont(font)
-        self.comboBoxStatus.setObjectName("comboBoxStatus")
-        self.comboBoxStatus.addItem('')
-        self.comboBoxStatus.addItem('Green')
-        self.comboBoxStatus.addItem('Yellow')
-        self.comboBoxStatus.addItem('Red')
-        self.comboBoxPower = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxPower.setGeometry(QtCore.QRect(305, 244, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxPower.setFont(font)
-        self.comboBoxPower.setObjectName("comboBoxPower")
-        self.comboBoxPower.addItem('')
-        self.comboBoxPower.addItem('Green')
-        self.comboBoxPower.addItem('Yellow')
-        self.comboBoxPower.addItem('Red')
-        self.comboBoxPower.addItem('Unknown')
-        self.comboBoxWater = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxWater.setGeometry(QtCore.QRect(547, 244, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxWater.setFont(font)
-        self.comboBoxWater.setObjectName("comboBoxWater")
-        self.comboBoxWater.addItem('')
-        self.comboBoxWater.addItem('Green')
-        self.comboBoxWater.addItem('Yellow')
-        self.comboBoxWater.addItem('Red')
-        self.comboBoxWater.addItem('Unknown')
-        self.comboBoxMedical = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxMedical.setGeometry(QtCore.QRect(30, 291, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxMedical.setFont(font)
-        self.comboBoxMedical.setObjectName("comboBoxMedical")
-        self.comboBoxMedical.addItem('')
-        self.comboBoxMedical.addItem('Green')
-        self.comboBoxMedical.addItem('Yellow')
-        self.comboBoxMedical.addItem('Red')
-        self.comboBoxMedical.addItem('Unknown')
-        self.comboBoxComms = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxComms.setGeometry(QtCore.QRect(305, 291, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxComms.setFont(font)
-        self.comboBoxComms.setObjectName("comboBoxComms")
-        self.comboBoxComms.addItem('')
-        self.comboBoxComms.addItem('Green')
-        self.comboBoxComms.addItem('Yellow')
-        self.comboBoxComms.addItem('Red')
-        self.comboBoxComms.addItem('Unknown')
-        self.comboBoxTravel = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxTravel.setGeometry(QtCore.QRect(547, 291, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxTravel.setFont(font)
-        self.comboBoxTravel.setObjectName("comboBoxTravel")
-        self.comboBoxTravel.addItem('')
-        self.comboBoxTravel.addItem('Green')
-        self.comboBoxTravel.addItem('Yellow')
-        self.comboBoxTravel.addItem('Red')
-        self.comboBoxTravel.addItem('Unknown')
-        self.comboBoxInternet = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxInternet.setGeometry(QtCore.QRect(30, 338, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxInternet.setFont(font)
-        self.comboBoxInternet.setObjectName("comboBoxInternet")
-        self.comboBoxInternet.addItem('')
-        self.comboBoxInternet.addItem('Green')
-        self.comboBoxInternet.addItem('Yellow')
-        self.comboBoxInternet.addItem('Red')
-        self.comboBoxInternet.addItem('Unknown')
-        self.comboBoxFuel = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxFuel.setGeometry(QtCore.QRect(305, 338, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxFuel.setFont(font)
-        self.comboBoxFuel.setObjectName("comboBoxFuel")
-        self.comboBoxFuel.addItem('')
-        self.comboBoxFuel.addItem('Green')
-        self.comboBoxFuel.addItem('Yellow')
-        self.comboBoxFuel.addItem('Red')
-        self.comboBoxFuel.addItem('Unknown')
-        self.comboBoxFood = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxFood.setGeometry(QtCore.QRect(547, 338, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxFood.setFont(font)
-        self.comboBoxFood.setObjectName("comboBoxFood")
-        self.comboBoxFood.addItem('')
-        self.comboBoxFood.addItem('Green')
-        self.comboBoxFood.addItem('Yellow')
-        self.comboBoxFood.addItem('Red')
-        self.comboBoxFood.addItem('Unknown')
-        self.comboBoxCrime = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxCrime.setGeometry(QtCore.QRect(29, 385, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxCrime.setFont(font)
-        self.comboBoxCrime.setObjectName("comboBoxCrime")
-        self.comboBoxCrime.addItem('')
-        self.comboBoxCrime.addItem('Green')
-        self.comboBoxCrime.addItem('Yellow')
-        self.comboBoxCrime.addItem('Red')
-        self.comboBoxCrime.addItem('Unknown')
-        self.comboBoxCivil = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxCivil.setGeometry(QtCore.QRect(305, 385, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxCivil.setFont(font)
-        self.comboBoxCivil.setObjectName("comboBoxCivil")
-        self.comboBoxCivil.addItem('')
-        self.comboBoxCivil.addItem('Green')
-        self.comboBoxCivil.addItem('Yellow')
-        self.comboBoxCivil.addItem('Red')
-        self.comboBoxCivil.addItem('Unknown')
-        self.comboBoxPolitical = QtWidgets.QComboBox(FormStatRep)
-        self.comboBoxPolitical.setGeometry(QtCore.QRect(547, 385, 130, 22))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.comboBoxPolitical.setFont(font)
-        self.comboBoxPolitical.setObjectName("comboBoxPolitical")
-        self.comboBoxPolitical.addItem('')
-        self.comboBoxPolitical.addItem('Green')
-        self.comboBoxPolitical.addItem('Yellow')
-        self.comboBoxPolitical.addItem('Red')
-        self.comboBoxPolitical.addItem('Unknown')
-        self.brevityButton = QtWidgets.QPushButton(FormStatRep)
-        self.brevityButton.setGeometry(QtCore.QRect(33, 434, 115, 24))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.brevityButton.setFont(font)
-        self.brevityButton.setText("Create Brevity")
-        self.brevityButton.setStyleSheet(
-            "QPushButton { border: 1px solid rgb(100, 100, 100); background-color: #28a745; color: black; padding: 5px; border-radius: 4px; }"
-            "QPushButton:hover { background-color: #34c759; }"
+
+        # Set window icon
+        if os.path.exists("radiation-32.jpg"):
+            self.setWindowIcon(QtGui.QIcon("radiation-32.jpg"))
+
+        # Configuration
+        self.server_ip = "127.0.0.1"
+        self.server_port = "2242"
+        self.callsign = ""
+        self.grid = ""
+        self.selected_group = ""
+        self.statrep_id = ""
+
+        # Status combo boxes
+        self.status_combos: Dict[str, QComboBox] = {}
+
+        # Load config and generate ID
+        self._load_config()
+        self._generate_statrep_id()
+
+        # Initialize API
+        self.api = js8callAPIsupport.js8CallUDPAPICalls(
+            self.server_ip, int(self.server_port)
         )
-        self.brevityButton.setToolTip("Launch Brevity tool to create a code and paste here")
-        self.brevityButton.setObjectName("brevityButton")
-        self.brevityButton.clicked.connect(self.launch_brevity)
-        self.lineEdit = QtWidgets.QLineEdit(FormStatRep)
-        self.lineEdit.setGeometry(QtCore.QRect(150, 434, 566, 24))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        self.lineEdit.setFont(font)
-        self.lineEdit.setStyleSheet("border: 1px solid rgb(100, 100, 100); border-radius: 4px;")
-        self.lineEdit.setObjectName("lineEdit")
-        self.textBrowser = QtWidgets.QTextBrowser(FormStatRep)
-        self.textBrowser.setGeometry(QtCore.QRect(17, 530, 776, 230))
-        self.textBrowser.setSource(QtCore.QUrl("statrep-5v-bottom.html"))
-        self.textBrowser.setObjectName("textBrowser")
-        self.label.raise_()
-        self.comboBoxTravel.raise_()
-        self.comboBoxCivil.raise_()
-        self.comboBoxFood.raise_()
-        self.lineEditFrom.raise_()
-        self.comboBoxMedical.raise_()
-        self.comboBoxStatus.raise_()
-        self.comboBoxFuel.raise_()
-        self.lineEdit.raise_()
-        self.comboBoxPower.raise_()
-        self.pushButton_2.raise_()
-        self.pushButton_3.raise_()
-        self.pushButton_4.raise_()
-        self.pushButton_5.raise_()
-        self.lineEditID.raise_()
-        self.comboBoxComms.raise_()
-        self.comboBoxCrime.raise_()
-        self.lineEditGrid.raise_()
-        self.gridFinderButton.raise_()
-        self.comboBoxPrecedent.raise_()
-        self.comboBoxWater.raise_()
-        self.lineEditToGrp.raise_()
-        self.comboBoxInternet.raise_()
-        self.pushButton.raise_()
-        self.comboBoxPolitical.raise_()
-        self.textBrowser.raise_()
-        self.brevityButton.raise_()
-        self.retranslateUi(FormStatRep)
-        QtCore.QMetaObject.connectSlotsByName(FormStatRep)
-        self.find_statrep_id()
-        self.getConfig()
-        self.serveripad = serverip
-        self.servport = int(serverport)
-        self.api = js8callAPIsupport.js8CallUDPAPICalls((self.serveripad),
-                                                        int(self.servport))
-        self.pushButton_2.clicked.connect(self.MainWindow.close)
-        self.pushButton.clicked.connect(self.transmit)
-        self.pushButton_3.clicked.connect(self.save_only)
-        self.pushButton_4.clicked.connect(self.all_green)
-        self.pushButton_5.clicked.connect(self.all_gray)
-        self.MainWindow.setWindowFlags(
-            QtCore.Qt.Window |
-            QtCore.Qt.CustomizeWindowHint |
-            QtCore.Qt.WindowTitleHint |
-            QtCore.Qt.WindowCloseButtonHint |
-            QtCore.Qt.WindowStaysOnTopHint
-        )
-    def retranslateUi(self, FormStatRep):
-        _translate = QtCore.QCoreApplication.translate
-        FormStatRep.setWindowTitle(_translate("FormStatRep", "Commstat StatRep"))
-        self.pushButton.setText(_translate("FormStatRep", "Transmit"))
-        self.pushButton_2.setText(_translate("FormStatRep", "Cancel"))
-        self.pushButton_3.setText(_translate("FormStatRep", "Save Only"))
-        self.pushButton_4.setText(_translate("FormStatRep", "All Green"))
-        self.pushButton_5.setText(_translate("FormStatRep", "All Gray"))
-        self.brevityButton.setText(_translate("FormStatRep", "Create Brevity"))
-        self.gridFinderButton.setText(_translate("FormStatRep", "GridFinder"))
-    def launch_brevity(self):
-        brevity_path = os.path.join(os.getcwd(), "brevity1.py")
-        if not os.path.exists(brevity_path):
-            msg = QMessageBox()
-            msg.setWindowTitle("Error")
-            msg.setText(f"Brevity tool not found at {brevity_path}")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            msg.exec_()
+
+        # Build UI
+        self._setup_ui()
+
+    def _load_config(self) -> None:
+        """Load configuration from config.ini."""
+        if not os.path.exists(CONFIG_FILE):
             return
+
+        config = ConfigParser()
+        config.read(CONFIG_FILE)
+
+        if "USERINFO" in config:
+            userinfo = config["USERINFO"]
+            self.callsign = userinfo.get("callsign", "")
+            self.grid = userinfo.get("grid", "")
+            self.selected_group = userinfo.get("selectedgroup", "")
+
+        if "DIRECTEDCONFIG" in config:
+            dirconfig = config["DIRECTEDCONFIG"]
+            self.server_ip = dirconfig.get("server", "127.0.0.1")
+            self.server_port = dirconfig.get("udp_port", "2242")
+
+    def _generate_statrep_id(self) -> None:
+        """Generate a unique StatRep ID that doesn't exist in the database."""
+        self.statrep_id = str(random.randint(100, 999))
+
         try:
-            subprocess.Popen([sys.executable, brevity_path])
-            self.MainWindow.raise_()
-            self.MainWindow.activateWindow()
-            self.lineEdit.setFocus()
-        except Exception as e:
-            msg = QMessageBox()
-            msg.setWindowTitle("Launch Error")
-            msg.setText(f"Failed to launch Brevity: {str(e)}")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            msg.exec_()
-    def launch_gridfinder(self):
-        gridfinder_path = os.path.join(os.getcwd(), "gridfinder.py")
-        if not os.path.exists(gridfinder_path):
-            msg = QMessageBox()
-            msg.setWindowTitle("Error")
-            msg.setText(f"GridFinder tool not found at {gridfinder_path}")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            msg.exec_()
-            return
-        try:
-            subprocess.Popen([sys.executable, gridfinder_path])
-            self.MainWindow.raise_()
-            self.MainWindow.activateWindow()
-            self.lineEditGrid.setFocus()
-        except Exception as e:
-            msg = QMessageBox()
-            msg.setWindowTitle("Launch Error")
-            msg.setText(f"Failed to launch GridFinder: {str(e)}")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            msg.exec_()
-    def getConfig(self):
-        global serverip
-        global serverport
-        global grid
-        global callsign
-        global selectedgroup
-        global stat_id
-        if os.path.exists("config.ini"):
-            config_object = ConfigParser()
-            config_object.read("config.ini")
-            userinfo = config_object["USERINFO"]
-            systeminfo = config_object["DIRECTEDCONFIG"]
-            callsign = format(userinfo["callsign"])
-            callsignSuffix = format(userinfo["callsignsuffix"])
-            group1 = format(userinfo["group1"])
-            group2 = format(userinfo["group2"])
-            grid = format(userinfo["grid"])
-            path = format(systeminfo["path"])
-            serverip = format(systeminfo["server"])
-            serverport = format(systeminfo["UDP_port"])
-            selectedgroup = format(userinfo["selectedgroup"])
-            self.lineEditFrom.setText(callsign)
-            self.lineEditToGrp.setText(selectedgroup)
-            self.lineEditGrid.setText(grid)
-            randnum = random.randint(100, 999)
-            self.lineEditID.setText(stat_id)
-    def save_only(self):
-        group = format(self.lineEditToGrp.text())
-        group = group.upper()
-        call = format(self.lineEditFrom.text())
-        call = call.upper()
-        grid = format(self.lineEditGrid.text())
-        grid = grid.upper()
-        prec = format(self.comboBoxPrecedent.currentText())
-        prec2 = format(self.comboBoxPrecedent.currentText())
-        incidenceno = format(self.lineEditID.text())
-        status = format(self.comboBoxStatus.currentText())
-        commpwr = format(self.comboBoxPower.currentText())
-        pubwtr = format(self.comboBoxWater.currentText())
-        med = format(self.comboBoxMedical.currentText())
-        ota = format(self.comboBoxComms.currentText())
-        trav = format(self.comboBoxTravel.currentText())
-        net = format(self.comboBoxInternet.currentText())
-        fuel = format(self.comboBoxFuel.currentText())
-        food = format(self.comboBoxFood.currentText())
-        crime = format(self.comboBoxCrime.currentText())
-        civil = format(self.comboBoxCivil.currentText())
-        political = format(self.comboBoxPolitical.currentText())
-        comments1 = format(self.lineEdit.text())
-        comments1 = comments1.upper()
-        comments = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", comments1)
-        if len(group) < 4 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Group Name too short")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(call) < 4 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Callsign too short")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(call) > 8 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Callsign too long")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if not re.match('[AKNWV][A-Z]{0,2}[0-9][A-Z]{1,3}', call):
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Does not meet callsign structure!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(comments) > 60 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Remarks too long, please abbreviate")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(comments) < 1:
-            comments = "NTR"
-        if len(grid) < 4:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Grid is not valid")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if "Green" in status:
-            status = "1"
-        elif ("Yellow" in status):
-            status = "2"
-        elif ("Red" in status):
-            status = "3"
-        elif ("Unknown" in status):
-            status = "4"
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT SRid FROM StatRep_Data")
+                existing_ids = [str(row[0]) for row in cursor.fetchall()]
+
+                while self.statrep_id in existing_ids:
+                    self.statrep_id = str(random.randint(100, 999))
+
+        except sqlite3.Error as e:
+            print(f"Database error generating StatRep ID: {e}")
+
+    def _setup_ui(self) -> None:
+        """Build the user interface."""
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Title
+        title = QtWidgets.QLabel("CommStat Status Report 5.1")
+        title.setAlignment(Qt.AlignCenter)
+        title_font = QtGui.QFont(FONT_FAMILY, 16, QtGui.QFont.Bold)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #333; margin-bottom: 10px;")
+        layout.addWidget(title)
+
+        # Header info (To, From, Grid)
+        header_layout = QtWidgets.QHBoxLayout()
+        header_layout.setSpacing(15)
+
+        # To (Group)
+        to_layout = QtWidgets.QVBoxLayout()
+        to_label = QtWidgets.QLabel("To:")
+        to_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        self.to_field = QtWidgets.QLineEdit(self.selected_group)
+        self.to_field.setReadOnly(True)
+        self.to_field.setStyleSheet("background-color: #e9ecef;")
+        to_layout.addWidget(to_label)
+        to_layout.addWidget(self.to_field)
+        header_layout.addLayout(to_layout)
+
+        # From (Callsign)
+        from_layout = QtWidgets.QVBoxLayout()
+        from_label = QtWidgets.QLabel("From:")
+        from_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        self.from_field = QtWidgets.QLineEdit(self.callsign)
+        self.from_field.setReadOnly(True)
+        self.from_field.setStyleSheet("background-color: #e9ecef;")
+        from_layout.addWidget(from_label)
+        from_layout.addWidget(self.from_field)
+        header_layout.addLayout(from_layout)
+
+        # Grid
+        grid_layout = QtWidgets.QVBoxLayout()
+        grid_label = QtWidgets.QLabel("Grid:")
+        grid_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        self.grid_field = QtWidgets.QLineEdit(self.grid)
+        self.grid_field.setReadOnly(True)
+        self.grid_field.setStyleSheet("background-color: #e9ecef;")
+        self.grid_field.setMaximumWidth(80)
+        grid_layout.addWidget(grid_label)
+        grid_layout.addWidget(self.grid_field)
+        header_layout.addLayout(grid_layout)
+
+        layout.addLayout(header_layout)
+
+        # Scope dropdown
+        scope_layout = QtWidgets.QHBoxLayout()
+        scope_label = QtWidgets.QLabel("Scope:")
+        scope_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        self.scope_combo = QtWidgets.QComboBox()
+        self.scope_combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        for display, code in SCOPE_OPTIONS:
+            self.scope_combo.addItem(display, code)
+        scope_layout.addWidget(scope_label)
+        scope_layout.addWidget(self.scope_combo)
+        scope_layout.addStretch()
+        layout.addLayout(scope_layout)
+
+        # Legend
+        legend = QtWidgets.QLabel(
+            "<b>Green</b> = Normal | "
+            "<b>Yellow</b> = Limited | "
+            "<b>Red</b> = Collapsed/None"
+        )
+        legend.setAlignment(Qt.AlignCenter)
+        legend.setStyleSheet(
+            "background-color: #f8f9fa; padding: 8px; border-radius: 4px; margin: 5px 0;"
+        )
+        layout.addWidget(legend)
+
+        # Status grid (4 columns x 3 rows)
+        status_grid = QtWidgets.QGridLayout()
+        status_grid.setSpacing(10)
+
+        for i, (label, name) in enumerate(STATUS_CATEGORIES):
+            row = i // 4
+            col = i % 4
+
+            cell_layout = QtWidgets.QVBoxLayout()
+            cell_label = QtWidgets.QLabel(label)
+            cell_label.setFont(QtGui.QFont(FONT_FAMILY, 9))
+            cell_label.setAlignment(Qt.AlignCenter)
+
+            combo = self._create_status_combo()
+            self.status_combos[name] = combo
+
+            cell_layout.addWidget(cell_label)
+            cell_layout.addWidget(combo)
+            status_grid.addLayout(cell_layout, row, col)
+
+        layout.addLayout(status_grid)
+
+        # Remarks
+        remarks_layout = QtWidgets.QVBoxLayout()
+        remarks_label = QtWidgets.QLabel("Remarks:")
+        remarks_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        self.remarks_field = QtWidgets.QLineEdit()
+        self.remarks_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.remarks_field.setMaxLength(60)
+        self.remarks_field.setPlaceholderText("Optional - max 60 characters")
+        remarks_layout.addWidget(remarks_label)
+        remarks_layout.addWidget(self.remarks_field)
+        layout.addLayout(remarks_layout)
+
+        # Spacer
+        layout.addStretch()
+
+        # Buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.setSpacing(10)
+
+        btn_all_green = QtWidgets.QPushButton("All Green")
+        btn_all_green.clicked.connect(self._on_all_green)
+        btn_all_green.setStyleSheet(self._button_style("#28a745"))
+        button_layout.addWidget(btn_all_green)
+
+        btn_all_gray = QtWidgets.QPushButton("All Gray")
+        btn_all_gray.clicked.connect(self._on_all_gray)
+        btn_all_gray.setStyleSheet(self._button_style("#6c757d"))
+        button_layout.addWidget(btn_all_gray)
+
+        btn_save = QtWidgets.QPushButton("Save Only")
+        btn_save.clicked.connect(self._on_save_only)
+        btn_save.setStyleSheet(self._button_style("#17a2b8"))
+        button_layout.addWidget(btn_save)
+
+        btn_transmit = QtWidgets.QPushButton("Transmit")
+        btn_transmit.clicked.connect(self._on_transmit)
+        btn_transmit.setStyleSheet(self._button_style("#007bff"))
+        button_layout.addWidget(btn_transmit)
+
+        btn_cancel = QtWidgets.QPushButton("Cancel")
+        btn_cancel.clicked.connect(self.close)
+        btn_cancel.setStyleSheet(self._button_style("#dc3545"))
+        button_layout.addWidget(btn_cancel)
+
+        layout.addLayout(button_layout)
+
+    def _create_status_combo(self) -> QComboBox:
+        """Create a status dropdown with color-coded options."""
+        combo = QtWidgets.QComboBox()
+        combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        combo.setMinimumWidth(90)
+
+        for display, code in STATUS_OPTIONS:
+            combo.addItem(display, code)
+
+        # Update color when selection changes
+        combo.currentTextChanged.connect(
+            lambda text, c=combo: self._update_combo_color(c, text)
+        )
+
+        return combo
+
+    def _update_combo_color(self, combo: QComboBox, text: str) -> None:
+        """Update combo box background color based on selection."""
+        color = STATUS_COLORS.get(text, "#ffffff")
+        if text in ("Green", "Yellow", "Red", "Unknown"):
+            text_color = "#000" if text == "Yellow" else "#fff"
+            combo.setStyleSheet(
+                f"background-color: {color}; color: {text_color}; font-weight: bold;"
+            )
         else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (commpwr == "Green"):
-            commpwr = "1"
-        elif (commpwr == "Yellow"):
-            commpwr = "2"
-        elif (commpwr == "Red"):
-            commpwr = "3"
-        elif (commpwr == "Unknown"):
-            commpwr = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (pubwtr == "Green"):
-            pubwtr = "1"
-        elif (pubwtr == "Yellow"):
-            pubwtr = "2"
-        elif (pubwtr == "Red"):
-            pubwtr = "3"
-        elif (pubwtr == "Unknown"):
-            pubwtr = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (med == "Green"):
-            med = "1"
-        elif (med == "Yellow"):
-            med = "2"
-        elif (med == "Red"):
-            med = "3"
-        elif (med == "Unknown"):
-            med = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (ota == "Green"):
-            ota = "1"
-        elif (ota == "Yellow"):
-            ota = "2"
-        elif (ota == "Red"):
-            ota = "3"
-        elif (ota == "Unknown"):
-            ota = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (trav == "Green"):
-            trav = "1"
-        elif (trav == "Yellow"):
-            trav = "2"
-        elif (trav == "Red"):
-            trav = "3"
-        elif (trav == "Unknown"):
-            trav = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (net == "Green"):
-            net = "1"
-        elif (net == "Yellow"):
-            net = "2"
-        elif (net == "Red"):
-            net = "3"
-        elif (net == "Unknown"):
-            net = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (fuel == "Green"):
-            fuel = "1"
-        elif (fuel == "Yellow"):
-            fuel = "2"
-        elif (fuel == "Red"):
-            fuel = "3"
-        elif (fuel == "Unknown"):
-            fuel = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (food == "Green"):
-            food = "1"
-        elif (food == "Yellow"):
-            food = "2"
-        elif (food == "Red"):
-            food = "3"
-        elif (food == "Unknown"):
-            food = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (crime == "Green"):
-            crime = "1"
-        elif (crime == "Yellow"):
-            crime = "2"
-        elif (crime == "Red"):
-            crime = "3"
-        elif (crime == "Unknown"):
-            crime = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (civil == "Green"):
-            civil = "1"
-        elif (civil == "Yellow"):
-            civil = "2"
-        elif (civil == "Red"):
-            civil = "3"
-        elif (civil == "Unknown"):
-            civil = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (political == "Green"):
-            political = "1"
-        elif (political == "Yellow"):
-            political = "2"
-        elif (political == "Red"):
-            political = "3"
-        elif (political == "Unknown"):
-            political = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (prec == "My Location"):
-            prec = "1"
-        elif (prec == "My Community"):
-            prec = "2"
-        elif (prec == "My County"):
-            prec = "3"
-        elif (prec == "My Region"):
-            prec = "4"
-        elif (prec == "Other Location"):
-            prec = "5"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All prc must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        selectedgroup1 = "@"+selectedgroup
-        message = "" + selectedgroup1 + " ," + grid + "," + prec + "," + incidenceno + "," + status + commpwr + pubwtr + med + ota + trav + net + fuel + food + crime + civil + political + "," + comments + ",{&%}" ""
-        messageType = js8callAPIsupport.TYPE_TX_SEND
-        messageString = message
-        msg = QMessageBox()
-        msg.setWindowTitle("CommStatX StatRep Saved")
-        msg.setText("CommStatX has saved : " + message)
+            combo.setStyleSheet("")
+
+    def _button_style(self, color: str) -> str:
+        """Generate button stylesheet."""
+        return f"""
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                border: none;
+                padding: 8px 12px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 10px;
+            }}
+            QPushButton:hover {{
+                opacity: 0.9;
+            }}
+            QPushButton:pressed {{
+                opacity: 0.8;
+            }}
+        """
+
+    def _show_error(self, message: str) -> None:
+        """Display an error message box."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("CommStat-Improved Error")
+        msg.setText(message)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowFlag(Qt.WindowStaysOnTopHint)
+        msg.exec_()
+
+    def _show_info(self, message: str) -> None:
+        """Display an info message box."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("CommStat-Improved")
+        msg.setText(message)
         msg.setIcon(QMessageBox.Information)
-        msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-        x = msg.exec_()
-        now = QDateTime.currentDateTime()
-        date = (now.toUTC().toString("yyyy-MM-dd HH:mm:ss"))
-        conn = sqlite3.connect("traffic.db3")
-        cur = conn.cursor()
-        conn.set_trace_callback(print)
-        cur.execute("INSERT INTO StatRep_Data(datetime,callsign,groupname, grid, SRid, prec,status, commpwr, pubwtr,med, ota, trav, net, fuel, food, crime, civil, political, comments) VALUES(?,?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",(date,call,group,grid,incidenceno,prec2, status,commpwr,pubwtr,med,ota,trav,net ,fuel,food,crime,civil,political, comments))
-        conn.commit()
-        cur.close()
-        datafile = open("copyDIRECTED.TXT", "w")
-        datafile.write("blank line \n" )
-        datafile.close()
-        self.closeapp()
-    def all_green(self):
-        group = format(self.lineEditToGrp.text())
-        group = group.upper()
-        call = format(self.lineEditFrom.text())
-        call = call.upper()
-        grid = format(self.lineEditGrid.text())
-        grid = grid.upper()
-        prec = format(self.comboBoxPrecedent.setCurrentText("Routine"))
-        prec = "1"
-        prec2 = format(self.comboBoxPrecedent.currentText())
-        incidenceno = format(self.lineEditID.text())
-        status = "1"
-        commpwr = "1"
-        pubwtr = "1"
-        med = "1"
-        ota = "1"
-        trav = "1"
-        net = "1"
-        fuel = "1"
-        food = "1"
-        crime = "1"
-        civil = "1"
-        political = "1"
-        format(self.lineEdit.setText("NTR"))
-        comments1 = format(self.lineEdit.text())
-        comments1 = comments1.upper()
-        comments = comments1
-        format(self.comboBoxStatus.setCurrentText("Green"))
-        format(self.comboBoxPower.setCurrentText("Green"))
-        format(self.comboBoxWater.setCurrentText("Green"))
-        format(self.comboBoxMedical.setCurrentText("Green"))
-        format(self.comboBoxComms.setCurrentText("Green"))
-        format(self.comboBoxTravel.setCurrentText("Green"))
-        format(self.comboBoxInternet.setCurrentText("Green"))
-        format(self.comboBoxFuel.setCurrentText("Green"))
-        format(self.comboBoxFood.setCurrentText("Green"))
-        format(self.comboBoxCrime.setCurrentText("Green"))
-        format(self.comboBoxCivil.setCurrentText("Green"))
-        format(self.comboBoxPolitical.setCurrentText("Green"))
-        if len(group) < 4 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Group Name too short")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(call) < 4 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Callsign too short")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if not re.match('[AKNWV][A-Z]{0,2}[0-9][A-Z]{1,3}', call):
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Does not meet callsign structure!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(comments) > 60 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Remarks too long, please abbreviate")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(comments) < 1:
-            comments = "NTR"
-        if len(grid) < 4:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Grid is not valid")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        selectedgroup1 = "@"+selectedgroup
-        message = "" + selectedgroup1 + " ," + grid + "," + prec + "," + incidenceno + "," + status + commpwr + pubwtr + med + ota + trav + net + fuel + food + crime + civil + political + "," + comments + ",{&%}" ""
-        messageType = js8callAPIsupport.TYPE_TX_SEND
-        messageString = message
-        datafile = open("copyDIRECTED.TXT", "w")
-        datafile.write("blank line \n" )
-        datafile.close()
-    def all_gray(self):
-        group = format(self.lineEditToGrp.text())
-        group = group.upper()
-        call = format(self.lineEditFrom.text())
-        call = call.upper()
-        grid = format(self.lineEditGrid.text())
-        grid = grid.upper()
-        prec = format(self.comboBoxPrecedent.setCurrentText("Routine"))
-        prec = "1"
-        prec2 = format(self.comboBoxPrecedent.currentText())
-        incidenceno = format(self.lineEditID.text())
-        status = "4"
-        commpwr = "4"
-        pubwtr = "4"
-        med = "4"
-        ota = "4"
-        trav = "4"
-        net = "4"
-        fuel = "4"
-        food = "4"
-        crime = "4"
-        civil = "4"
-        political = "4"
-        format(self.lineEdit.setText("NTR"))
-        comments1 = format(self.lineEdit.text())
-        comments1 = comments1.upper()
-        comments = comments1
-        format(self.comboBoxStatus.setCurrentText("Unknown"))
-        format(self.comboBoxPower.setCurrentText("Unknown"))
-        format(self.comboBoxWater.setCurrentText("Unknown"))
-        format(self.comboBoxMedical.setCurrentText("Unknown"))
-        format(self.comboBoxComms.setCurrentText("Unknown"))
-        format(self.comboBoxTravel.setCurrentText("Unknown"))
-        format(self.comboBoxInternet.setCurrentText("Unknown"))
-        format(self.comboBoxFuel.setCurrentText("Unknown"))
-        format(self.comboBoxFood.setCurrentText("Unknown"))
-        format(self.comboBoxCrime.setCurrentText("Unknown"))
-        format(self.comboBoxCivil.setCurrentText("Unknown"))
-        format(self.comboBoxPolitical.setCurrentText("Unknown"))
-        if len(group) < 4 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Group Name too short")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(call) < 4 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Callsign too short")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if not re.match('[AKNWV][A-Z]{0,2}[0-9][A-Z]{1,3}', call):
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Does not meet callsign structure!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(comments) > 60 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Remarks too long, please abbreviate")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(comments) < 1:
-            comments = "NTR"
-        if len(grid) < 4:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Grid is not valid")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        selectedgroup1 = "@"+selectedgroup
-        message = "" + selectedgroup1 + " ," + grid + "," + prec + "," + incidenceno + "," + status + commpwr + pubwtr + med + ota + trav + net + fuel + food + crime + civil + political + "," + comments + ",{&%}" ""
-        messageType = js8callAPIsupport.TYPE_TX_SEND
-        messageString = message
-        datafile = open("copyDIRECTED.TXT", "w")
-        datafile.write("blank line \n" )
-        datafile.close()
-    def transmit(self):
-        global selectedgroup
-        group = format(self.lineEditToGrp.text())
-        group = group.upper()
-        call = format(self.lineEditFrom.text())
-        call = call.upper()
-        grid = format(self.lineEditGrid.text())
-        grid = grid.upper()
-        prec = format(self.comboBoxPrecedent.currentText())
-        prec2 = format(self.comboBoxPrecedent.currentText())
-        incidenceno = format(self.lineEditID.text())
-        status = format(self.comboBoxStatus.currentText())
-        commpwr = format(self.comboBoxPower.currentText())
-        pubwtr = format(self.comboBoxWater.currentText())
-        med = format(self.comboBoxMedical.currentText())
-        ota = format(self.comboBoxComms.currentText())
-        trav = format(self.comboBoxTravel.currentText())
-        net = format(self.comboBoxInternet.currentText())
-        fuel = format(self.comboBoxFuel.currentText())
-        food = format(self.comboBoxFood.currentText())
-        crime = format(self.comboBoxCrime.currentText())
-        civil = format(self.comboBoxCivil.currentText())
-        political = format(self.comboBoxPolitical.currentText())
-        comments1 = format(self.lineEdit.text())
-        comments1 = comments1.upper()
-        comments = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", comments1)
-        if len(group) < 4 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Group Name too short")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(callsign) < 4 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Callsign too short")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(comments) > 60 :
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Remarks too long, please abbreviate")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if len(comments) < 1:
-            comments = "NTR"
-        if len(grid) < 4:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("Grid is not valid")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if "Green" in status:
-            status = "1"
-        elif ("Yellow" in status):
-            status = "2"
-        elif ("Red" in status):
-            status = "3"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (commpwr == "Green"):
-            commpwr = "1"
-        elif (commpwr == "Yellow"):
-            commpwr = "2"
-        elif (commpwr == "Red"):
-            commpwr = "3"
-        elif (commpwr == "Unknown"):
-            commpwr = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (pubwtr == "Green"):
-            pubwtr = "1"
-        elif (pubwtr == "Yellow"):
-            pubwtr = "2"
-        elif (pubwtr == "Red"):
-            pubwtr = "3"
-        elif (pubwtr == "Unknown"):
-            pubwtr = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (med == "Green"):
-            med = "1"
-        elif (med == "Yellow"):
-            med = "2"
-        elif (med == "Red"):
-            med = "3"
-        elif (med == "Unknown"):
-            med = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (ota == "Green"):
-            ota = "1"
-        elif (ota == "Yellow"):
-            ota = "2"
-        elif (ota == "Red"):
-            ota = "3"
-        elif (ota == "Unknown"):
-            ota = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (trav == "Green"):
-            trav = "1"
-        elif (trav == "Yellow"):
-            trav = "2"
-        elif (trav == "Red"):
-            trav = "3"
-        elif (trav == "Unknown"):
-            trav = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (net == "Green"):
-            net = "1"
-        elif (net == "Yellow"):
-            net = "2"
-        elif (net == "Red"):
-            net = "3"
-        elif (net == "Unknown"):
-            net = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (fuel == "Green"):
-            fuel = "1"
-        elif (fuel == "Yellow"):
-            fuel = "2"
-        elif (fuel == "Red"):
-            fuel = "3"
-        elif (fuel == "Unknown"):
-            fuel = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (food == "Green"):
-            food = "1"
-        elif (food == "Yellow"):
-            food = "2"
-        elif (food == "Red"):
-            food = "3"
-        elif (food == "Unknown"):
-            food = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (crime == "Green"):
-            crime = "1"
-        elif (crime == "Yellow"):
-            crime = "2"
-        elif (crime == "Red"):
-            crime = "3"
-        elif (crime == "Unknown"):
-            crime = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (civil == "Green"):
-            civil = "1"
-        elif (civil == "Yellow"):
-            civil = "2"
-        elif (civil == "Red"):
-            civil = "3"
-        elif (civil == "Unknown"):
-            civil = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (political == "Green"):
-            political = "1"
-        elif (political == "Yellow"):
-            political = "2"
-        elif (political == "Red"):
-            political = "3"
-        elif (political == "Unknown"):
-            political = "4"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All boxes must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        if (prec == "My Location"):
-            prec = "1"
-        elif (prec == "My Community"):
-            prec = "2"
-        elif (prec == "My County"):
-            prec = "3"
-        elif (prec == "My Region"):
-            prec = "4"
-        elif (prec == "Other Location"):
-            prec = "5"
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("CommStatX error")
-            msg.setText("All prc must have a selection!")
-            msg.setIcon(QMessageBox.Critical)
-            msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
-            x = msg.exec_()
-            return
-        selectedgroup = "@"+selectedgroup
-        message = "" + selectedgroup + " ," + grid + "," + prec + "," + incidenceno + "," + status + commpwr + pubwtr + med + ota + trav + net + fuel + food + crime + civil + political + "," + comments + ",{&%}" ""
-        messageType = js8callAPIsupport.TYPE_TX_SEND
-        messageString = message
-        self.sendMessage(messageType, messageString)
-        now = QDateTime.currentDateTime()
-        date = (now.toUTC().toString("yyyy-MM-dd HH:mm:ss"))
-        conn = sqlite3.connect("traffic.db3")
-        cur = conn.cursor()
-        conn.set_trace_callback(print)
-        cur.execute("INSERT INTO StatRep_Data(datetime,callsign,groupname, grid, SRid, prec,status, commpwr, pubwtr,med, ota, trav, net, fuel, food, crime, civil, political, comments) VALUES(?,?,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",(date,call,group,grid,incidenceno,prec2, status,commpwr,pubwtr,med,ota,trav,net ,fuel,food,crime,civil,political, comments))
-        conn.commit()
-        cur.close()
-        datafile = open("copyDIRECTED.TXT", "w")
-        datafile.write("blank line \n" )
-        datafile.close()
-        self.closeapp()
-    def find_statrep_id(self):
-        global stat_id
-        randnum = random.randint(100, 999)
-        stat_id = (str(randnum))
+        msg.setWindowFlag(Qt.WindowStaysOnTopHint)
+        msg.exec_()
+
+    def _validate(self) -> bool:
+        """Validate all form fields. Returns True if valid."""
+        # Check all status fields are selected
+        for label, name in STATUS_CATEGORIES:
+            combo = self.status_combos[name]
+            if not combo.currentData():
+                self._show_error(f"Please select a status for '{label}'")
+                combo.setFocus()
+                return False
+
+        # Check remarks length
+        remarks = self.remarks_field.text().strip()
+        if len(remarks) > 60:
+            self._show_error("Remarks too long (max 60 characters)")
+            return False
+
+        return True
+
+    def _get_status_values(self) -> Dict[str, str]:
+        """Collect all status values as codes."""
+        values = {}
+        for _, name in STATUS_CATEGORIES:
+            values[name] = self.status_combos[name].currentData() or ""
+        return values
+
+    def _set_all_status(self, status_name: str) -> None:
+        """Set all status dropdowns to the specified status."""
+        for _, name in STATUS_CATEGORIES:
+            combo = self.status_combos[name]
+            index = combo.findText(status_name)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+
+    def _on_all_green(self) -> None:
+        """Set all statuses to Green."""
+        self._set_all_status("Green")
+        self.remarks_field.setText("NTR")
+
+    def _on_all_gray(self) -> None:
+        """Set all statuses to Unknown (Gray)."""
+        self._set_all_status("Unknown")
+        self.remarks_field.setText("NTR")
+
+    def _build_message(self) -> str:
+        """Build the StatRep message string for transmission."""
+        values = self._get_status_values()
+        scope_code = self.scope_combo.currentData()
+        remarks = self.remarks_field.text().strip().upper()
+        if not remarks:
+            remarks = "NTR"
+
+        # Clean remarks - only alphanumeric, spaces, hyphens, asterisks
+        remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
+
+        # Build status string (all 12 values concatenated)
+        status_str = "".join([
+            values["status"],
+            values["power"],
+            values["water"],
+            values["medical"],
+            values["comms"],
+            values["travel"],
+            values["internet"],
+            values["fuel"],
+            values["food"],
+            values["crime"],
+            values["civil"],
+            values["political"],
+        ])
+
+        # Format: @GROUP ,GRID,SCOPE,ID,STATUSES,REMARKS,{&%}
+        group = f"@{self.selected_group}"
+        message = f"{group} ,{self.grid},{scope_code},{self.statrep_id},{status_str},{remarks},{{&%}}"
+
+        return message
+
+    def _save_to_database(self) -> None:
+        """Save StatRep to database."""
+        values = self._get_status_values()
+        scope_text = self.scope_combo.currentText()
+        remarks = self.remarks_field.text().strip().upper() or "NTR"
+        remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
+
+        now = QDateTime.currentDateTimeUtc()
+        date = now.toString("yyyy-MM-dd HH:mm:ss")
+
         try:
-            sqliteConnection = sqlite3.connect('traffic.db3')
-            cursor = sqliteConnection.cursor()
-            sqlite_select_query = 'SELECT SRid FROM StatRep_Data;'
-            cursor.execute(sqlite_select_query)
-            items = cursor.fetchall()
-            for item in items:
-                srid = item[0]
-                if stat_id in item:
-                    print("StatRep random number failed, recycling and trying again")
-                    cursor.close()
-                    self.find_statrep_id()
-            cursor.close()
-        except sqlite3.Error as error:
-            print("Failed to read data from sqlite table", error)
-        finally:
-            if (sqliteConnection):
-                sqliteConnection.close()
-    def closeapp(self):
-        self.MainWindow.close()
-    def sendMessage(self, messageType, messageText):
-        self.api.sendMessage(messageType, messageText)
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO StatRep_Data(
+                        datetime, callsign, groupname, grid, SRid, prec,
+                        status, commpwr, pubwtr, med, ota, trav, net,
+                        fuel, food, crime, civil, political, comments
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    date,
+                    self.callsign.upper(),
+                    self.selected_group.upper(),
+                    self.grid.upper(),
+                    self.statrep_id,
+                    scope_text,
+                    values["status"],
+                    values["power"],
+                    values["water"],
+                    values["medical"],
+                    values["comms"],
+                    values["travel"],
+                    values["internet"],
+                    values["fuel"],
+                    values["food"],
+                    values["crime"],
+                    values["civil"],
+                    values["political"],
+                    remarks,
+                ))
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"Database error saving StatRep: {e}")
+            raise
+
+    def _clear_copy_file(self) -> None:
+        """Clear the copy file to trigger refresh."""
+        try:
+            with open("copyDIRECTED.TXT", "w") as f:
+                f.write("blank line \n")
+        except Exception as e:
+            print(f"Error clearing copy file: {e}")
+
+    def _on_save_only(self) -> None:
+        """Validate and save without transmitting."""
+        if not self._validate():
+            return
+
+        try:
+            self._save_to_database()
+            message = self._build_message()
+
+            # Print to terminal
+            now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
+            print(f"\n{'='*60}")
+            print(f"STATREP SAVED - {now} UTC")
+            print(f"{'='*60}")
+            print(f"  ID:       {self.statrep_id}")
+            print(f"  To:       {self.selected_group}")
+            print(f"  From:     {self.callsign}")
+            print(f"  Grid:     {self.grid}")
+            print(f"  Scope:    {self.scope_combo.currentText()}")
+            print(f"  Message:  {message}")
+            print(f"{'='*60}\n")
+
+            self._show_info(f"StatRep saved:\n{message}")
+            self._clear_copy_file()
+            self.accept()
+        except Exception as e:
+            self._show_error(f"Failed to save StatRep: {e}")
+
+    def _on_transmit(self) -> None:
+        """Validate, transmit, and save."""
+        if not self._validate():
+            return
+
+        try:
+            message = self._build_message()
+            self.api.sendMessage(js8callAPIsupport.TYPE_TX_SEND, message)
+            self._save_to_database()
+
+            # Print to terminal
+            now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
+            print(f"\n{'='*60}")
+            print(f"STATREP TRANSMITTED - {now} UTC")
+            print(f"{'='*60}")
+            print(f"  ID:       {self.statrep_id}")
+            print(f"  To:       {self.selected_group}")
+            print(f"  From:     {self.callsign}")
+            print(f"  Grid:     {self.grid}")
+            print(f"  Scope:    {self.scope_combo.currentText()}")
+            print(f"  Message:  {message}")
+            print(f"{'='*60}\n")
+
+            self._clear_copy_file()
+            self.accept()
+        except Exception as e:
+            self._show_error(f"Failed to transmit StatRep: {e}")
+
+
+# =============================================================================
+# Standalone Entry Point
+# =============================================================================
+
 if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    FormStatRep = QtWidgets.QWidget()
-    ui = Ui_FormStatRep()
-    ui.setupUi(FormStatRep)
-    FormStatRep.show()
+    dialog = StatRepDialog()
+    dialog.show()
     sys.exit(app.exec_())

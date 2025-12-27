@@ -5,12 +5,12 @@ import webbrowser
 import os
 import re
 from datetime import datetime
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QGridLayout, QFormLayout, QLabel, QFrame, QScrollArea, QWidget, QMessageBox, QPushButton, QHBoxLayout, QTextEdit
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt
 import html
-import brevity1 # Import brevity1.py directly from commstatone directory
+import brevity1
 
 class StatRepDialog(QDialog):
     def __init__(self, srid):
@@ -23,6 +23,8 @@ class StatRepDialog(QDialog):
         self.setMinimumSize(560, 600)
         self.resize(650, 600)
         self.setStyleSheet("background-color: rgb(255, 255, 255);")
+        if os.path.exists("radiation-32.jpg"):
+            self.setWindowIcon(QtGui.QIcon("radiation-32.jpg"))
         # Main layout
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)

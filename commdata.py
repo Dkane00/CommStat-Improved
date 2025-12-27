@@ -31,7 +31,7 @@ class UI(QMainWindow):
         self.setStyleSheet('font-size: 12px')
 
         #load the ui file
-        uic.loadUi("commdata2.ui", self)
+        uic.loadUi("commdata.ui", self)
 
 
 

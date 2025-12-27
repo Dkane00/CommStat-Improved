@@ -1,106 +1,98 @@
+# Copyright (c) 2025 Manuel Ochoa
+# This file is part of CommStat-Improved.
+# Licensed under the GNU General Public License v3.0.
+# AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
 
-# comment: mod to make directed not wrap but scroll. Only mod and have not updated versions on the CS Responder as I wait to see if I add more mods. Changed "zoom_start..." to 3 to see if full USA map holds as CS refreshes. Map size has been increased and recentered and zoomed now 1.0.7.4
-# comment: 2.0.0 offline map for Net Manager and Members list.
-# comment: 2.1.0 added a click to view_statrep. Click on a map pin or statrep.
-# 2.1.1 added a text filed to a displayed statrep. Allowing a brevity report to be pasted in then saved to the html output
-# comment: 2.2 added brevity entry and decode
-# comment: 2.3 added GridFinder
-import subprocess
+"""
+CommStat-Improved v2.5.0 - Rebuilt with best practices
+
+A PyQt5 application for monitoring JS8Call communications,
+displaying status reports, bulletins, and live data feeds.
+"""
+
 import sys
-import webbrowser
-from random import randint
-import feedparser
-from file_read_backwards import FileReadBackwards
-from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtGui import QIcon, QColor, QCursor
-from PyQt5.QtWidgets import QApplication, QGridLayout, QMainWindow, QPlainTextEdit, QWidget, QTableWidget, QTableWidgetItem, QMenu, \
-    QAction, qApp, QScrollArea, QLabel, QDialog, QInputDialog, QMessageBox
-from PyQt5.QtCore import QUrl, QTime, QTimer, QDateTime, Qt, pyqtSignal
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile, QWebEnginePage
-import io
-import folium
-import sqlite3
 import os
-import socket
-import settings
-from settings import Ui_FormSettings
-from configparser import ConfigParser
+import io
+import sqlite3
 import threading
-from subprocess import call
-import time
-from js8mail import Ui_FormJS8Mail
-from js8sms import Ui_FormJS8SMS
-from statrep import Ui_FormStatRep
-from bulletin import Ui_FormBull
-from marquee import Ui_FormMarquee
-from checkin import Ui_FormCheckin
-from members import Ui_FormMembers
-from heardlist import Ui_FormHeard
-from statack import Ui_FormStatack
-from about import Ui_FormAbout
-import platform
-import maidenhead as mh
+import subprocess
 import http.server
 import socketserver
+import urllib.request
+import tempfile
+import webbrowser
+from configparser import ConfigParser
+from pathlib import Path
+from typing import Dict, Any, Optional, List, Tuple
 
-# Define the handler to serve files from the 'tilesPNG2' directory
-class TileHandler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory="tilesPNG2", **kwargs)
+import folium
+import maidenhead as mh
+import datareader
 
-# Function to start the local server
-def start_local_server(port=8000):
-    ports = [port, port + 1]  # Try default port and next port
-    for p in ports:
-        try:
-            with socketserver.TCPServer(("", p), TileHandler) as httpd:
-                print(f"Serving at port {p}")
-                httpd.serve_forever()
-            return p  # Return the successful port
-        except OSError as e:
-            if e.errno == 98:  # Address already in use
-                print(f"Port {p} is in use, trying next port...")
-                continue
-            raise
-    print("Failed to start server: all ports in use")
-    return None
+from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtGui import QColor
+from PyQt5.QtWidgets import QTableWidgetItem
+from PyQt5.QtCore import QTimer, QDateTime, Qt
+from PyQt5.QtWidgets import qApp
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
+from about import Ui_FormAbout
+from settings import SettingsDialog
+from colors import ColorsDialog
+from filter import FilterDialog
+from groups import GroupsDialog
+from js8mail import JS8MailDialog
+from js8sms import JS8SMSDialog
+from marquee import Ui_FormMarquee
+from bulletin import Ui_FormBull
+from statrep import StatRepDialog
 
-callsign = ""
-callsignSuffix = ""
-group1 = ""
-group2 = ""
-grid = ""
-path = ""
-selectedgroup = ""
-counter = 0
-directedcounter = 0
-statreprwcnt = 0
-bulletinrwcnt = 0
-marqueerwcnt = 0
-heardrwcnt = 0
-dbcounter = 0
-mapper = ""
-directedsize = 0
-data = ""
-map_flag = 0
-OS = ""
-bull1 = 1
-bull2 = 3
-OS_Directed = ""
 
-statelist = ['AP', 'AO', 'BO', 'CN', 'CM', 'CO', 'DN', 'DM', 'DL', 'DO', 'EN', 'EM','EL','EO','FN','FM','FO']
-start = '2023-01-01 05:00'
-end = '2030-02-23 00:56'
-green = True
-yellow = True
-red = True
-grids = statelist
-loadflag = 0
+# =============================================================================
+# Constants
+# =============================================================================
 
-# Color scheme (loaded from config.ini)
-colors = {
+VERSION = "2.5.0"
+WINDOW_TITLE = f"CommStat-Improved (v{VERSION}) by N0DDK"
+WINDOW_SIZE = (1440, 832)
+CONFIG_FILE = "config.ini"
+ICON_FILE = "radiation-32.jpg"
+DATABASE_FILE = "traffic.db3"
+
+# Default filter date range
+DEFAULT_FILTER_START = "2023-01-01"
+DEFAULT_FILTER_END = "2030-01-01"
+
+# Group settings
+MAX_GROUP_NAME_LENGTH = 15
+DEFAULT_GROUPS = ["MAGNET", "AMRRON", "PREPPERNET"]
+
+# Map and layout dimensions
+MAP_WIDTH = 604
+MAP_HEIGHT = 340
+FILTER_HEIGHT = 20
+SLIDESHOW_INTERVAL = 1  # Minutes between image changes
+PLAYLIST_URL = "https://js8call-improved.com/playlist.php"
+
+# Map and layout dimensions defaults
+# MAP_WIDTH = 604
+# MAP_HEIGHT = 350
+# FILTER_HEIGHT = 20
+
+# StatRep table column headers
+STATREP_HEADERS = [
+    "Date Time UTC", "Group", "Callsign", "Grid", "Scope", "Map Pin",
+    "Powr", "H2O", "Med", "Comm", "Trvl", "Inet", "Fuel", "Food",
+    "Crime", "Civil", "Pol", "Remarks"
+]
+
+# Default color scheme
+DEFAULT_COLORS: Dict[str, str] = {
     'program_background': '#A52A2A',
     'program_foreground': '#FFFFFF',
+    'menu_background': '#3050CC',
+    'menu_foreground': '#FFFFFF',
+    'title_bar_background': '#F07800',
+    'title_bar_foreground': '#FFFFFF',
     'marquee_background': '#242424',
     'marquee_foreground_green': '#00FF00',
     'marquee_foreground_yellow': '#FFFF00',
@@ -111,38 +103,82 @@ colors = {
     'condition_yellow': '#FFFF77',
     'condition_red': '#BB0000',
     'condition_gray': '#808080',
-    'title_bar_background': '#F07800',
-    'title_bar_foreground': '#FFFFFF',
     'data_background': '#EEEEEE',
     'data_foreground': '#000000',
     'feed_background': '#000000',
-    'feed_foreground': '#FFFFFF'
+    'feed_foreground': '#FFFFFF',
 }
 
-def load_colors():
-    """Load color scheme from config.ini"""
-    global colors
-    config = ConfigParser()
-    config.read("config.ini")
-    if config.has_section("COLORS"):
-        for key in colors.keys():
-            if config.has_option("COLORS", key):
-                colors[key] = config.get("COLORS", key)
 
-def hex_to_rgb(hex_color):
-    """Convert hex color to RGB tuple"""
-    hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+# =============================================================================
+# Tile Server for Map
+# =============================================================================
 
-# Load colors at startup
-load_colors()
+class TileHandler(http.server.SimpleHTTPRequestHandler):
+    """Serves map tiles from the tilesPNG2 directory."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory="tilesPNG2", **kwargs)
+
+    def log_message(self, format, *args):
+        """Suppress logging to keep console clean."""
+        pass
+
+
+def start_local_server(port: int = 8000) -> Optional[int]:
+    """Start a local tile server on the specified port."""
+    ports = [port, port + 1]
+    for p in ports:
+        try:
+            with socketserver.TCPServer(("", p), TileHandler) as httpd:
+                print(f"Tile server running on port {p}")
+                httpd.serve_forever()
+            return p
+        except OSError as e:
+            if e.errno in (98, 10048):  # Address already in use (Linux/Windows)
+                print(f"Port {p} in use, trying next...")
+                continue
+            raise
+    print("Failed to start tile server")
+    return None
+
+
+# =============================================================================
+# Clickable Label for Slideshow
+# =============================================================================
+
+class ClickableLabel(QtWidgets.QLabel):
+    """A QLabel that emits a clicked signal when clicked."""
+    clicked = QtCore.pyqtSignal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+# =============================================================================
+# Custom Web Engine Page for Map Links
+# =============================================================================
 
 class CustomWebEnginePage(QWebEnginePage):
+    """Handles navigation requests from the map and video player."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
 
     def acceptNavigationRequest(self, url, navigation_type, is_main_frame):
+        """Intercept custom URL schemes for statrep links and video events."""
+        url_str = url.toString()
+
+        # Handle video-ended event
+        if url_str == "commstat://video-ended":
+            if hasattr(self.parent_widget, '_on_video_skip'):
+                self.parent_widget._on_video_skip()
+            return False  # Prevent navigation
+
+        # Handle statrep links
         if url.path().startswith("/statrep/"):
             srid = url.path().replace("/statrep/", "").strip()
             if srid:
@@ -155,673 +191,1261 @@ class CustomWebEnginePage(QWebEnginePage):
             return False  # Prevent navigation
         return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
 
-class Ui_MainWindow(QWidget):
-    def __init__(self):
-        super(Ui_MainWindow, self).__init__()
-        # Start the server in a separate thread
-        self.server_thread = threading.Thread(target=start_local_server)
-        self.server_thread.daemon = True  # Daemonize thread to ensure it exits when the main program does
+
+# =============================================================================
+# ConfigManager - Handles all configuration loading
+# =============================================================================
+
+class ConfigManager:
+    """Manages application configuration from config.ini."""
+
+    def __init__(self, config_path: str = CONFIG_FILE):
+        """
+        Initialize ConfigManager.
+
+        Args:
+            config_path: Path to the configuration file
+        """
+        self.config_path = Path(config_path)
+        self.colors = DEFAULT_COLORS.copy()
+        self.user_info: Dict[str, str] = {}
+        self.directed_config: Dict[str, str] = {}
+        self.filter_settings: Dict[str, Any] = {}
+        self._load()
+
+    def _load(self) -> None:
+        """Load all configuration sections from file."""
+        if not self.config_path.exists():
+            print(f"Warning: Config file '{self.config_path}' not found. Using defaults.")
+            return
+
+        config = ConfigParser()
+        config.read(self.config_path)
+
+        self._load_user_info(config)
+        self._load_directed_config(config)
+        self._load_filter_settings(config)
+        self._load_colors(config)
+
+    def _load_user_info(self, config: ConfigParser) -> None:
+        """Load user information section."""
+        if config.has_section("USERINFO"):
+            self.user_info = {
+                'callsign': config.get("USERINFO", "callsign", fallback=""),
+                'callsign_suffix': config.get("USERINFO", "callsignsuffix", fallback=""),
+                'grid': config.get("USERINFO", "grid", fallback=""),
+            }
+
+    def _load_directed_config(self, config: ConfigParser) -> None:
+        """Load directed configuration section."""
+        if config.has_section("DIRECTEDCONFIG"):
+            self.directed_config = {
+                'path': config.get("DIRECTEDCONFIG", "path", fallback=""),
+                'server': config.get("DIRECTEDCONFIG", "server", fallback="127.0.0.1"),
+                'UDP_port': config.get("DIRECTEDCONFIG", "UDP_port", fallback="2442"),
+                'state': config.get("DIRECTEDCONFIG", "state", fallback=""),
+                'hide_heartbeat': config.getboolean("DIRECTEDCONFIG", "hide_heartbeat", fallback=False),
+                'show_all_groups': config.getboolean("DIRECTEDCONFIG", "show_all_groups", fallback=False),
+                'hide_map': config.getboolean("DIRECTEDCONFIG", "hide_map", fallback=False),
+            }
+        else:
+            self.directed_config = {'hide_heartbeat': False, 'show_all_groups': False, 'hide_map': False}
+
+    def _load_filter_settings(self, config: ConfigParser) -> None:
+        """Load filter settings section."""
+        if config.has_section("FILTER"):
+            self.filter_settings = {
+                'start': config.get("FILTER", "start", fallback=DEFAULT_FILTER_START),
+                'end': config.get("FILTER", "end", fallback=DEFAULT_FILTER_END)
+            }
+
+    def _load_colors(self, config: ConfigParser) -> None:
+        """Load color scheme from config, using defaults for missing values."""
+        if config.has_section("COLORS"):
+            for key in self.colors:
+                if config.has_option("COLORS", key):
+                    self.colors[key] = config.get("COLORS", key)
+
+    def get_color(self, key: str) -> str:
+        """
+        Get a color value by key with validation.
+
+        Args:
+            key: The color key name
+
+        Returns:
+            The hex color value, or default if invalid
+        """
+        color = self.colors.get(key, '#FFFFFF')
+        if not QColor(color).isValid():
+            default = DEFAULT_COLORS.get(key, '#FFFFFF')
+            print(f"Warning: Invalid color '{color}' for '{key}', using default '{default}'")
+            return default
+        return color
+
+    def get_callsign(self) -> str:
+        """Get the user's callsign with optional suffix."""
+        callsign = self.user_info.get('callsign', '')
+        suffix = self.user_info.get('callsign_suffix', '')
+        if suffix:
+            return f"{callsign}/{suffix}"
+        return callsign
+
+    def get_hide_heartbeat(self) -> bool:
+        """Get the hide heartbeat setting."""
+        return self.directed_config.get('hide_heartbeat', False)
+
+    def set_hide_heartbeat(self, value: bool) -> None:
+        """Set and save the hide heartbeat setting."""
+        self.directed_config['hide_heartbeat'] = value
+        # Save to config file
+        config = ConfigParser()
+        config.read(self.config_path)
+        if not config.has_section("DIRECTEDCONFIG"):
+            config.add_section("DIRECTEDCONFIG")
+        config.set("DIRECTEDCONFIG", "hide_heartbeat", str(value))
+        with open(self.config_path, 'w') as f:
+            config.write(f)
+
+    def get_show_all_groups(self) -> bool:
+        """Get the show all groups setting."""
+        return self.directed_config.get('show_all_groups', False)
+
+    def set_show_all_groups(self, value: bool) -> None:
+        """Set and save the show all groups setting."""
+        self.directed_config['show_all_groups'] = value
+        # Save to config file
+        config = ConfigParser()
+        config.read(self.config_path)
+        if not config.has_section("DIRECTEDCONFIG"):
+            config.add_section("DIRECTEDCONFIG")
+        config.set("DIRECTEDCONFIG", "show_all_groups", str(value))
+        with open(self.config_path, 'w') as f:
+            config.write(f)
+
+    def get_hide_map(self) -> bool:
+        """Get the hide map setting."""
+        return self.directed_config.get('hide_map', False)
+
+    def set_hide_map(self, value: bool) -> None:
+        """Set and save the hide map setting."""
+        self.directed_config['hide_map'] = value
+        # Save to config file
+        config = ConfigParser()
+        config.read(self.config_path)
+        if not config.has_section("DIRECTEDCONFIG"):
+            config.add_section("DIRECTEDCONFIG")
+        config.set("DIRECTEDCONFIG", "hide_map", str(value))
+        with open(self.config_path, 'w') as f:
+            config.write(f)
+
+
+# =============================================================================
+# DatabaseManager - Handles all database operations
+# =============================================================================
+
+class DatabaseManager:
+    """Manages SQLite database operations."""
+
+    def __init__(self, db_path: str = DATABASE_FILE):
+        """
+        Initialize DatabaseManager.
+
+        Args:
+            db_path: Path to the SQLite database file
+        """
+        self.db_path = db_path
+
+    def get_statrep_data(
+        self,
+        group: Optional[str],
+        start: str,
+        end: str
+    ) -> List[Tuple]:
+        """
+        Fetch StatRep data from database.
+
+        Args:
+            group: Selected group name, or None for all groups
+            start/end: Date range filter
+
+        Returns:
+            List of tuples containing StatRep records
+        """
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                if group:
+                    query = """
+                        SELECT datetime, groupname, callsign, grid, prec, status,
+                               commpwr, pubwtr, med, ota, trav, net,
+                               fuel, food, crime, civil, political, comments
+                        FROM StatRep_Data
+                        WHERE groupname = ?
+                          AND datetime BETWEEN ? AND ?
+                    """
+                    params = [group, start, end]
+                else:
+                    query = """
+                        SELECT datetime, groupname, callsign, grid, prec, status,
+                               commpwr, pubwtr, med, ota, trav, net,
+                               fuel, food, crime, civil, political, comments
+                        FROM StatRep_Data
+                        WHERE datetime BETWEEN ? AND ?
+                    """
+                    params = [start, end]
+                cursor.execute(query, params)
+                return cursor.fetchall()
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return []
+
+    def get_bulletin_data(self, group: Optional[str]) -> List[Tuple]:
+        """
+        Fetch bulletin data from database.
+
+        Args:
+            group: Selected group name, or None for all groups
+
+        Returns:
+            List of tuples containing bulletin records
+        """
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                if group:
+                    cursor.execute(
+                        "SELECT datetime, groupid, callsign, message FROM bulletins_Data WHERE groupid = ?",
+                        [group]
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT datetime, groupid, callsign, message FROM bulletins_Data"
+                    )
+                return cursor.fetchall()
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return []
+
+    def get_latest_marquee(self, group: Optional[str]) -> Optional[Tuple]:
+        """
+        Fetch the latest marquee message for a group.
+
+        Args:
+            group: Selected group name, or None for all groups
+
+        Returns:
+            Tuple containing marquee data or None
+        """
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                if group:
+                    cursor.execute(
+                        "SELECT idnum, callsign, groupname, date, color, message FROM marquees_data WHERE groupname = ? ORDER BY date DESC LIMIT 1",
+                        [group]
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT idnum, callsign, groupname, date, color, message FROM marquees_data ORDER BY date DESC LIMIT 1"
+                    )
+                return cursor.fetchone()
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return None
+
+    def init_groups_table(self) -> None:
+        """Create Groups table if it doesn't exist and seed default groups."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS Groups (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT UNIQUE NOT NULL,
+                        is_active INTEGER DEFAULT 0
+                    )
+                """)
+                connection.commit()
+
+                # Check if table is empty
+                cursor.execute("SELECT COUNT(*) FROM Groups")
+                if cursor.fetchone()[0] == 0:
+                    # Seed default groups, first one is active
+                    for i, group_name in enumerate(DEFAULT_GROUPS):
+                        cursor.execute(
+                            "INSERT INTO Groups (name, is_active) VALUES (?, ?)",
+                            (group_name.upper(), 1 if i == 0 else 0)
+                        )
+                    connection.commit()
+        except sqlite3.Error as error:
+            print(f"Database error initializing Groups table: {error}")
+
+    def get_all_groups(self) -> List[str]:
+        """Get all group names."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("SELECT name FROM Groups ORDER BY name")
+                return [row[0] for row in cursor.fetchall()]
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return []
+
+    def get_active_group(self) -> str:
+        """Get the currently active group name."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("SELECT name FROM Groups WHERE is_active = 1")
+                result = cursor.fetchone()
+                return result[0] if result else ""
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return ""
+
+    def set_active_group(self, group_name: str) -> bool:
+        """Set a group as the active group."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                # Deactivate all groups
+                cursor.execute("UPDATE Groups SET is_active = 0")
+                # Activate the selected group
+                cursor.execute(
+                    "UPDATE Groups SET is_active = 1 WHERE name = ?",
+                    (group_name.upper(),)
+                )
+                connection.commit()
+                return cursor.rowcount > 0
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return False
+
+    def add_group(self, group_name: str) -> bool:
+        """Add a new group. Returns True if successful."""
+        name = group_name.strip().upper()[:MAX_GROUP_NAME_LENGTH]
+        if not name:
+            return False
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute(
+                    "INSERT INTO Groups (name, is_active) VALUES (?, 0)",
+                    (name,)
+                )
+                connection.commit()
+                return True
+        except sqlite3.IntegrityError:
+            # Duplicate name
+            return False
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return False
+
+    def remove_group(self, group_name: str) -> bool:
+        """Remove a group. Returns False if it's the last group."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                # Check if this is the last group
+                cursor.execute("SELECT COUNT(*) FROM Groups")
+                if cursor.fetchone()[0] <= 1:
+                    return False
+                # Check if this group is active
+                cursor.execute(
+                    "SELECT is_active FROM Groups WHERE name = ?",
+                    (group_name.upper(),)
+                )
+                result = cursor.fetchone()
+                was_active = result and result[0] == 1
+                # Delete the group
+                cursor.execute(
+                    "DELETE FROM Groups WHERE name = ?",
+                    (group_name.upper(),)
+                )
+                # If deleted group was active, activate another one
+                if was_active and cursor.rowcount > 0:
+                    cursor.execute(
+                        "UPDATE Groups SET is_active = 1 WHERE id = (SELECT MIN(id) FROM Groups)"
+                    )
+                connection.commit()
+                return cursor.rowcount > 0
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return False
+
+    def get_group_count(self) -> int:
+        """Get the number of groups."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("SELECT COUNT(*) FROM Groups")
+                return cursor.fetchone()[0]
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return 0
+
+
+
+# =============================================================================
+# MainWindow - Main application window
+# =============================================================================
+
+class MainWindow(QtWidgets.QMainWindow):
+    """Main application window for CommStat-Improved."""
+
+    def __init__(self, config: ConfigManager, db: DatabaseManager):
+        """
+        Initialize the main window.
+
+        Args:
+            config: ConfigManager instance with loaded settings
+            db: DatabaseManager instance for database operations
+        """
+        super().__init__()
+        self.config = config
+        self.db = db
+
+        # Initialize datareader for parsing DIRECTED.TXT
+        self.datareader_config = datareader.Config()
+        self.datareader_parser = datareader.MessageParser(self.datareader_config)
+
+        # Start tile server for map
+        self.server_thread = threading.Thread(target=start_local_server, daemon=True)
         self.server_thread.start()
 
-    def setupUi(self, MainWindow):
-        global marqueecolor
-        global bull1
-        global bull2
-        global green
-        global yellow
-        global red
-        global start
-        global end
-        global grids
+        # Map state
+        self.map_loaded = False
 
-        self.oscheck()
-        MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1400, 820)
-        icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("USA-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        MainWindow.setWindowIcon(icon)
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
-        self.centralwidget.setStyleSheet(f"background-color: {colors['program_background']};")
-        self.gridLayout_2 = QtWidgets.QGridLayout(self.centralwidget)
-        self.gridLayout_2.setObjectName("gridLayout_2")
+        self._setup_window()
+        self._setup_ui()
 
-        # Header row using horizontal layout for precise control
-        self.header_widget = QtWidgets.QWidget(self.centralwidget)
+    def _setup_window(self) -> None:
+        """Configure window properties (size, title, icon)."""
+        self.setObjectName("MainWindow")
+        self.setWindowTitle(WINDOW_TITLE)
+        self.resize(*WINDOW_SIZE)
+
+        # Set window icon
+        icon_path = Path(ICON_FILE)
+        if icon_path.exists():
+            icon = QtGui.QIcon()
+            icon.addPixmap(QtGui.QPixmap(str(icon_path)), QtGui.QIcon.Normal, QtGui.QIcon.Off)
+            self.setWindowIcon(icon)
+
+    def _setup_ui(self) -> None:
+        """Build the user interface."""
+        # Create central widget with background color
+        self.central_widget = QtWidgets.QWidget(self)
+        self.central_widget.setStyleSheet(
+            f"background-color: {self.config.get_color('program_background')};"
+        )
+        self.setCentralWidget(self.central_widget)
+
+        # Main layout
+        self.main_layout = QtWidgets.QGridLayout(self.central_widget)
+        self.main_layout.setObjectName("mainLayout")
+
+        # Row stretches: header and labels don't stretch
+        self.main_layout.setRowStretch(0, 0)  # Header
+        self.main_layout.setRowStretch(1, 1)  # StatRep table (50%)
+        self.main_layout.setRowStretch(2, 1)  # Feed text (50%)
+        self.main_layout.setRowStretch(3, 0)  # Map row 1 / Filter (fixed)
+        self.main_layout.setRowStretch(4, 0)  # Map row 2 / Bulletin (fixed)
+
+        # Setup components
+        self._setup_menu()
+        self._setup_header()
+        self._setup_statrep_table()
+        self._setup_filter_labels()
+        self._setup_map_widget()
+        self._setup_live_feed()
+        self._setup_bulletin_table()
+        self._setup_timers()
+
+        # Load initial data
+        self._load_statrep_data()
+        self._load_marquee()
+        self._load_map()
+        self._load_live_feed()
+        self._load_bulletin_data()
+
+        # Check playlist on startup for Force/Skip commands
+        self._check_playlist_on_startup()
+
+    def _setup_menu(self) -> None:
+        """Create the menu bar with all actions."""
+        self.menubar = QtWidgets.QMenuBar(self)
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 886, 24))
+        self.menubar.setFixedHeight(24)
+        menu_bg = self.config.get_color('menu_background')
+        menu_fg = self.config.get_color('menu_foreground')
+        self.menubar.setStyleSheet(f"""
+            QMenuBar {{
+                background-color: {menu_bg};
+                color: {menu_fg};
+            }}
+            QMenuBar::item {{
+                padding: 4px 8px;
+            }}
+            QMenuBar::item:selected {{
+                background-color: {menu_bg};
+            }}
+            QMenu {{
+                background-color: {menu_bg};
+                color: {menu_fg};
+            }}
+            QMenu::item:selected {{
+                background-color: {menu_bg};
+            }}
+        """)
+        self.setMenuBar(self.menubar)
+
+        # Create the main menu
+        self.menu = QtWidgets.QMenu("Menu", self.menubar)
+        self.menubar.addMenu(self.menu)
+
+        # Define menu actions: (name, text, handler)
+        menu_items = [
+            ("statrep", "STATREP", self._on_statrep),
+            ("flash_bulletin", "FLASH BULLETIN", self._on_flash_bulletin),
+            ("new_marquee", "NEW MARQUEE", self._on_new_marquee),
+            ("js8email", "JS8 EMAIL", self._on_js8email),
+            ("js8sms", "JS8 SMS", self._on_js8sms),
+            None,  # Separator
+            ("statrep_ack", "STATREP ACK", self._on_statrep_ack),
+            ("net_roster", "NET MANAGER", self._on_net_roster),
+            ("net_check_in", "NET CHECK IN", self._on_net_check_in),
+            ("member_list", "MEMBER LIST", self._on_member_list),
+            None,  # Separator
+            ("filter", "DISPLAY FILTER", self._on_filter),
+            ("groups", "MANAGE GROUPS", self._on_groups),
+            ("settings", "SETTINGS", self._on_settings),
+            ("colors", "COLORS", self._on_colors),
+            None,  # Separator
+        ]
+
+        # Create actions for dropdown menu
+        self.actions: Dict[str, QtWidgets.QAction] = {}
+        for item in menu_items:
+            if item is None:
+                self.menu.addSeparator()
+            else:
+                name, text, handler = item
+                action = QtWidgets.QAction(text, self)
+                action.triggered.connect(handler)
+                self.menu.addAction(action)
+                self.actions[name] = action
+
+        # Add checkable toggle for hiding heartbeat messages
+        self.hide_heartbeat_action = QtWidgets.QAction("HIDE HEARTBEAT", self)
+        self.hide_heartbeat_action.setCheckable(True)
+        self.hide_heartbeat_action.setChecked(self.config.get_hide_heartbeat())
+        self.hide_heartbeat_action.triggered.connect(self._on_toggle_heartbeat)
+        self.menu.addAction(self.hide_heartbeat_action)
+        self.actions["hide_heartbeat"] = self.hide_heartbeat_action
+
+        # Add checkable toggle for showing all groups
+        self.show_all_groups_action = QtWidgets.QAction("SHOW ALL GROUPS", self)
+        self.show_all_groups_action.setCheckable(True)
+        self.show_all_groups_action.setChecked(self.config.get_show_all_groups())
+        self.show_all_groups_action.triggered.connect(self._on_toggle_show_all_groups)
+        self.menu.addAction(self.show_all_groups_action)
+        self.actions["show_all_groups"] = self.show_all_groups_action
+
+        # Add checkable toggle for hiding map and showing videos
+        self.hide_map_action = QtWidgets.QAction("HIDE MAP", self)
+        self.hide_map_action.setCheckable(True)
+        self.hide_map_action.setChecked(self.config.get_hide_map())
+        self.hide_map_action.triggered.connect(self._on_toggle_hide_map)
+        self.menu.addAction(self.hide_map_action)
+        self.actions["hide_map"] = self.hide_map_action
+
+        # Add About, Help, Exit directly to menu bar
+        about_action = QtWidgets.QAction("About", self)
+        about_action.triggered.connect(self._on_about)
+        self.menubar.addAction(about_action)
+        self.actions["about"] = about_action
+
+        help_action = QtWidgets.QAction("Help", self)
+        help_action.triggered.connect(self._on_help)
+        self.menubar.addAction(help_action)
+        self.actions["help"] = help_action
+
+        exit_action = QtWidgets.QAction("Exit", self)
+        exit_action.triggered.connect(qApp.quit)
+        self.menubar.addAction(exit_action)
+        self.actions["exit"] = exit_action
+
+        # Add status bar
+        self.statusbar = QtWidgets.QStatusBar(self)
+        self.setStatusBar(self.statusbar)
+
+    def _setup_header(self) -> None:
+        """Create the header row with Active Group, Marquee, and Time."""
+        # Header container widget with horizontal layout
+        self.header_widget = QtWidgets.QWidget(self.central_widget)
+        self.header_widget.setFixedHeight(38)
         self.header_layout = QtWidgets.QHBoxLayout(self.header_widget)
         self.header_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Active Group label
-        self.label_3 = QtWidgets.QLabel(self.header_widget)
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(10)
-        font.setBold(True)
-        self.label_3.setFont(font)
-        self.label_3.setObjectName("label_3")
-        self.label_3.setStyleSheet(f"color: {colors['program_foreground']};")
-        self.label_3.setText("Active Group : AMMRRON")
-        self.header_layout.addWidget(self.label_3)
+        fg_color = self.config.get_color('program_foreground')
 
+        # Active Group label
+        self.label_active_group = QtWidgets.QLabel(self.header_widget)
+        self.label_active_group.setStyleSheet(f"color: {fg_color};")
+        self.label_active_group.setText(f"Active Group: {self.db.get_active_group()}")
+        font = QtGui.QFont("Arial", 12, QtGui.QFont.Bold)
+        self.label_active_group.setFont(font)
+        self.header_layout.addWidget(self.label_active_group)
+
+        # Spacer to push marquee to center
         self.header_layout.addStretch()
 
         # Marquee label
         self.label_marquee = QtWidgets.QLabel(self.header_widget)
-        font_marquee = QtGui.QFont()
-        font_marquee.setFamily("Arial")
-        font_marquee.setPointSize(10)
-        font_marquee.setBold(True)
-        self.label_marquee.setFont(font_marquee)
-        self.label_marquee.setStyleSheet(f"color: {colors['program_foreground']};")
+        self.label_marquee.setStyleSheet(f"color: {fg_color};")
         self.label_marquee.setText("Marquee:")
+        self.label_marquee.setFont(font)
         self.header_layout.addWidget(self.label_marquee)
 
-        # Marquee banner
-        self.label = QtWidgets.QLabel(self.header_widget)
-        self.label.setMinimumSize(QtCore.QSize(200, 30))
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(12)
-        font.setBold(False)
-        self.label.setFont(font)
-        self.label.setAutoFillBackground(False)
-        self.label.setStyleSheet(f"background-color: {colors['marquee_background']};\n"
-                                   f"color: {colors['marquee_foreground_green']};")
-        self.label.setObjectName("label")
-        self.label.setFixedWidth(600)
-        self.header_layout.addWidget(self.label)
+        # Marquee banner (scrolling text)
+        self.marquee_label = QtWidgets.QLabel(self.header_widget)
+        self.marquee_label.setFixedSize(600, 32)
+        self.marquee_label.setFont(QtGui.QFont("Arial", 12))
+        self.marquee_label.setStyleSheet(
+            f"background-color: {self.config.get_color('marquee_background')};"
+            f"color: {self.config.get_color('marquee_foreground_green')};"
+        )
+        self.header_layout.addWidget(self.marquee_label)
 
-        # Spacer to push Time to the right
+        # Spacer to push time to right
         self.header_layout.addStretch()
 
         # Time label
-        self.label_time = QtWidgets.QLabel(self.header_widget)
-        font_time = QtGui.QFont()
-        font_time.setFamily("Arial")
-        font_time.setPointSize(10)
-        font_time.setBold(True)
-        self.label_time.setFont(font_time)
-        self.label_time.setStyleSheet(f"color: {colors['program_foreground']};")
-        self.label_time.setText("Time:")
-        self.header_layout.addWidget(self.label_time)
+        self.label_time_prefix = QtWidgets.QLabel(self.header_widget)
+        self.label_time_prefix.setStyleSheet(f"color: {fg_color};")
+        self.label_time_prefix.setText("Time:")
+        self.label_time_prefix.setFont(font)
+        self.header_layout.addWidget(self.label_time_prefix)
 
-        # Time banner
-        self.label_2 = QtWidgets.QLabel(self.header_widget)
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(12)
-        font.setBold(False)
-        self.label_2.setFont(font)
-        self.label_2.setAutoFillBackground(False)
-        self.label_2.setStyleSheet(f"background-color: {colors['time_background']};\n"
-                                   f"color: {colors['time_foreground']};")
-        self.label_2.setObjectName("label_2")
-        self.label_2.setMinimumWidth(150)
-        self.header_layout.addWidget(self.label_2)
+        # Time display
+        self.time_label = QtWidgets.QLabel(self.header_widget)
+        self.time_label.setFixedSize(240, 32)
+        self.time_label.setFont(QtGui.QFont("Arial", 12))
+        self.time_label.setStyleSheet(
+            f"background-color: {self.config.get_color('time_background')};"
+            f"color: {self.config.get_color('time_foreground')};"
+        )
+        self.time_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.header_layout.addWidget(self.time_label)
 
-        # Add header to grid spanning all columns
-        self.gridLayout_2.addWidget(self.header_widget, 0, 0, 1, 5)
+        # Add header to main layout (row 0, spans all columns)
+        self.main_layout.addWidget(self.header_widget, 0, 0, 1, 2)
 
-        self.readconfig()
+    def _setup_statrep_table(self) -> None:
+        """Create the StatRep data table."""
+        self.statrep_table = QtWidgets.QTableWidget(self.central_widget)
+        self.statrep_table.setObjectName("statrepTable")
+        self.statrep_table.setColumnCount(18)
+        self.statrep_table.setRowCount(0)
 
-        self.tableWidget = QtWidgets.QTableWidget(self.centralwidget)
-        self.tableWidget.setObjectName("tableWidget")
-        self.tableWidget.setColumnCount(0)
-        self.tableWidget.setRowCount(0)
-        self.tableWidget.setStyleSheet(f"""
+        # Apply styling
+        title_bg = self.config.get_color('title_bar_background')
+        title_fg = self.config.get_color('title_bar_foreground')
+        data_bg = self.config.get_color('data_background')
+        data_fg = self.config.get_color('data_foreground')
+
+        self.statrep_table.setStyleSheet(f"""
             QTableWidget {{
-                background-color: {colors['data_background']};
-                color: {colors['data_foreground']};
+                background-color: {data_bg};
+                color: {data_fg};
             }}
+            QTableWidget QHeaderView::section {{
+                background-color: {title_bg};
+                color: {title_fg};
+                font-weight: bold;
+                padding: 4px;
+                border: 1px solid {title_bg};
+            }}
+        """)
+
+        # Explicitly style the horizontal header
+        self.statrep_table.horizontalHeader().setStyleSheet(f"""
             QHeaderView::section {{
-                background-color: {colors['title_bar_background']};
-                color: {colors['title_bar_foreground']};
+                background-color: {title_bg};
+                color: {title_fg};
                 font-weight: bold;
                 padding: 4px;
             }}
         """)
-        # Connect itemClicked signal for left-click with chooser
-        self.tableWidget.itemClicked.connect(self.handleTableClick)
-        self.gridLayout_2.addWidget(self.tableWidget, 1, 0, 1, 5)
 
-        if "1" in green:
-            greenstat = "ON"
-        else:
-            greenstat = "OFF"
-        if "2" in yellow:
-            yellowstat = "ON"
-        else:
-            yellowstat = "OFF"
-        if "3" in red:
-            redstat = "ON"
-        else:
-            redstat = "OFF"
+        # Set headers
+        self.statrep_table.setHorizontalHeaderLabels(STATREP_HEADERS)
 
-        self.label_start = QtWidgets.QLabel(self.centralwidget)
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(9)
-        font.setBold(False)
-        self.label_start.setFont(font)
-        self.label_start.setObjectName("label_start")
-        self.label_start.setStyleSheet(f"color: {colors['program_foreground']};")
-        self.gridLayout_2.addWidget(self.label_start, 2, 0, 1, 1)
-        self.label_start.setText("Filters : Start : "+start+"  |  End : "+end+"| Green : "+greenstat+" |  Yellow : "+yellowstat+" |")
+        # Configure header behavior
+        header = self.statrep_table.horizontalHeader()
+        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        header.setStretchLastSection(True)
+        self.statrep_table.verticalHeader().setVisible(False)
 
-        self.label_filters = QtWidgets.QLabel(self.centralwidget)
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(9)
-        font.setBold(False)
-        self.label_filters.setFont(font)
-        self.label_filters.setObjectName("label_start")
-        self.label_filters.setStyleSheet(f"color: {colors['program_foreground']};")
-        self.gridLayout_2.addWidget(self.label_filters, 2, 1, 1, 3)
-        self.label_filters.setText(" Red : "+redstat+" |  Grids : "+grids)
+        # Connect click handler
+        self.statrep_table.itemClicked.connect(self._on_statrep_click)
 
-        # Feed section with title label
-        self.feed_container = QtWidgets.QWidget(self.centralwidget)
-        self.feed_layout = QtWidgets.QVBoxLayout(self.feed_container)
-        self.feed_layout.setContentsMargins(0, 0, 0, 0)
-        self.feed_layout.setSpacing(0)
+        # Add to layout (row 1, spans all columns)
+        self.main_layout.addWidget(self.statrep_table, 1, 0, 1, 2)
 
-        # Feed title label
-        self.label_feed_title = QtWidgets.QLabel(self.feed_container)
-        font_feed = QtGui.QFont()
-        font_feed.setFamily("Arial")
-        font_feed.setPointSize(10)
-        font_feed.setBold(True)
-        self.label_feed_title.setFont(font_feed)
-        self.label_feed_title.setStyleSheet(f"color: {colors['program_foreground']};")
-        self.label_feed_title.setText(" JS8Call Live Data Feed")
-        self.feed_layout.addWidget(self.label_feed_title)
+    def _setup_filter_labels(self) -> None:
+        """Create the filter status labels below the StatRep table."""
+        filters = self.config.filter_settings
+        fg_color = self.config.get_color('program_foreground')
+        font = QtGui.QFont("Arial", 9)
 
-        # Feed text area
-        self.plainTextEdit = QtWidgets.QPlainTextEdit(self.feed_container)
-        self.plainTextEdit.setObjectName("plainTextEdit")
-        self.plainTextEdit.setFont(font)
-        self.plainTextEdit.setStyleSheet(f"background-color: {colors['feed_background']}; color: {colors['feed_foreground']};")
+        # Size policy that allows labels to shrink
+        shrink_policy = QtWidgets.QSizePolicy(
+            QtWidgets.QSizePolicy.Ignored,
+            QtWidgets.QSizePolicy.Preferred
+        )
 
-        # Set word wrap mode to NoWrap
-        self.plainTextEdit.setWordWrapMode(QtGui.QTextOption.NoWrap)
+        # Filter label (date range only) - positioned above bulletin
+        self.label_filter = QtWidgets.QLabel(self.central_widget)
+        self.label_filter.setFont(font)
+        self.label_filter.setStyleSheet(f"color: {fg_color};")
+        self.label_filter.setText(
+            f"Bulletin Filter:   Start Date: {filters.get('start', '')}  |  End Date: {filters.get('end', '')}"
+        )
+        self.label_filter.setSizePolicy(shrink_policy)
+        self.label_filter.setFixedHeight(FILTER_HEIGHT)
+        self.main_layout.addWidget(self.label_filter, 3, 1, 1, 1)
 
-        # Enable vertical and horizontal scrollbars
-        self.plainTextEdit.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.plainTextEdit.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.feed_layout.addWidget(self.plainTextEdit)
+    def _setup_map_widget(self) -> None:
+        """Create the map widget using QWebEngineView."""
+        self.map_widget = QWebEngineView(self.central_widget)
+        self.map_widget.setObjectName("mapWidget")
+        self.map_widget.setFixedSize(MAP_WIDTH, MAP_HEIGHT)
 
-        self.gridLayout_2.addWidget(self.feed_container, 3, 2, 1, 3)
-
-        self.widget = QWebEngineView(self.centralwidget)
-        self.setObjectName("widget")
-        # Set custom QWebEnginePage to handle statrep URLs
+        # Set custom page to handle statrep links
         custom_page = CustomWebEnginePage(self)
-        self.widget.setPage(custom_page)
-        self.gridLayout_2.addWidget(self.widget, 3, 0, 2, 2)
+        self.map_widget.setPage(custom_page)
 
-        self.tableWidget_2 = QtWidgets.QTableWidget(self.centralwidget)
-        self.tableWidget_2.setObjectName("tableWidget_2")
-        self.tableWidget_2.setColumnCount(0)
-        self.tableWidget_2.setRowCount(0)
-        self.tableWidget_2.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {colors['data_background']};
-                color: {colors['data_foreground']};
-            }}
-            QHeaderView::section {{
-                background-color: {colors['title_bar_background']};
-                color: {colors['title_bar_foreground']};
-                font-weight: bold;
-                padding: 4px;
-            }}
-        """)
-        self.gridLayout_2.addWidget(self.tableWidget_2, 4, 2, 1, 3)
+        # Add to layout (row 3-4, column 0 only, spanning 2 rows)
+        self.main_layout.addWidget(self.map_widget, 3, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
 
-        self.gridLayout_2.setRowStretch(0, 0)
-        self.gridLayout_2.setRowStretch(1, 1)
-        self.gridLayout_2.setRowStretch(4, 1)
+        # Set column stretches: map column fixed, bulletin column stretches
+        self.main_layout.setColumnStretch(0, 0)  # Map (fixed)
 
-        MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 886, 22))
-        self.menubar.setObjectName("menubar")
-        self.menuEXIT = QtWidgets.QMenu(self.menubar)
-        self.menuEXIT.setObjectName("menuEXIT")
-        MainWindow.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(MainWindow)
-        self.statusbar.setObjectName("statusbar")
-        MainWindow.setStatusBar(self.statusbar)
-        self.actionJS8EMAIL = QtWidgets.QAction(MainWindow)
-        self.actionJS8EMAIL.setObjectName("actionJS8EMAIL")
-        self.actionJS8SMS = QtWidgets.QAction(MainWindow)
-        self.actionJS8SMS.setObjectName("actionJS8SMS")
-        self.actionSTATREP = QtWidgets.QAction(MainWindow)
-        self.actionSTATREP.setObjectName("actionSTATREP")
+        # Setup map disabled label (hidden by default)
+        self._setup_map_disabled_label()
 
-        self.actionNET_CHECK_IN = QtWidgets.QAction(MainWindow)
-        self.actionNET_CHECK_IN.setObjectName("actionNET_CHECK_IN")
-
-        self.actionFilter = QtWidgets.QAction(MainWindow)
-        self.actionFilter.setObjectName("actionFilter")
-
-        self.actionData = QtWidgets.QAction(MainWindow)
-        self.actionData.setObjectName("actionData")
-
-        self.actionMEMBER_LIST = QtWidgets.QAction(MainWindow)
-        self.actionMEMBER_LIST.setObjectName("actionMEMBER_LIST")
-
-        self.actionSTATREP_ACK = QtWidgets.QAction(MainWindow)
-        self.actionSTATREP_ACK.setObjectName("actionSTATREP_ACK")
-        self.actionNET_ROSTER = QtWidgets.QAction(MainWindow)
-        self.actionNET_ROSTER.setObjectName("actionNET_ROSTER")
-        self.actionNEW_MARQUEE = QtWidgets.QAction(MainWindow)
-        self.actionNEW_MARQUEE.setObjectName("actionNEW_MARQUEE")
-        self.actionFLASH_BULLETIN = QtWidgets.QAction(MainWindow)
-        self.actionFLASH_BULLETIN.setObjectName("actionFLASH_BULLETIN")
-        self.actionSETTINGS = QtWidgets.QAction(MainWindow)
-        self.actionSETTINGS.setObjectName("actionSETTINGS")
-        
-        self.actionHELP = QtWidgets.QAction(MainWindow)
-        self.actionHELP.setObjectName("actionHELP")
-        self.actionABOUT = QtWidgets.QAction(MainWindow)
-        self.actionABOUT.setObjectName("actionABOUT")
-
-        self.actionEXIT_2 = QtWidgets.QAction(MainWindow)
-        self.actionEXIT_2.setObjectName("actionEXIT_2")
-
-        self.menuEXIT.addAction(self.actionJS8EMAIL)
-        self.actionJS8EMAIL.triggered.connect(self.js8email_window)
-        self.menuEXIT.addAction(self.actionJS8SMS)
-        self.actionJS8SMS.triggered.connect(self.js8sms_window)
-        self.menuEXIT.addAction(self.actionSTATREP)
-        self.actionSTATREP.triggered.connect(self.statrep_window)
-        self.menuEXIT.addAction(self.actionNET_CHECK_IN)
-        self.actionNET_CHECK_IN.triggered.connect(self.checkin_window)
-
-        self.menuEXIT.addAction(self.actionMEMBER_LIST)
-        self.actionMEMBER_LIST.triggered.connect(self.members_window)
-
-        self.menuEXIT.addSeparator()
-        self.menuEXIT.addAction(self.actionSTATREP_ACK)
-        self.actionSTATREP_ACK.triggered.connect(self.statack_window)
-        self.menuEXIT.addAction(self.actionNET_ROSTER)
-        self.actionNET_ROSTER.triggered.connect(self.thread_netmanage)
-        self.menuEXIT.addAction(self.actionNEW_MARQUEE)
-        self.actionNEW_MARQUEE.triggered.connect(self.marquee_window)
-        self.menuEXIT.addAction(self.actionFLASH_BULLETIN)
-        self.actionFLASH_BULLETIN.triggered.connect(self.bull_window)
-        self.menuEXIT.addSeparator()
-
-        self.menuEXIT.addAction(self.actionFilter)
-        self.actionFilter.triggered.connect(self.filter_window)
-
-        self.menuEXIT.addAction(self.actionData)
-        self.actionData.triggered.connect(self.data_window)
-
-        self.menuEXIT.addAction(self.actionSETTINGS)
-        self.actionSETTINGS.triggered.connect(self.settings_window)
-
-        self.menuEXIT.addAction(self.actionHELP)
-        self.actionHELP.triggered.connect(self.open_webbrowser)
-        self.menuEXIT.addAction(self.actionABOUT)
-        self.actionABOUT.triggered.connect(self.about_window)
-
-        self.menuEXIT.addSeparator()
-        self.menuEXIT.addAction(self.actionEXIT_2)
-        self.actionEXIT_2.triggered.connect(qApp.quit)
-        self.menubar.addAction(self.menuEXIT.menuAction())
-
-        self.retranslateUi(MainWindow)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
-
-        timer = QTimer(self)
-        timer.timeout.connect(self.showTime)
-        timer.start(1000) # update every second
-        self.showTime()
-
-        self.timeLine = QtCore.QTimeLine()
-        self.timeLine.setCurveShape(QtCore.QTimeLine.LinearCurve)
-        self.timeLine.frameChanged.connect(self.setText)
-        self.timeLine.finished.connect(self.nextNews)
-        self.signalMapper = QtCore.QSignalMapper(self)
-        
-        self.oscheck()
-
-        self.feed()
-        self.filetest()
-
-    def handleTableClick(self, item):
-        """Handle left-click on tableWidget with a chooser dialog positioned near the mouse."""
-        row = item.row()
-        if row >= 0:
-            srid = self.tableWidget.item(row, 1).text()
-            msg = QMessageBox()
-            msg.setWindowTitle("View StatRep")
-            msg.setText(f"View StatRep for SRid {srid}?")
-            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-            msg.setDefaultButton(QMessageBox.Yes)
-            # Position dialog near mouse cursor
-            mouse_pos = QCursor.pos()
-            msg.move(mouse_pos.x() + 10, mouse_pos.y() + 10)  # Offset slightly for visibility
-            response = msg.exec_()
-            if response == QMessageBox.Yes:
-                try:
-                    view_statrep_path = os.path.join(os.getcwd(), "view_statrep.py")
-                    subprocess.Popen([sys.executable, view_statrep_path, srid])
-                    print(f"Launched view_statrep.py with SRid: {srid}")
-                except Exception as e:
-                    print(f"Failed to launch view_statrep.py: {e}")
-
-    def retranslateUi(self, MainWindow):
-        _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "CommStat-Improved V 2.3.1 / Modified by N0DDK"))
-        self.actionFilter.setText(_translate("MainWindow", "DISPLAY FILTER"))
-        self.actionData.setText(_translate("MainWindow", "DATA MANAGER"))
-        self.label.setText(_translate("MainWindow", "TextLabel Marquee"))
-        self.label_2.setText(_translate("MainWindow", "TextLabel Clock"))
-        self.menuEXIT.setTitle(_translate("MainWindow", "MENU"))
-        self.actionJS8EMAIL.setText(_translate("MainWindow", "JS8EMAIL"))
-        self.actionJS8SMS.setText(_translate("MainWindow", "JS8SMS"))
-        self.actionSTATREP.setText(_translate("MainWindow", "STATREP"))
-        self.actionNET_CHECK_IN.setText(_translate("MainWindow", "NET CHECK IN"))
-        self.actionMEMBER_LIST.setText(_translate("MainWindow", "MEMBER LIST"))
-        self.actionSTATREP_ACK.setText(_translate("MainWindow", "STATREP ACK"))
-        self.actionNET_ROSTER.setText(_translate("MainWindow", "NET MANAGER"))
-        self.actionNEW_MARQUEE.setText(_translate("MainWindow", "NEW MARQUEE"))
-        self.actionFLASH_BULLETIN.setText(_translate("MainWindow", "FLASH BULLETIN"))
-        self.actionSETTINGS.setText(_translate("MainWindow", "SETTINGS"))
-        self.actionHELP.setText(_translate("MainWindow", "HELP"))
-        self.actionABOUT.setText(_translate("MainWindow", "ABOUT"))
-        self.actionEXIT_2.setText(_translate("MainWindow", "EXIT"))
-
-    def oscheck(self):
-        global OS
-        global bull1
-        global bull2
-        global OS_Directed
-        pios = "aarch64"
-        winos = "Windows"
-        linuxos = "Linux"
-        if pios in (platform.platform()):
-            print("Commstat this is Pi 64bit OS")
-            OS = "pi"
-            bull1 = 0
-            bull2 = 4
-        if winos in (platform.platform()):
-            print("Commstat this is Windows OS")
-            OS_Directed = r"\DIRECTED.TXT"
-        if linuxos in (platform.platform()):
-            print("Commstat this is Linux OS")
-            OS_Directed = "/DIRECTED.TXT"
+        # Apply initial hide_map setting
+        if self.config.get_hide_map():
+            self.map_widget.hide()
+            self.map_disabled_label.show()
+            self._start_slideshow()
         else:
-            print("Commstat operating System is :" + platform.platform())
-            print("Commstat Python version is :" + platform.python_version())
+            self.map_disabled_label.hide()
 
-    def readconfig(self):
-        config_object = ConfigParser()
-        config_object.read("config.ini")
-        global callsign
-        global callsignSuffix
-        global group1
-        global group2
-        global grid
-        global path
-        global selectedgroup
-        global OS_Directed
-        global start
-        global end
-        global green
-        global yellow
-        global red
-        global grids
+    def _setup_map_disabled_label(self) -> None:
+        """Create the label/image display shown when map is hidden."""
+        self.map_disabled_label = ClickableLabel(self.central_widget)
+        self.map_disabled_label.setFixedSize(MAP_WIDTH, MAP_HEIGHT)
+        self.map_disabled_label.setAlignment(Qt.AlignCenter)
+        self.map_disabled_label.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
+        self.map_disabled_label.clicked.connect(self._on_slideshow_click)
 
-        userinfo = config_object["USERINFO"]
-        systeminfo = config_object["DIRECTEDCONFIG"]
-        filter = config_object["FILTER"]
+        # Use feed colors for background
+        bg_color = self.config.get_color('feed_background')
+        fg_color = self.config.get_color('feed_foreground')
+        self.map_disabled_label.setStyleSheet(
+            f"background-color: {bg_color}; color: {fg_color}; font-size: 18px; font-weight: bold;"
+        )
 
-        callsign = format(userinfo["callsign"])
-        callsignSuffix = format(userinfo["callsignsuffix"])
-        group1 = format(userinfo["group1"])
-        group2 = format(userinfo["group2"])
-        grid = format(userinfo["grid"])
-        path1 = format(systeminfo["path"])
-        path = (path1+""+OS_Directed)
-        selectedgroup = format(userinfo["selectedgroup"])
-        start = format(filter["start"])
-        end = format(filter["end"])
-        green = format(filter["green"])
-        yellow = format(filter["yellow"])
-        red = format(filter["red"])
-        grids = format(filter["grids"])
+        # Add to same layout position as map
+        self.main_layout.addWidget(self.map_disabled_label, 3, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
 
-        if (callsign =="NOCALL"):
-            self.settings_window()
+        # Image slideshow state: list of (image_path, click_url) tuples
+        self.slideshow_items: List[Tuple[str, Optional[str]]] = []
+        self.slideshow_index: int = 0
+        self.playlist_message: Optional[str] = None  # Message from playlist to display
 
-    def filetest(self):
-        global path
-        global directedsize
-        pathlocal = path
-        status = os.stat(path)
-        statussize = status.st_size
-        if statussize != directedsize:
-            directedsize = statussize
-            self.directed()
-            QtCore.QTimer.singleShot(3000, self.directed)
-            QtCore.QTimer.singleShot(30000, self.filetest)
-        else:
-            QtCore.QTimer.singleShot(30000, self.filetest)
+        # Timer for slideshow
+        self.slideshow_timer = QtCore.QTimer(self)
+        self.slideshow_timer.timeout.connect(self._show_next_image)
+        self.slideshow_timer.setInterval(SLIDESHOW_INTERVAL * 60000)  # Convert minutes to ms
 
-    def help_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormSettings()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+    def _check_playlist_on_startup(self) -> None:
+        """Check playlist on startup for Force/Skip commands (runs in background thread)."""
+        thread = threading.Thread(target=self._check_playlist_for_force_async, daemon=True)
+        thread.start()
 
-    def settings_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormSettings()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+    def _check_playlist_for_force_async(self) -> None:
+        """Background thread version of Force check - emits signal to update UI."""
+        import re
+        from datetime import datetime
+        try:
+            with urllib.request.urlopen(PLAYLIST_URL, timeout=10) as response:
+                content = response.read().decode('utf-8')
 
-    def js8email_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormJS8Mail()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+                # Extract content between <pre> tags if present
+                pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
+                if pre_match:
+                    content = pre_match.group(1)
 
-    def js8sms_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormJS8SMS()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+                content = content.strip()
+                lines = [line.strip() for line in content.split('\n') if line.strip()]
 
-    def statrep_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormStatRep()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+                print(f"Playlist lines: {lines[:3]}")  # Debug output
 
-    def bull_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormBull()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+                if not lines:
+                    return
 
-    def marquee_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormMarquee()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+                # Line 1: Check for expiration date (case-insensitive)
+                first_line = lines[0]
+                date_match = re.match(r'date:\s*(\d{4}-\d{2}-\d{2})', first_line, re.IGNORECASE)
+                if date_match:
+                    expiry_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
+                    today = datetime.now().date()
+                    print(f"Playlist date: {expiry_date}, Today: {today}")  # Debug
+                    if expiry_date < today:
+                        # Date has passed - skip all playlist rules including Force
+                        print("Playlist expired, skipping Force check")
+                        return
+                    # Remove date line
+                    lines = lines[1:]
 
-    def checkin_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormCheckin()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+                # Line 2: Check for Force/Skip
+                if lines and lines[0].startswith("Force"):
+                    print("Force command detected, hiding map")  # Debug
+                    # Schedule UI update on main thread
+                    QtCore.QMetaObject.invokeMethod(
+                        self, "_apply_force_hide_map",
+                        QtCore.Qt.QueuedConnection
+                    )
 
-    def filter_window(self):
-        result = subprocess.run([sys.executable, "filter.py"])
-        print(result)
-        self.loadData()
-        self.run_mapper()
+        except Exception as e:
+            print(f"Failed to check playlist: {e}")
 
-    def data_window(self):
-        result = subprocess.run([sys.executable, "commdata.py"])
-        print(result)
+    @QtCore.pyqtSlot()
+    def _apply_force_hide_map(self) -> None:
+        """Apply force hide map from background thread signal (runs on main thread)."""
+        if not self.config.get_hide_map():
+            self.config.set_hide_map(True)
+            self.hide_map_action.setChecked(True)
+            self.map_widget.hide()
+            self.map_disabled_label.show()
+            self._start_slideshow()
 
-    def members_window(self):
-        subprocess.call([sys.executable, "members.py"])
+    def _fetch_remote_playlist(self) -> List[Tuple[str, Optional[str]]]:
+        """Fetch and parse the remote playlist, download images to temp files.
 
-    def statack_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormStatack()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
+        Playlist format:
+        - Line 1: Date: YYYY-MM-DD (expiration date - if passed, skip all rules)
+        - Line 2: Force, Skip, or neither
+        - Remaining: MESSAGE START/END block or image URLs
 
-    def thread_netmanage(self):
-        t5 = threading.Thread(target=self.netmanager_window)
-        t5.start()
-
-    def netmanager_window(self):
-        subprocess.call([sys.executable, "netmanager.py"])
-
-    def about_window(self):
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormAbout()
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
-
-    
-    def loadData(self):
-        self.readconfig()
-        global statelist
-        global start
-        global end
-        global green
-        global yellow
-        global red
-        global grids
-        global selectedgroup
-        print(start)
-        print(end)
-        print("colors :" + red + " " + yellow + " " + green)
-        if "1" in green:
-            greenstat = "ON"
-        else:
-            greenstat = "OFF"
-        if "2" in yellow:
-            yellowstat = "ON"
-        else:
-            yellowstat = "OFF"
-        if "3" in red:
-            redstat = "ON"
-        else:
-            redstat = "OFF"
-
-        self.label_start.setText("Filters : Start : " + start + "  |  End : " + end + "| Green : " + greenstat + " |  Yellow : " + yellowstat + " |")
-        self.label_filters.setText(" Red : " + redstat + " |  Grids : " + grids)
+        Returns empty list if Skip command found, date expired, or if showing a message.
+        """
+        import re
+        from datetime import datetime
+        items = []
+        self.playlist_message = None  # Reset message
 
         try:
-            with sqlite3.connect('traffic.db3', timeout=10) as connection:
-                cursor = connection.cursor()
-                query = ("""
-                    SELECT StatRep_Data.datetime, StatRep_Data.SRid, StatRep_Data.callsign, StatRep_Data.grid,
-                           StatRep_Data.prec, StatRep_Data.status, StatRep_Data.commpwr, StatRep_Data.pubwtr,
-                           StatRep_Data.med, StatRep_Data.ota, StatRep_Data.trav, StatRep_Data.net,
-                           StatRep_Data.fuel, StatRep_Data.food, StatRep_Data.crime, StatRep_Data.civil,
-                           StatRep_Data.political, StatRep_Data.comments
-                    FROM StatRep_Data
-                    WHERE StatRep_Data.groupname = ? AND (StatRep_Data.status = ? OR StatRep_Data.status = ? OR StatRep_Data.status = ?)
-                    AND StatRep_Data.datetime BETWEEN ? AND ? AND substr(StatRep_Data.grid, 1, 2) IN ({})
-                """.format(', '.join('?' for _ in statelist)))
-                cursor.execute(query, [selectedgroup, green, yellow, red, start, end] + statelist)
-                result = cursor.fetchall()
+            with urllib.request.urlopen(PLAYLIST_URL, timeout=10) as response:
+                content = response.read().decode('utf-8')
 
-                self.tableWidget.setRowCount(0)
-                self.tableWidget.setColumnCount(18)
-                for row_number, row_data in enumerate(result):
-                    self.tableWidget.insertRow(row_number)
-                    for column_number, data in enumerate(row_data):  # Include all columns
-                        item = QTableWidgetItem(str(data) if data is not None else "")
-                        # Apply existing color logic for status columns
-                        if data in ["1", "2", "3", "4"]:
-                            if data == "1":
-                                item.setBackground(QColor(colors['condition_green']))
-                                item.setForeground(QColor(colors['condition_green']))
-                            elif data == "2":
-                                item.setBackground(QColor(colors['condition_yellow']))
-                                item.setForeground(QColor(colors['condition_yellow']))
-                            elif data == "3":
-                                item.setBackground(QColor(colors['condition_red']))
-                                item.setForeground(QColor(colors['condition_red']))
-                            elif data == "4":
-                                item.setBackground(QColor(colors['condition_gray']))
-                                item.setForeground(QColor(colors['condition_gray']))
-                        self.tableWidget.setItem(row_number, column_number, item)
+                # Extract content between <pre> tags if present
+                pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
+                if pre_match:
+                    content = pre_match.group(1)
 
-                table = self.tableWidget
-                table.setHorizontalHeaderLabels(
-                    str("Date Time UTC ;ID ;Callsign; Grid ; Scope; Map Pin; Pow; H2O; Med; Com; Trv; Int; Fuel; Food; Cri; Civ; Pol; Remarks").split(";"))
-                header = table.horizontalHeader()
-                header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-                header.setStretchLastSection(True)
-                self.tableWidget.verticalHeader().setVisible(False)
-                self.tableWidget.sortItems(0, QtCore.Qt.DescendingOrder)
-        except sqlite3.Error as error:
-            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load StatRep data: {error}")
+                content = content.strip()
+                lines = [line.strip() for line in content.split('\n') if line.strip()]
 
+                if not lines:
+                    return []
 
-    def directedpi(self):
-        global directedcounter
-        with open(path) as f, open('output.txt', 'w') as fout:
-            fout.writelines(reversed(f.readlines()))
-        text = open('output.txt').read()
-        self.plainTextEdit.setPlainText(text)
-        directedcounter += 1
-        print("Directed completed : counter :" + str(directedcounter))
+                # Line 1: Check for expiration date (case-insensitive)
+                first_line = lines[0]
+                date_match = re.match(r'date:\s*(\d{4}-\d{2}-\d{2})', first_line, re.IGNORECASE)
+                if date_match:
+                    expiry_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
+                    today = datetime.now().date()
+                    if expiry_date < today:
+                        # Date has passed - skip all playlist rules
+                        print(f"Playlist expired on {expiry_date}, skipping rules")
+                        return []
+                    # Remove date line
+                    lines = lines[1:]
 
-        self.loadbulletins()
-        self.loadData()
-        self.run_mapper()
-        self.thread()
+                # Line 2: Check for Skip command
+                if lines and lines[0].startswith("Skip"):
+                    return []
 
-        self.label_3.setText(" Active Group: " + selectedgroup)
+                # Check for Force command - remove it from lines
+                if lines and lines[0].startswith("Force"):
+                    lines = lines[1:]
 
-    def directed(self):
-        global directedcounter
-        with open(path) as f, open('output.txt', 'w') as fout:
-            fout.writelines(reversed(f.readlines()))
-        text = open('output.txt').read()
-        self.plainTextEdit.setPlainText(text)
-        directedcounter += 1
-        print("Directed completed : counter :" + str(directedcounter))
+                # Rebuild content for MESSAGE check
+                content = '\n'.join(lines)
 
-        self.loadbulletins()
-        self.loadData()
-        self.run_mapper()
-        self.thread()
+                # Check for MESSAGE START/END block
+                msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', content, re.DOTALL)
+                if msg_match:
+                    self.playlist_message = msg_match.group(1)
+                    return []  # Don't load images when showing message
 
-        self.label_3.setText(" Active Group : " + selectedgroup)
+                for line in lines:
+                    # Skip MESSAGE markers
+                    if line in ("MESSAGE START", "MESSAGE END"):
+                        continue
 
-    def mapperWidget(self):
-        global mapper
-        global data
-        global map_flag
-        global statelist
-        global start
-        global end
-        global green
-        global yellow
-        global red
-        global grids
-        global selectedgroup
+                    # Find all URLs in the line
+                    urls = re.findall(r'https?://[^\s]+', line)
+                    if not urls:
+                        continue
 
-        gridlist = []
-        coordinate = (38.8199286, -96.7782551)
-        m = folium.Map(
-            zoom_start=4,
-            location=coordinate
+                    image_url = urls[0]
+                    click_url = urls[1] if len(urls) > 1 else None
+
+                    # Download image to temp file
+                    try:
+                        temp_path = self._download_image(image_url)
+                        if temp_path:
+                            items.append((temp_path, click_url))
+                    except Exception as e:
+                        print(f"Failed to download {image_url}: {e}")
+
+        except Exception as e:
+            print(f"Failed to fetch playlist: {e}")
+
+        return items
+
+    def _download_image(self, url: str) -> Optional[str]:
+        """Download an image from URL to a temp file, return the path."""
+        try:
+            # Get file extension from URL
+            ext = os.path.splitext(url)[1] or '.png'
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+
+            with urllib.request.urlopen(url, timeout=10) as response:
+                temp_file.write(response.read())
+            temp_file.close()
+            return temp_file.name
+        except Exception as e:
+            print(f"Failed to download image {url}: {e}")
+            return None
+
+    def _load_slideshow_images(self) -> None:
+        """Load images from remote playlist first, then local folder."""
+        self.slideshow_items = []
+        self.slideshow_index = 0
+
+        # First, fetch remote playlist
+        remote_items = self._fetch_remote_playlist()
+        self.slideshow_items.extend(remote_items)
+
+        # Then, load local images from images folder
+        images_folder = os.path.join(os.getcwd(), "images")
+        if os.path.isdir(images_folder):
+            valid_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
+            files = sorted(os.listdir(images_folder))
+            for filename in files:
+                if filename.lower().endswith(valid_extensions):
+                    image_path = os.path.join(images_folder, filename)
+                    self.slideshow_items.append((image_path, None))
+
+    def _start_slideshow(self) -> None:
+        """Start the image slideshow or display playlist message."""
+        self._load_slideshow_images()
+
+        # Check if we have a message to display
+        if self.playlist_message:
+            self._display_playlist_message()
+            self.slideshow_timer.start()  # Keep timer running to check for changes
+        elif self.slideshow_items:
+            self._show_current_image()
+            self.slideshow_timer.start()
+        else:
+            # No images and no message - show "Map Disabled"
+            self.map_disabled_label.setPixmap(QtGui.QPixmap())
+            self.map_disabled_label.setText("Map Disabled")
+
+    @QtCore.pyqtSlot()
+    def _display_playlist_message(self) -> None:
+        """Display the playlist message centered in the label."""
+        if not self.playlist_message:
+            return
+
+        # Clear any existing pixmap
+        self.map_disabled_label.setPixmap(QtGui.QPixmap())
+
+        # Set text with center alignment (both horizontal and vertical)
+        self.map_disabled_label.setText(self.playlist_message)
+        self.map_disabled_label.setAlignment(Qt.AlignCenter)
+        self.map_disabled_label.setWordWrap(True)
+
+    def _stop_slideshow(self) -> None:
+        """Stop the image slideshow."""
+        self.slideshow_timer.stop()
+
+    def _show_current_image(self) -> None:
+        """Display the current slideshow image."""
+        if not self.slideshow_items:
+            return
+
+        image_path, _ = self.slideshow_items[self.slideshow_index]
+        pixmap = QtGui.QPixmap(image_path)
+
+        # Scale to fit while maintaining aspect ratio
+        scaled_pixmap = pixmap.scaled(
+            MAP_WIDTH, MAP_HEIGHT,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
         )
+        self.map_disabled_label.setPixmap(scaled_pixmap)
+        self.map_disabled_label.setText("")
+
+    def _show_next_image(self) -> None:
+        """Advance to the next image in the slideshow or refresh message."""
+        # Check playlist for updates in background (at each interval)
+        thread = threading.Thread(target=self._check_playlist_content_async, daemon=True)
+        thread.start()
+
+        # If showing a message, just keep displaying it (will be updated by async check)
+        if self.playlist_message:
+            return
+
+        # Otherwise advance to next image
+        if not self.slideshow_items:
+            return
+
+        self.slideshow_index = (self.slideshow_index + 1) % len(self.slideshow_items)
+        self._show_current_image()
+
+    def _check_playlist_content_async(self) -> None:
+        """Background thread to check playlist for message changes."""
+        import re
+        from datetime import datetime
+        try:
+            with urllib.request.urlopen(PLAYLIST_URL, timeout=10) as response:
+                content = response.read().decode('utf-8')
+
+                # Extract content between <pre> tags if present
+                pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
+                if pre_match:
+                    content = pre_match.group(1)
+
+                content = content.strip()
+                lines = [line.strip() for line in content.split('\n') if line.strip()]
+
+                if not lines:
+                    return
+
+                # Line 1: Check for expiration date (case-insensitive)
+                first_line = lines[0]
+                date_match = re.match(r'date:\s*(\d{4}-\d{2}-\d{2})', first_line, re.IGNORECASE)
+                if date_match:
+                    expiry_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
+                    today = datetime.now().date()
+                    if expiry_date < today:
+                        # Date has passed - skip all playlist rules, clear any message
+                        if self.playlist_message:
+                            self.playlist_message = None
+                            QtCore.QMetaObject.invokeMethod(
+                                self, "_reload_slideshow",
+                                QtCore.Qt.QueuedConnection
+                            )
+                        return
+                    # Remove date line
+                    lines = lines[1:]
+
+                # Check for Skip - no message
+                if lines and lines[0].startswith("Skip"):
+                    if self.playlist_message:
+                        self.playlist_message = None
+                        QtCore.QMetaObject.invokeMethod(
+                            self, "_reload_slideshow",
+                            QtCore.Qt.QueuedConnection
+                        )
+                    return
+
+                # Check for Force command - remove it from lines
+                if lines and lines[0].startswith("Force"):
+                    lines = lines[1:]
+
+                # Rebuild content for MESSAGE check
+                content = '\n'.join(lines)
+
+                # Check for MESSAGE START/END block
+                msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', content, re.DOTALL)
+                if msg_match:
+                    new_message = msg_match.group(1)
+                    # Only update if message changed
+                    if new_message != self.playlist_message:
+                        self.playlist_message = new_message
+                        QtCore.QMetaObject.invokeMethod(
+                            self, "_display_playlist_message",
+                            QtCore.Qt.QueuedConnection
+                        )
+                elif self.playlist_message:
+                    # Message was removed from playlist
+                    self.playlist_message = None
+                    QtCore.QMetaObject.invokeMethod(
+                        self, "_reload_slideshow",
+                        QtCore.Qt.QueuedConnection
+                    )
+
+        except Exception as e:
+            print(f"Failed to check playlist content: {e}")
+
+    @QtCore.pyqtSlot()
+    def _reload_slideshow(self) -> None:
+        """Reload the slideshow (called from background thread via signal)."""
+        self._load_slideshow_images()
+        if self.playlist_message:
+            self._display_playlist_message()
+        elif self.slideshow_items:
+            self.slideshow_index = 0
+            self._show_current_image()
+        else:
+            self.map_disabled_label.setPixmap(QtGui.QPixmap())
+            self.map_disabled_label.setText("Map Disabled")
+
+    def _on_slideshow_click(self) -> None:
+        """Handle click on slideshow image - open associated URL if any."""
+        if not self.slideshow_items:
+            return
+
+        _, click_url = self.slideshow_items[self.slideshow_index]
+        if click_url:
+            webbrowser.open(click_url)
+
+    def _setup_live_feed(self) -> None:
+        """Create the live feed text area."""
+        # Feed text area
+        self.feed_text = QtWidgets.QPlainTextEdit(self.central_widget)
+        self.feed_text.setObjectName("feedText")
+        self.feed_text.setFont(QtGui.QFont("Source Code Pro", 10))
+        self.feed_text.setStyleSheet(
+            f"background-color: {self.config.get_color('feed_background')};"
+            f"color: {self.config.get_color('feed_foreground')};"
+        )
+        self.feed_text.setReadOnly(True)
+
+        # No word wrap, always show scrollbars
+        self.feed_text.setWordWrapMode(QtGui.QTextOption.NoWrap)
+        self.feed_text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.feed_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+
+        # Add to layout (row 2, full width)
+        self.main_layout.addWidget(self.feed_text, 2, 0, 1, 2)
+
+    def _load_live_feed(self) -> None:
+        """Load DIRECTED.TXT content into the live feed (reversed order)."""
+        directed_path = self.config.directed_config.get('path', '')
+        if not directed_path:
+            self.feed_text.setPlainText("No DIRECTED.TXT path configured")
+            return
+
+        # Build full path to DIRECTED.TXT
+        full_path = os.path.join(directed_path, "DIRECTED.TXT")
+
+        try:
+            with open(full_path, 'r') as f:
+                lines = f.readlines()
+            # Filter out heartbeat messages if setting is enabled
+            if self.config.get_hide_heartbeat():
+                lines = [line for line in lines if 'HEARTBEAT' not in line.upper()]
+            # Reverse the lines so newest is at top
+            reversed_text = ''.join(reversed(lines))
+            self.feed_text.setPlainText(reversed_text)
+        except FileNotFoundError:
+            self.feed_text.setPlainText(f"File not found: {full_path}")
+        except Exception as e:
+            self.feed_text.setPlainText(f"Error reading feed: {e}")
+
+    def _setup_bulletin_table(self) -> None:
+        """Create the bulletin data table."""
+        self.bulletin_table = QtWidgets.QTableWidget(self.central_widget)
+        self.bulletin_table.setObjectName("bulletinTable")
+        self.bulletin_table.setColumnCount(4)
+        self.bulletin_table.setRowCount(0)
+
+        # Apply styling
+        title_bg = self.config.get_color('title_bar_background')
+        title_fg = self.config.get_color('title_bar_foreground')
+        data_bg = self.config.get_color('data_background')
+        data_fg = self.config.get_color('data_foreground')
+
+        self.bulletin_table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {data_bg};
+                color: {data_fg};
+            }}
+            QTableWidget QHeaderView::section {{
+                background-color: {title_bg};
+                color: {title_fg};
+                font-weight: bold;
+                padding: 4px;
+                border: 1px solid {title_bg};
+            }}
+        """)
+
+        # Explicitly style the horizontal header
+        self.bulletin_table.horizontalHeader().setStyleSheet(f"""
+            QHeaderView::section {{
+                background-color: {title_bg};
+                color: {title_fg};
+                font-weight: bold;
+                padding: 4px;
+            }}
+        """)
+
+        # Set headers
+        self.bulletin_table.setHorizontalHeaderLabels([
+            "Date Time UTC", "Group", "Callsign", "Bulletin"
+        ])
+
+        # Configure header behavior
+        header = self.bulletin_table.horizontalHeader()
+        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        header.setStretchLastSection(True)
+        self.bulletin_table.verticalHeader().setVisible(False)
+        self.bulletin_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.bulletin_table.setFixedHeight(MAP_HEIGHT - FILTER_HEIGHT)
+
+        # Add to layout (row 4, column 1)
+        self.main_layout.addWidget(self.bulletin_table, 4, 1, 1, 1)
+
+    def _load_bulletin_data(self) -> None:
+        """Load bulletin data from database into the table."""
+        group = None if self.config.get_show_all_groups() else self.db.get_active_group()
+        data = self.db.get_bulletin_data(group)
+
+        # Clear and populate table
+        self.bulletin_table.setRowCount(0)
+        for row_num, row_data in enumerate(data):
+            self.bulletin_table.insertRow(row_num)
+            for col_num, value in enumerate(row_data):
+                item = QTableWidgetItem(str(value) if value is not None else "")
+                self.bulletin_table.setItem(row_num, col_num, item)
+
+        # Sort by datetime descending
+        self.bulletin_table.sortItems(0, QtCore.Qt.DescendingOrder)
+
+    def _load_map(self) -> None:
+        """Generate and display the folium map with StatRep pins."""
+        filters = self.config.filter_settings
+        group = self.db.get_active_group()
+
+        # Use saved map position or default to US center
+        if not hasattr(self, 'map_center'):
+            self.map_center = (38.8199286, -96.7782551)
+            self.map_zoom = 4
+
+        m = folium.Map(zoom_start=self.map_zoom, location=self.map_center)
 
         # Add local tile layer
         folium.raster_layers.TileLayer(
@@ -832,199 +1456,438 @@ class Ui_MainWindow(QWidget):
             control=True
         ).add_to(m)
 
+        # Get StatRep data for pins
         try:
-            connection = sqlite3.connect('traffic.db3')
-            cursor = connection.cursor()
-            query = (
-                "SELECT callsign, SRid, status, grid FROM StatRep_Data WHERE groupname = ? AND (status = ? OR status = ? OR status = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(
-                    ', '.join('?' for _ in statelist)))
-            cursor = connection.execute(query, [selectedgroup, green, yellow, red, start, end] + statelist)
-            items = cursor.fetchall()
+            data = self.db.get_statrep_data(
+                group=group,
+                start=filters.get('start', DEFAULT_FILTER_START),
+                end=filters.get('end', DEFAULT_FILTER_END)
+            )
 
-            for item in items:
-                call = item[0]
-                srid = item[1]
-                status = item[2]
-                grid = item[3]
-                coords = mh.to_location(grid, center=True)
-                testlat = float(coords[0])
-                testlong = float(coords[1])
-                count = gridlist.count(grid)
-                if count > 0:
-                    testlat = testlat + (count * .010)
-                    testlong = testlong + (count * .010)
-                gridlist.append(grid)
-                testlat = float(testlat)
-                testlong = float(testlong)
+            gridlist = []
+            for row in data:
+                callsign = row[2]
+                srid = row[1]
+                status = str(row[5])
+                grid = row[3]
 
-                glat = testlat
-                glon = testlong
+                # Convert grid to coordinates
+                try:
+                    coords = mh.to_location(grid, center=True)
+                    lat = float(coords[0])
+                    lon = float(coords[1])
 
-                pinstring = ("Callsign :")
-                html = '''<HTML>
-                            <BODY>
-                                <p style="color:blue;font-size:14px;">
-                                    %s %s<br>
-                                    StatRep ID: %s<br>
-                                    <button onclick="window.location.href='http://localhost/statrep/%s'" style="color:#0000FF;font-family:Arial;font-size:12px;font-weight:bold;cursor:pointer;border:1px solid #000;padding:2px 5px;">View StatRep</button>
-                                </p>
-                            </BODY>
-                          </HTML>''' % (pinstring, call, srid, srid)
-                iframe = folium.IFrame(html, width=160, height=100)
-                popup = folium.Popup(iframe, min_width=100, max_width=160)
+                    # Offset duplicate grids
+                    count = gridlist.count(grid)
+                    if count > 0:
+                        lat += count * 0.01
+                        lon += count * 0.01
+                    gridlist.append(grid)
 
-                color = "black"  # Default color
-                radius = 5
-                filler = True
+                    # Create popup HTML
+                    html = f'''<HTML>
+                        <BODY>
+                            <p style="color:blue;font-size:14px;">
+                                Callsign: {callsign}<br>
+                                StatRep ID: {srid}<br>
+                                <button onclick="window.location.href='http://localhost/statrep/{srid}'"
+                                    style="color:#0000FF;font-family:Arial;font-size:12px;font-weight:bold;
+                                    cursor:pointer;border:1px solid #000;padding:2px 5px;">
+                                    View StatRep
+                                </button>
+                            </p>
+                        </BODY>
+                    </HTML>'''
+                    iframe = folium.IFrame(html, width=160, height=100)
+                    popup = folium.Popup(iframe, min_width=100, max_width=160)
 
-                if status == "1":
-                    color = "green"
-                    radius = 5
-                elif status == "2":
-                    color = "orange"
-                    radius = 10
-                elif status == "3":
-                    color = "red"
-                    radius = 10
+                    # Determine pin color and size
+                    if status == "1":
+                        color = "green"
+                        radius = 5
+                    elif status == "2":
+                        color = "orange"
+                        radius = 10
+                    elif status == "3":
+                        color = "red"
+                        radius = 10
+                    else:
+                        color = "black"
+                        radius = 5
 
-                folium.CircleMarker(radius=radius, fill=filler, color=color, fill_color=color, location=[glat, glon], popup=popup).add_to(m)
+                    folium.CircleMarker(
+                        radius=radius,
+                        fill=True,
+                        color=color,
+                        fill_color=color,
+                        location=[lat, lon],
+                        popup=popup
+                    ).add_to(m)
+                except Exception as e:
+                    print(f"Error adding pin for grid {grid}: {e}")
 
-            cursor.close()
+        except Exception as e:
+            print(f"Error loading map data: {e}")
 
-        except sqlite3.Error as error:
-            print("Failed to read data from sqlite table", error)
-        finally:
-            if (connection):
-                connection.close()
+        # Save map to bytes and display
+        map_data = io.BytesIO()
+        m.save(map_data, close_file=False)
 
-        data = io.BytesIO()
-        m.save(data, close_file=False)
+        # Always set new HTML content (reload() only refreshes cached content)
+        self.map_widget.setHtml(map_data.getvalue().decode())
+        self.map_loaded = True
 
-        if map_flag == 1:
-            self.widget.reload()
-        else:
-            self.widget.setHtml(data.getvalue().decode())
-            map_flag = 0
+    def _save_map_position(self, callback=None) -> None:
+        """Save current map center and zoom via JavaScript."""
+        if not self.map_loaded:
+            if callback:
+                callback()
+            return
 
-    def run_mapper(self):
-        global mapper
-        global data
-        global os
-        if "Pi" in OS:
-            print("\n \n OS is Pi map is removed \n \n ")
-        else:
-            self.mapperWidget()
-            print("\n \n OS is not Pi \n \n ")
+        js_code = """
+        (function() {
+            try {
+                var mapId = Object.keys(window).find(k => k.startsWith('map_'));
+                if (mapId && window[mapId]) {
+                    var map = window[mapId];
+                    var center = map.getCenter();
+                    var zoom = map.getZoom();
+                    return JSON.stringify({lat: center.lat, lng: center.lng, zoom: zoom});
+                }
+            } catch(e) {}
+            return null;
+        })();
+        """
 
-    def loadbulletins(self):
-        self.readconfig()
-        connection = sqlite3.connect('traffic.db3')
-        query = "SELECT datetime, idnum, callsign, message FROM bulletins_Data where groupid = ?"
-        result = connection.execute(query, (selectedgroup,))
-        self.tableWidget_2.setRowCount(0)
-        self.tableWidget_2.setColumnCount(4)
-        for row_number, row_data in enumerate(result):
-            self.tableWidget_2.insertRow(row_number)
-            for column_number, data in enumerate(row_data):
-                self.tableWidget_2.setItem(row_number, column_number, QTableWidgetItem(str(data)))
-        table = self.tableWidget_2
-        table.setHorizontalHeaderLabels(
-            str("Date Time UTC ;ID ;Callsign; Bulletin ;").split(
-                ";"))
-        header = table.horizontalHeader()
-        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-        header.setStretchLastSection(True)
-        table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-        self.tableWidget_2.verticalHeader().setVisible(False)
-        self.tableWidget_2.sortItems(0, QtCore.Qt.DescendingOrder)
-        connection.close()
+        def handle_result(result):
+            if result:
+                try:
+                    import json
+                    data = json.loads(result)
+                    self.map_center = (data['lat'], data['lng'])
+                    self.map_zoom = data['zoom']
+                except:
+                    pass
+            if callback:
+                callback()
 
-    def thread_second():
-        call(["python", "datareader.py"])
+        self.map_widget.page().runJavaScript(js_code, handle_result)
 
-    def showTime(self):
-        now = QDateTime.currentDateTime()
-        displayTxt = now.toUTC().toString("  yyyy-MM-dd   hh:mm:ss 'UTC'  ")
-        self.label_2.setText(" " + displayTxt + " ")
+    def _load_statrep_data(self) -> None:
+        """Load StatRep data from database into the table."""
+        # Get filter settings
+        filters = self.config.filter_settings
+        group = None if self.config.get_show_all_groups() else self.db.get_active_group()
 
-    def thread(self):
-        t1 = threading.Thread(target=self.Operation)
-        t1.start()
+        # Fetch data from database
+        data = self.db.get_statrep_data(
+            group=group,
+            start=filters.get('start', DEFAULT_FILTER_START),
+            end=filters.get('end', DEFAULT_FILTER_END)
+        )
 
-    def Operation(self):
-        global counter
-        now = QDateTime.currentDateTime()
-        displayTxt = (now.toUTC().toString(Qt.ISODate))
-        print("Time Datatreader Start :" + displayTxt)
-        counter += 1
-        print("Thread counter = " + str(counter))
-        subprocess.call([sys.executable, "datareader.py"])
+        # Clear and populate table
+        self.statrep_table.setRowCount(0)
+        for row_num, row_data in enumerate(data):
+            self.statrep_table.insertRow(row_num)
+            for col_num, value in enumerate(row_data):
+                item = QTableWidgetItem(str(value) if value is not None else "")
 
-    def feed(self):
-        marqueegreen = f"color: {colors['marquee_foreground_green']};"
-        marqueeyellow = f"color: {colors['marquee_foreground_yellow']};"
-        marqueered = f"color: {colors['marquee_foreground_red']};"
-        connection = sqlite3.connect('traffic.db3')
-        query = "SELECT * FROM marquees_data WHERE groupname = ? ORDER BY date DESC LIMIT 1"
-        result = connection.execute(query, (selectedgroup,))
-        result = result.fetchall()
+                # Apply color coding for status columns (values 1-4)
+                if value in ["1", "2", "3", "4"]:
+                    if value == "1":
+                        color = QColor(self.config.get_color('condition_green'))
+                    elif value == "2":
+                        color = QColor(self.config.get_color('condition_yellow'))
+                    elif value == "3":
+                        color = QColor(self.config.get_color('condition_red'))
+                    else:  # "4"
+                        color = QColor(self.config.get_color('condition_gray'))
+                    item.setBackground(color)
+                    item.setForeground(color)
 
-        callSend = (result[0][2])
-        id = (result[0][1])
-        group = (result[0][3])
-        date = (result[0][4])
-        msg = (result[0][6])
-        color = (result[0][5])
-        if (color == "2"):
-            self.label.setStyleSheet(f"background-color: {colors['marquee_background']};\n"
-                                     "" + marqueered + "")
-        elif (color == "1"):
-            self.label.setStyleSheet(f"background-color: {colors['marquee_background']};\n"
-                                     "" + marqueeyellow + "")
-        else:
-            self.label.setStyleSheet(f"background-color: {colors['marquee_background']};\n"
-                                     "" + marqueegreen + "")
+                self.statrep_table.setItem(row_num, col_num, item)
 
-        marqueetext = (" ID " + id + " Received  : " + date + "  From : " + group + " by : " + callSend + " MSG : " + msg)
-        connection.close()
-        fm = self.label.fontMetrics()
-        self.nl = int(self.label.width() / fm.averageCharWidth())
-        news = [marqueetext]
-        appendix = ' ' * self.nl
-        news.append(appendix)
-        delimiter = '      +++      '
-        self.news = delimiter.join(news)
-        newsLength = len(self.news)
-        lps = 5
-        dur = newsLength * 500 / lps
-        self.timeLine.setDuration(20000)
-        self.timeLine.setFrameRange(0, newsLength)
-        self.timeLine.start()
+        # Sort by datetime descending
+        self.statrep_table.sortItems(0, QtCore.Qt.DescendingOrder)
 
-    def setText(self, number_of_frame):
-        if number_of_frame < self.nl:
+    def _on_statrep_click(self, item: QTableWidgetItem) -> None:
+        """Handle click on StatRep table row."""
+        row = item.row()
+        sr_id = self.statrep_table.item(row, 1)  # Column 1 is the ID
+        if sr_id:
+            print(f"StatRep clicked: ID = {sr_id.text()}")
+
+    def _setup_timers(self) -> None:
+        """Setup timers for clock, data refresh, and marquee animation."""
+        # Clock timer - updates every second
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self._update_time)
+        self.clock_timer.start(1000)
+        self._update_time()  # Initial display
+
+        # Data refresh timer - updates every 20 seconds
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self._refresh_data)
+        self.refresh_timer.start(20000)
+
+        # Marquee animation timeline
+        self.marquee_timeline = QtCore.QTimeLine()
+        self.marquee_timeline.setCurveShape(QtCore.QTimeLine.LinearCurve)
+        self.marquee_timeline.frameChanged.connect(self._update_marquee_text)
+        self.marquee_timeline.finished.connect(self._next_marquee)
+
+        # Marquee state
+        self.marquee_text = ""
+        self.marquee_chars = 0
+
+    def _refresh_data(self) -> None:
+        """Run datareader and refresh StatRep, live feed, and bulletin data."""
+        # Parse new messages from DIRECTED.TXT (only processes new lines)
+        if self.datareader_parser.copy_directed():
+            new_count = self.datareader_parser.parse()
+            if new_count > 0:
+                print(f"Processed {new_count} new lines")
+
+        # Reload data from database
+        self._load_statrep_data()
+        self._load_live_feed()
+        self._load_bulletin_data()
+
+        # Save map position before refresh, then reload map
+        self._save_map_position(callback=self._load_map)
+
+        # Check playlist for Force command in background (even when map is shown)
+        thread = threading.Thread(target=self._check_playlist_for_force_async, daemon=True)
+        thread.start()
+
+    def _update_time(self) -> None:
+        """Update the time display with current UTC time."""
+        current_time = QDateTime.currentDateTimeUtc()
+        self.time_label.setText(current_time.toString("yyyy-MM-dd hh:mm:ss") + " UTC")
+
+    def _update_marquee_text(self, frame: int) -> None:
+        """Update marquee display for current animation frame."""
+        if frame < self.marquee_chars:
             start = 0
         else:
-            start = number_of_frame - self.nl
-        text = '{}'.format(self.news[start:number_of_frame])
-        self.label.setText(text)
+            start = frame - self.marquee_chars
+        text = self.marquee_text[start:frame]
+        self.marquee_label.setText(text)
 
-    def nextNews(self):
-        self.feed()
-        self.timeLine.start()
+    def _next_marquee(self) -> None:
+        """Called when marquee animation completes - reload and restart."""
+        self._load_marquee()
 
-    def setTlText(self, text):
-        string = '{} pressed'.format(text)
-        self.textLabel.setText(string)
+    def _load_marquee(self) -> None:
+        """Load the latest marquee message from database and start animation."""
+        group = self.db.get_active_group()
+        result = self.db.get_latest_marquee(group)
 
-    def open_webbrowser(self):
-        webbrowser.open('CommStat_Help.pdf')
+        if result:
+            # Extract marquee data (idnum, callsign, groupname, date, color, message)
+            try:
+                sr_id = result[0] if len(result) > 0 else ""
+                callsign = result[1] if len(result) > 1 else ""
+                msg_group = result[2] if len(result) > 2 else ""
+                date = result[3] if len(result) > 3 else ""
+                color = str(result[4]) if len(result) > 4 else "1"
+                msg = result[5] if len(result) > 5 else ""
+
+                # Set marquee color based on status
+                if color == "3":
+                    fg_color = self.config.get_color('marquee_foreground_red')
+                elif color == "2":
+                    fg_color = self.config.get_color('marquee_foreground_yellow')
+                else:
+                    fg_color = self.config.get_color('marquee_foreground_green')
+
+                self.marquee_label.setStyleSheet(
+                    f"background-color: {self.config.get_color('marquee_background')};"
+                    f"color: {fg_color};"
+                )
+
+                # Build marquee text
+                marquee_text = f" ID: {sr_id} | Received: {date} | From: {msg_group} | By: {callsign} | MSG: {msg}"
+
+                # Calculate how many characters fit in the marquee width
+                fm = self.marquee_label.fontMetrics()
+                self.marquee_chars = int(self.marquee_label.width() / fm.averageCharWidth())
+
+                # Add padding spaces
+                padding = ' ' * self.marquee_chars
+                self.marquee_text = marquee_text + "      +++      " + padding
+
+                # Setup and start animation
+                text_length = len(self.marquee_text)
+                self.marquee_timeline.setDuration(20000)
+                self.marquee_timeline.setFrameRange(0, text_length)
+                self.marquee_timeline.start()
+            except (IndexError, TypeError) as e:
+                print(f"Error loading marquee: {e}")
+        else:
+            # No marquee data - show placeholder
+            self.marquee_label.setText("  No marquee messages")
+
+    # -------------------------------------------------------------------------
+    # Menu Action Handlers (placeholders for now)
+    # -------------------------------------------------------------------------
+
+    def _on_js8email(self) -> None:
+        """Open JS8 Email window."""
+        dialog = JS8MailDialog(self)
+        dialog.exec_()
+
+    def _on_js8sms(self) -> None:
+        """Open JS8 SMS window."""
+        dialog = JS8SMSDialog(self)
+        dialog.exec_()
+
+    def _on_statrep(self) -> None:
+        """Open StatRep window."""
+        dialog = StatRepDialog(self)
+        dialog.exec_()
+
+    def _on_net_check_in(self) -> None:
+        """Open Net Check In window."""
+        print("NET CHECK IN clicked - window not yet implemented")
+
+    def _on_member_list(self) -> None:
+        """Open Member List window."""
+        print("MEMBER LIST clicked - window not yet implemented")
+
+    def _on_statrep_ack(self) -> None:
+        """Open StatRep Acknowledgment window."""
+        print("STATREP ACK clicked - window not yet implemented")
+
+    def _on_net_roster(self) -> None:
+        """Open Net Manager window."""
+        print("NET MANAGER clicked - window not yet implemented")
+
+    def _on_new_marquee(self) -> None:
+        """Open New Marquee window."""
+        dialog = QtWidgets.QDialog()
+        dialog.ui = Ui_FormMarquee()
+        dialog.ui.setupUi(dialog)
+        dialog.exec_()
+
+    def _on_flash_bulletin(self) -> None:
+        """Open Flash Bulletin window."""
+        dialog = QtWidgets.QDialog()
+        dialog.ui = Ui_FormBull()
+        dialog.ui.setupUi(dialog)
+        dialog.exec_()
+
+    def _on_filter(self) -> None:
+        """Open Display Filter window."""
+        dialog = FilterDialog(self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Reload config and refresh data
+            self.config = ConfigManager()
+            self._setup_filter_labels()
+            self._load_statrep_data()
+            # Save map position before refresh, then reload map
+            self._save_map_position(callback=self._load_map)
+
+    def _on_toggle_heartbeat(self, checked: bool) -> None:
+        """Toggle heartbeat message filtering in live feed."""
+        self.config.set_hide_heartbeat(checked)
+        self._load_live_feed()
+
+    def _on_toggle_show_all_groups(self, checked: bool) -> None:
+        """Toggle showing data from all groups."""
+        self.config.set_show_all_groups(checked)
+        self._load_statrep_data()
+        self._load_bulletin_data()
+        self._load_marquee()
+
+    def _on_toggle_hide_map(self, checked: bool) -> None:
+        """Toggle between map and image slideshow."""
+        self.config.set_hide_map(checked)
+        if checked:
+            self.map_widget.hide()
+            self.map_disabled_label.show()
+            self._start_slideshow()
+        else:
+            self._stop_slideshow()
+            self.playlist_message = None  # Clear any message
+            self.map_disabled_label.hide()
+            self.map_widget.show()
+
+    def _on_groups(self) -> None:
+        """Open Manage Groups window."""
+        dialog = GroupsDialog(self.db, self)
+        dialog.exec_()
+        # Refresh header to show new active group
+        self._update_active_group_label()
+        # Refresh data for new group
+        self._load_statrep_data()
+        self._load_bulletin_data()
+        self._load_marquee()
+        self._save_map_position(callback=self._load_map)
+
+    def _update_active_group_label(self) -> None:
+        """Update the Active Group label in the header."""
+        self.label_active_group.setText(f"Active Group: {self.db.get_active_group()}")
+
+    def _on_settings(self) -> None:
+        """Open Settings window."""
+        dialog = SettingsDialog(self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Reload config after settings are saved
+            self.config = ConfigManager()
+
+    def _on_colors(self) -> None:
+        """Open Colors customization window."""
+        dialog = ColorsDialog(self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Reload config - colors apply on restart
+            self.config = ConfigManager()
+            QtWidgets.QMessageBox.information(
+                self, "Colors Saved",
+                "Color changes will apply when you restart the application."
+            )
+
+    def _on_help(self) -> None:
+        """Open Help documentation."""
+        pdf_path = Path("CommStat_Help.pdf").resolve()
+        if pdf_path.exists():
+            os.startfile(str(pdf_path))
+        else:
+            QtWidgets.QMessageBox.warning(
+                self, "Help Not Found",
+                "CommStat_Help.pdf not found in application directory."
+            )
+
+    def _on_about(self) -> None:
+        """Open About window."""
+        dialog = QtWidgets.QDialog()
+        dialog.ui = Ui_FormAbout()
+        dialog.ui.setupUi(dialog)
+        dialog.exec_()
+
+
+# =============================================================================
+# Application Entry Point
+# =============================================================================
+
+def main() -> None:
+    """Application entry point."""
+    app = QtWidgets.QApplication(sys.argv)
+
+    # Load configuration and database
+    config = ConfigManager()
+    db = DatabaseManager()
+
+    # Initialize Groups table (creates if needed, seeds defaults)
+    db.init_groups_table()
+
+    # Create and show main window
+    window = MainWindow(config, db)
+    window.show()
+
+    sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-    MainWindow.show()
-    sys.exit(app.exec_())
+    main()

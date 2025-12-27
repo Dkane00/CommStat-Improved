@@ -119,15 +119,15 @@ Summary of Changes and Improvements</h3>
 
 9. FILES MODIFIED
 -----------------
-- commstatpy (main application rebuild)
+- commstat.py (main application rebuild)
 - datareader.py (refactored)
 - install.py (updated)
 - config.ini.template (NEW)
 - traffic.db3.template (NEW)
 - .gitignore (updated)
-- bulletin.py, checkin.py, csresponder.py, filter.py, heardlist.py,
+- bulletin.py, checkin.py, csresponder.py, filter.py,
   js8mail.py, js8sms.py, marquee.py, members.py, netmanager.py,
-  settings.py, statack.py, statrep.py (UDP_port rename)
+  settings.py, statack.py, statrep.py (modernized dialogs)
 
 
 10. MENU ACTIVATION (December 2025)
@@ -140,7 +140,7 @@ Summary of Changes and Improvements</h3>
   - Cleaned up js8sms.py: same improvements as js8mail
   - Fixed error messages (was incorrectly saying "email" instead of "phone/SMS")
   - Added APRS SMS info link and service availability warning
-- DISPLAY FILTER: New simplified filter dialog (filter2.py)
+- DISPLAY FILTER: Simplified filter dialog (filter.py)
   - Date range picker (start/end dates)
   - Shows all status colors (green/yellow/red) - no color filtering
   - Removed complex grid filter (now shows all stations)
@@ -168,7 +168,41 @@ Summary of Changes and Improvements</h3>
 - All data refreshes when active group changes
 
 
-13. GIT COMMITS
+13. FILE CLEANUP AND REORGANIZATION (December 2025)
+----------------------------------------------------
+- Renamed modernized files (removed "2" suffix):
+  - commstat2.py → commstat.py
+  - statrep2.py → statrep.py
+  - js8mail2.py → js8mail.py
+  - js8sms2.py → js8sms.py
+  - filter2.py → filter.py
+  - settings2.py → settings.py
+  - commdata2.ui → commdata.ui
+- Replaced USA-32.png/jpg with radiation-32.jpg across all files
+- Moved obsolete files to trash/ folder:
+  - Old versions of renamed files
+  - Unused HTML files (CommStatStatrep, CommStatX-help, statrep-5v-bottom)
+  - Unused PNG files (statrep images, grid.png, CommStatXBeta.png)
+  - Unused code (server.py, heardlist.py, filter.ui)
+- Updated menu labels: "JS8EMAIL" → "JS8 EMAIL", "JS8SMS" → "JS8 SMS"
+- Fixed dialog spacing and font sizes in JS8 EMAIL and JS8 SMS
+- Added window icon to view_statrep.py
+- Cleaned up unused imports and outdated comments
+
+
+14. MODERNIZED DIALOGS
+----------------------
+- StatRep (statrep.py): Complete rewrite with modern QDialog pattern
+  - Auto-populated fields (To, From, Grid, DTG)
+  - Simplified status legend (Green=Normal, Yellow=Limited, Red=Collapsed)
+  - Terminal output on save/transmit
+- JS8 EMAIL (js8mail.py): Modern dialog with proper spacing and styling
+- JS8 SMS (js8sms.py): Modern dialog with phone input mask
+- Filter (filter.py): Simplified date range filter
+- Settings (settings.py): Cleaned up settings dialog
+
+
+15. GIT COMMITS
 ---------------
 - Add commstat.py - rebuilt application with best practices
 - Refactor datareader.py with Python best practices
@@ -182,6 +216,7 @@ Summary of Changes and Improvements</h3>
 - Activate Display Filter menu with simplified dialog
 - Add map position preservation during refresh
 - Add dynamic group management with database storage
+- File cleanup and reorganization
 
 
 
