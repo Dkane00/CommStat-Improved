@@ -10,6 +10,7 @@ Identifies message types by markers and extracts relevant fields.
 
 import os
 import platform
+import re
 import shutil
 import sqlite3
 import sys
@@ -333,32 +334,35 @@ class MessageParser:
     def _process_line(self, line: str) -> None:
         """Process a single line from DIRECTED.TXT."""
         try:
-            # Check if line contains selected group
-            if self.config.selected_group not in line:
-                self._handle_non_group_message(line)
-                return
+            # Extract group from line (format: @GROUPNAME)
+            group = self._extract_group_from_line(line)
 
-            current_group = self.config.selected_group
-
-            # Determine message type and process
+            # Determine message type and process (regardless of group)
             if MSG_BULLETIN in line:
-                self._process_bulletin(line, current_group)
+                self._process_bulletin(line, group)
             elif MSG_FORWARDED_STATREP in line:
-                self._process_forwarded_statrep(line, current_group)
+                self._process_forwarded_statrep(line, group)
             elif MSG_STATREP in line:
-                self._process_statrep(line, current_group)
+                self._process_statrep(line, group)
             elif MSG_MARQUEE in line:
-                self._process_marquee(line, current_group)
+                self._process_marquee(line, group)
             elif MSG_CS_REQUEST in line:
                 self._process_cs_request(line)
             elif MSG_CHECKIN in line:
-                self._process_checkin(line, current_group)
+                self._process_checkin(line, group)
             else:
                 self._handle_unrecognized_message(line)
 
         except IndexError:
             print_red(line.rstrip())
             print(f"Received string failed index criteria, msg not parsed into database\n")
+
+    def _extract_group_from_line(self, line: str) -> str:
+        """Extract group name from message line (e.g., @MAGNET -> MAGNET)."""
+        match = re.search(r'@([A-Z0-9]+)', line)
+        if match:
+            return match.group(1)
+        return ""
 
     def _parse_base_fields(self, line: str) -> Tuple[str, List[str], str]:
         """

@@ -211,11 +211,11 @@ class Ui_FormMarquee:
     def _get_selected_color(self) -> Optional[str]:
         """Get the selected color code, or None if none selected."""
         if self.radioButton_Green.isChecked():
-            return "0"
-        elif self.radioButton_Yellow.isChecked():
             return "1"
-        elif self.radioButton_Red.isChecked():
+        elif self.radioButton_Yellow.isChecked():
             return "2"
+        elif self.radioButton_Red.isChecked():
+            return "3"
         return None
 
     def _validate_input(self, validate_callsign: bool = True) -> Optional[tuple]:
@@ -226,7 +226,7 @@ class Ui_FormMarquee:
         """
         # Get and clean message
         message_raw = self.lineEdit_2.text()
-        message = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", message_raw).upper()
+        message = re.sub(r"[^ -~]+", " ", message_raw).upper()
 
         # Validate callsign if required
         if validate_callsign:

@@ -193,7 +193,7 @@ class Ui_FormBull:
         """
         # Get and clean message
         message_raw = self.lineEdit_2.text()
-        message = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", message_raw)
+        message = re.sub(r"[^ -~]+", " ", message_raw)
 
         # Validate message length
         if len(message) < MIN_MESSAGE_LENGTH:

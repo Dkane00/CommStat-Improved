@@ -74,7 +74,7 @@ FILTER_HEIGHT = 20
 
 # StatRep table column headers
 STATREP_HEADERS = [
-    "Date Time UTC", "ID", "Callsign", "Grid", "Scope", "Map Pin",
+    "Date Time UTC", "Group", "Callsign", "Grid", "Scope", "Map Pin",
     "Powr", "H2O", "Med", "Comm", "Trvl", "Inet", "Fuel", "Food",
     "Crime", "Civil", "Pol", "Remarks"
 ]
@@ -216,9 +216,10 @@ class ConfigManager:
                 'UDP_port': config.get("DIRECTEDCONFIG", "UDP_port", fallback="2442"),
                 'state': config.get("DIRECTEDCONFIG", "state", fallback=""),
                 'hide_heartbeat': config.getboolean("DIRECTEDCONFIG", "hide_heartbeat", fallback=False),
+                'show_all_groups': config.getboolean("DIRECTEDCONFIG", "show_all_groups", fallback=False),
             }
         else:
-            self.directed_config = {'hide_heartbeat': False}
+            self.directed_config = {'hide_heartbeat': False, 'show_all_groups': False}
 
     def _load_filter_settings(self, config: ConfigParser) -> None:
         """Load filter settings section."""
@@ -276,6 +277,22 @@ class ConfigManager:
         with open(self.config_path, 'w') as f:
             config.write(f)
 
+    def get_show_all_groups(self) -> bool:
+        """Get the show all groups setting."""
+        return self.directed_config.get('show_all_groups', False)
+
+    def set_show_all_groups(self, value: bool) -> None:
+        """Set and save the show all groups setting."""
+        self.directed_config['show_all_groups'] = value
+        # Save to config file
+        config = ConfigParser()
+        config.read(self.config_path)
+        if not config.has_section("DIRECTEDCONFIG"):
+            config.add_section("DIRECTEDCONFIG")
+        config.set("DIRECTEDCONFIG", "show_all_groups", str(value))
+        with open(self.config_path, 'w') as f:
+            config.write(f)
+
 
 # =============================================================================
 # DatabaseManager - Handles all database operations
@@ -295,7 +312,7 @@ class DatabaseManager:
 
     def get_statrep_data(
         self,
-        group: str,
+        group: Optional[str],
         start: str,
         end: str
     ) -> List[Tuple]:
@@ -303,7 +320,7 @@ class DatabaseManager:
         Fetch StatRep data from database.
 
         Args:
-            group: Selected group name
+            group: Selected group name, or None for all groups
             start/end: Date range filter
 
         Returns:
@@ -312,28 +329,37 @@ class DatabaseManager:
         try:
             with sqlite3.connect(self.db_path, timeout=10) as connection:
                 cursor = connection.cursor()
-                query = """
-                    SELECT datetime, SRid, callsign, grid, prec, status,
-                           commpwr, pubwtr, med, ota, trav, net,
-                           fuel, food, crime, civil, political, comments
-                    FROM StatRep_Data
-                    WHERE groupname = ?
-                      AND datetime BETWEEN ? AND ?
-                """
-
-                params = [group, start, end]
+                if group:
+                    query = """
+                        SELECT datetime, groupname, callsign, grid, prec, status,
+                               commpwr, pubwtr, med, ota, trav, net,
+                               fuel, food, crime, civil, political, comments
+                        FROM StatRep_Data
+                        WHERE groupname = ?
+                          AND datetime BETWEEN ? AND ?
+                    """
+                    params = [group, start, end]
+                else:
+                    query = """
+                        SELECT datetime, groupname, callsign, grid, prec, status,
+                               commpwr, pubwtr, med, ota, trav, net,
+                               fuel, food, crime, civil, political, comments
+                        FROM StatRep_Data
+                        WHERE datetime BETWEEN ? AND ?
+                    """
+                    params = [start, end]
                 cursor.execute(query, params)
                 return cursor.fetchall()
         except sqlite3.Error as error:
             print(f"Database error: {error}")
             return []
 
-    def get_bulletin_data(self, group: str) -> List[Tuple]:
+    def get_bulletin_data(self, group: Optional[str]) -> List[Tuple]:
         """
         Fetch bulletin data from database.
 
         Args:
-            group: Selected group name
+            group: Selected group name, or None for all groups
 
         Returns:
             List of tuples containing bulletin records
@@ -341,21 +367,26 @@ class DatabaseManager:
         try:
             with sqlite3.connect(self.db_path, timeout=10) as connection:
                 cursor = connection.cursor()
-                cursor.execute(
-                    "SELECT datetime, idnum, callsign, message FROM bulletins_Data WHERE groupid = ?",
-                    [group]
-                )
+                if group:
+                    cursor.execute(
+                        "SELECT datetime, groupid, callsign, message FROM bulletins_Data WHERE groupid = ?",
+                        [group]
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT datetime, groupid, callsign, message FROM bulletins_Data"
+                    )
                 return cursor.fetchall()
         except sqlite3.Error as error:
             print(f"Database error: {error}")
             return []
 
-    def get_latest_marquee(self, group: str) -> Optional[Tuple]:
+    def get_latest_marquee(self, group: Optional[str]) -> Optional[Tuple]:
         """
         Fetch the latest marquee message for a group.
 
         Args:
-            group: Selected group name
+            group: Selected group name, or None for all groups
 
         Returns:
             Tuple containing marquee data or None
@@ -363,10 +394,15 @@ class DatabaseManager:
         try:
             with sqlite3.connect(self.db_path, timeout=10) as connection:
                 cursor = connection.cursor()
-                cursor.execute(
-                    "SELECT idnum, callsign, groupname, date, color, message FROM marquees_data WHERE groupname = ? ORDER BY date DESC LIMIT 1",
-                    [group]
-                )
+                if group:
+                    cursor.execute(
+                        "SELECT idnum, callsign, groupname, date, color, message FROM marquees_data WHERE groupname = ? ORDER BY date DESC LIMIT 1",
+                        [group]
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT idnum, callsign, groupname, date, color, message FROM marquees_data ORDER BY date DESC LIMIT 1"
+                    )
                 return cursor.fetchone()
         except sqlite3.Error as error:
             print(f"Database error: {error}")
@@ -660,6 +696,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menu.addAction(self.hide_heartbeat_action)
         self.actions["hide_heartbeat"] = self.hide_heartbeat_action
 
+        # Add checkable toggle for showing all groups
+        self.show_all_groups_action = QtWidgets.QAction("SHOW ALL GROUPS", self)
+        self.show_all_groups_action.setCheckable(True)
+        self.show_all_groups_action.setChecked(self.config.get_show_all_groups())
+        self.show_all_groups_action.triggered.connect(self._on_toggle_show_all_groups)
+        self.menu.addAction(self.show_all_groups_action)
+        self.actions["show_all_groups"] = self.show_all_groups_action
+
         # Add About, Help, Exit directly to menu bar
         about_action = QtWidgets.QAction("About", self)
         about_action.triggered.connect(self._on_about)
@@ -917,7 +961,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Set headers
         self.bulletin_table.setHorizontalHeaderLabels([
-            "Date Time UTC", "ID", "Callsign", "Bulletin"
+            "Date Time UTC", "Group", "Callsign", "Bulletin"
         ])
 
         # Configure header behavior
@@ -933,7 +977,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _load_bulletin_data(self) -> None:
         """Load bulletin data from database into the table."""
-        group = self.db.get_active_group()
+        group = None if self.config.get_show_all_groups() else self.db.get_active_group()
         data = self.db.get_bulletin_data(group)
 
         # Clear and populate table
@@ -1089,7 +1133,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Load StatRep data from database into the table."""
         # Get filter settings
         filters = self.config.filter_settings
-        group = self.db.get_active_group()
+        group = None if self.config.get_show_all_groups() else self.db.get_active_group()
 
         # Fetch data from database
         data = self.db.get_statrep_data(
@@ -1304,6 +1348,13 @@ class MainWindow(QtWidgets.QMainWindow):
         """Toggle heartbeat message filtering in live feed."""
         self.config.set_hide_heartbeat(checked)
         self._load_live_feed()
+
+    def _on_toggle_show_all_groups(self, checked: bool) -> None:
+        """Toggle showing data from all groups."""
+        self.config.set_show_all_groups(checked)
+        self._load_statrep_data()
+        self._load_bulletin_data()
+        self._load_marquee()
 
     def _on_groups(self) -> None:
         """Open Manage Groups window."""
