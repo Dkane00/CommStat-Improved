@@ -63,12 +63,12 @@ MAX_GROUP_NAME_LENGTH = 15
 DEFAULT_GROUPS = ["MAGNET", "AMRRON", "PREPPERNET"]
 
 # Map and layout dimensions
-MAP_WIDTH = 620
+MAP_WIDTH = 604
 MAP_HEIGHT = 340
 FILTER_HEIGHT = 20
 
 # Map and layout dimensions defaults
-# MAP_WIDTH = 640
+# MAP_WIDTH = 604
 # MAP_HEIGHT = 350
 # FILTER_HEIGHT = 20
 
@@ -142,14 +142,23 @@ def start_local_server(port: int = 8000) -> Optional[int]:
 # =============================================================================
 
 class CustomWebEnginePage(QWebEnginePage):
-    """Handles navigation requests from the map, launching view_statrep.py for statrep links."""
+    """Handles navigation requests from the map and video player."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_widget = parent
 
     def acceptNavigationRequest(self, url, navigation_type, is_main_frame):
-        """Intercept statrep links and launch external viewer."""
+        """Intercept custom URL schemes for statrep links and video events."""
+        url_str = url.toString()
+
+        # Handle video-ended event
+        if url_str == "commstat://video-ended":
+            if hasattr(self.parent_widget, '_on_video_skip'):
+                self.parent_widget._on_video_skip()
+            return False  # Prevent navigation
+
+        # Handle statrep links
         if url.path().startswith("/statrep/"):
             srid = url.path().replace("/statrep/", "").strip()
             if srid:
@@ -217,9 +226,10 @@ class ConfigManager:
                 'state': config.get("DIRECTEDCONFIG", "state", fallback=""),
                 'hide_heartbeat': config.getboolean("DIRECTEDCONFIG", "hide_heartbeat", fallback=False),
                 'show_all_groups': config.getboolean("DIRECTEDCONFIG", "show_all_groups", fallback=False),
+                'hide_map': config.getboolean("DIRECTEDCONFIG", "hide_map", fallback=False),
             }
         else:
-            self.directed_config = {'hide_heartbeat': False, 'show_all_groups': False}
+            self.directed_config = {'hide_heartbeat': False, 'show_all_groups': False, 'hide_map': False}
 
     def _load_filter_settings(self, config: ConfigParser) -> None:
         """Load filter settings section."""
@@ -290,6 +300,22 @@ class ConfigManager:
         if not config.has_section("DIRECTEDCONFIG"):
             config.add_section("DIRECTEDCONFIG")
         config.set("DIRECTEDCONFIG", "show_all_groups", str(value))
+        with open(self.config_path, 'w') as f:
+            config.write(f)
+
+    def get_hide_map(self) -> bool:
+        """Get the hide map setting."""
+        return self.directed_config.get('hide_map', False)
+
+    def set_hide_map(self, value: bool) -> None:
+        """Set and save the hide map setting."""
+        self.directed_config['hide_map'] = value
+        # Save to config file
+        config = ConfigParser()
+        config.read(self.config_path)
+        if not config.has_section("DIRECTEDCONFIG"):
+            config.add_section("DIRECTEDCONFIG")
+        config.set("DIRECTEDCONFIG", "hide_map", str(value))
         with open(self.config_path, 'w') as f:
             config.write(f)
 
@@ -541,6 +567,7 @@ class DatabaseManager:
             return 0
 
 
+
 # =============================================================================
 # MainWindow - Main application window
 # =============================================================================
@@ -703,6 +730,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.show_all_groups_action.triggered.connect(self._on_toggle_show_all_groups)
         self.menu.addAction(self.show_all_groups_action)
         self.actions["show_all_groups"] = self.show_all_groups_action
+
+        # Add checkable toggle for hiding map and showing videos
+        self.hide_map_action = QtWidgets.QAction("HIDE MAP", self)
+        self.hide_map_action.setCheckable(True)
+        self.hide_map_action.setChecked(self.config.get_hide_map())
+        self.hide_map_action.triggered.connect(self._on_toggle_hide_map)
+        self.menu.addAction(self.hide_map_action)
+        self.actions["hide_map"] = self.hide_map_action
 
         # Add About, Help, Exit directly to menu bar
         about_action = QtWidgets.QAction("About", self)
@@ -876,6 +911,33 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Set column stretches: map column fixed, bulletin column stretches
         self.main_layout.setColumnStretch(0, 0)  # Map (fixed)
+
+        # Setup map disabled label (hidden by default)
+        self._setup_map_disabled_label()
+
+        # Apply initial hide_map setting
+        if self.config.get_hide_map():
+            self.map_widget.hide()
+            self.map_disabled_label.show()
+        else:
+            self.map_disabled_label.hide()
+
+    def _setup_map_disabled_label(self) -> None:
+        """Create the 'Map Disabled' label shown when map is hidden."""
+        self.map_disabled_label = QtWidgets.QLabel(self.central_widget)
+        self.map_disabled_label.setFixedSize(MAP_WIDTH, MAP_HEIGHT)
+        self.map_disabled_label.setAlignment(Qt.AlignCenter)
+
+        # Use feed colors
+        bg_color = self.config.get_color('feed_background')
+        fg_color = self.config.get_color('feed_foreground')
+        self.map_disabled_label.setStyleSheet(
+            f"background-color: {bg_color}; color: {fg_color}; font-size: 18px; font-weight: bold;"
+        )
+        self.map_disabled_label.setText("Map Disabled")
+
+        # Add to same layout position as map
+        self.main_layout.addWidget(self.map_disabled_label, 3, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
         self.main_layout.setColumnStretch(1, 1)  # Bulletin (stretches)
 
     def _setup_live_feed(self) -> None:
@@ -1355,6 +1417,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_statrep_data()
         self._load_bulletin_data()
         self._load_marquee()
+
+    def _on_toggle_hide_map(self, checked: bool) -> None:
+        """Toggle between map and disabled label."""
+        self.config.set_hide_map(checked)
+        if checked:
+            self.map_widget.hide()
+            self.map_disabled_label.show()
+        else:
+            self.map_disabled_label.hide()
+            self.map_widget.show()
 
     def _on_groups(self) -> None:
         """Open Manage Groups window."""
