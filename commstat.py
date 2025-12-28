@@ -262,10 +262,28 @@ class ConfigManager:
 
     def _load_colors(self, config: ConfigParser) -> None:
         """Load color scheme from config, using defaults for missing values."""
-        if config.has_section("COLORS"):
-            for key in self.colors:
-                if config.has_option("COLORS", key):
-                    self.colors[key] = config.get("COLORS", key)
+        needs_save = False
+
+        if not config.has_section("COLORS"):
+            config.add_section("COLORS")
+            needs_save = True
+
+        for key in self.colors:
+            if config.has_option("COLORS", key):
+                self.colors[key] = config.get("COLORS", key)
+            else:
+                # Missing key - add default to config
+                config.set("COLORS", key, self.colors[key])
+                needs_save = True
+
+        # Write defaults to config.ini if any were missing
+        if needs_save:
+            try:
+                with open(CONFIG_FILE, 'w') as f:
+                    config.write(f)
+                print("Rebuilt missing colors in config.ini")
+            except IOError as e:
+                print(f"Warning: Could not save colors to config: {e}")
 
     def get_color(self, key: str) -> str:
         """
