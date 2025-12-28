@@ -164,6 +164,17 @@ class StatRepDialog(QDialog):
             print(f"Error reading active group from database: {e}")
         return ""
 
+    def _get_all_groups_from_db(self) -> list:
+        """Get all groups from the database."""
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM Groups ORDER BY name")
+                return [row[0] for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Error reading groups from database: {e}")
+        return []
+
     def _generate_statrep_id(self) -> None:
         """Generate a unique StatRep ID that doesn't exist in the database."""
         self.statrep_id = str(random.randint(100, 999))
@@ -198,15 +209,23 @@ class StatRepDialog(QDialog):
         header_layout = QtWidgets.QHBoxLayout()
         header_layout.setSpacing(15)
 
-        # To (Group)
+        # To (Group) - dropdown with all groups
         to_layout = QtWidgets.QVBoxLayout()
         to_label = QtWidgets.QLabel("To:")
         to_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
-        self.to_field = QtWidgets.QLineEdit(self.selected_group)
-        self.to_field.setReadOnly(True)
-        self.to_field.setStyleSheet("background-color: #e9ecef;")
+        self.to_combo = QtWidgets.QComboBox()
+        self.to_combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        # Populate with all groups
+        all_groups = self._get_all_groups_from_db()
+        for group in all_groups:
+            self.to_combo.addItem(group)
+        # Pre-select active group
+        if self.selected_group:
+            index = self.to_combo.findText(self.selected_group)
+            if index >= 0:
+                self.to_combo.setCurrentIndex(index)
         to_layout.addWidget(to_label)
-        to_layout.addWidget(self.to_field)
+        to_layout.addWidget(self.to_combo)
         header_layout.addLayout(to_layout)
 
         # From (Callsign)
@@ -463,7 +482,7 @@ class StatRepDialog(QDialog):
         ])
 
         # Format: @GROUP ,GRID,SCOPE,ID,STATUSES,REMARKS,{&%}
-        group = f"@{self.selected_group}"
+        group = f"@{self.to_combo.currentText()}"
         message = f"{group} ,{self.grid},{scope_code},{self.statrep_id},{status_str},{remarks},{{&%}}"
 
         return message
@@ -490,7 +509,7 @@ class StatRepDialog(QDialog):
                 """, (
                     date,
                     self.callsign.upper(),
-                    self.selected_group.upper(),
+                    self.to_combo.currentText().upper(),
                     self.grid.upper(),
                     self.statrep_id,
                     scope_text,
@@ -537,7 +556,7 @@ class StatRepDialog(QDialog):
             print(f"STATREP SAVED - {now} UTC")
             print(f"{'='*60}")
             print(f"  ID:       {self.statrep_id}")
-            print(f"  To:       {self.selected_group}")
+            print(f"  To:       {self.to_combo.currentText()}")
             print(f"  From:     {self.callsign}")
             print(f"  Grid:     {self.grid}")
             print(f"  Scope:    {self.scope_combo.currentText()}")
@@ -566,7 +585,7 @@ class StatRepDialog(QDialog):
             print(f"STATREP TRANSMITTED - {now} UTC")
             print(f"{'='*60}")
             print(f"  ID:       {self.statrep_id}")
-            print(f"  To:       {self.selected_group}")
+            print(f"  To:       {self.to_combo.currentText()}")
             print(f"  From:     {self.callsign}")
             print(f"  Grid:     {self.grid}")
             print(f"  Scope:    {self.scope_combo.currentText()}")

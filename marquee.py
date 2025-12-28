@@ -82,6 +82,18 @@ class Ui_FormMarquee:
         self.radioButton_Red.setGeometry(QtCore.QRect(185, 85, 89, 20))
         self.radioButton_Red.setObjectName("radioButton_Red")
 
+        # Group dropdown
+        self.group_label = QtWidgets.QLabel(FormMarquee)
+        self.group_label.setGeometry(QtCore.QRect(300, 55, 60, 20))
+        self.group_label.setFont(font)
+        self.group_label.setText("Group:")
+        self.group_label.setObjectName("group_label")
+
+        self.group_combo = QtWidgets.QComboBox(FormMarquee)
+        self.group_combo.setGeometry(QtCore.QRect(360, 55, 150, 22))
+        self.group_combo.setFont(font)
+        self.group_combo.setObjectName("group_combo")
+
         # Callsign input
         self.label_3 = QtWidgets.QLabel(FormMarquee)
         self.label_3.setGeometry(QtCore.QRect(70, 125, 146, 20))
@@ -192,6 +204,16 @@ class Ui_FormMarquee:
         # Get active group from database (not config.ini)
         self.selected_group = self._get_active_group_from_db()
 
+        # Populate group dropdown
+        all_groups = self._get_all_groups_from_db()
+        for group in all_groups:
+            self.group_combo.addItem(group)
+        # Pre-select active group
+        if self.selected_group:
+            index = self.group_combo.findText(self.selected_group)
+            if index >= 0:
+                self.group_combo.setCurrentIndex(index)
+
     def _get_active_group_from_db(self) -> str:
         """Get the active group from the database."""
         try:
@@ -204,6 +226,17 @@ class Ui_FormMarquee:
         except sqlite3.Error as e:
             print(f"Error reading active group from database: {e}")
         return ""
+
+    def _get_all_groups_from_db(self) -> list:
+        """Get all groups from the database."""
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM Groups ORDER BY name")
+                return [row[0] for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Error reading groups from database: {e}")
+        return []
 
     def _show_error(self, message: str) -> None:
         """Display an error message box."""
@@ -276,7 +309,7 @@ class Ui_FormMarquee:
 
     def _build_message(self, color: str, message: str) -> str:
         """Build the marquee message string for transmission."""
-        group = "@" + self.selected_group
+        group = "@" + self.group_combo.currentText()
         return f"{group} ,{self.marq_id},{color},{message},{{*%}}"
 
     def _save_to_database(self, callsign: str, color: str, message: str) -> None:
@@ -291,10 +324,10 @@ class Ui_FormMarquee:
                 "INSERT OR REPLACE INTO marquees_Data "
                 "(idnum, callsign, groupname, date, color, message) "
                 "VALUES(?, ?, ?, ?, ?, ?)",
-                (self.marq_id, callsign, self.selected_group, date, color, message)
+                (self.marq_id, callsign, self.group_combo.currentText(), date, color, message)
             )
             conn.commit()
-            print(f"{date}, {self.selected_group}, {self.marq_id}, {callsign}, {message}")
+            print(f"{date}, {self.group_combo.currentText()}, {self.marq_id}, {callsign}, {message}")
         finally:
             conn.close()
 
