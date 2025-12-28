@@ -738,7 +738,6 @@ class MainWindow(QtWidgets.QMainWindow):
             ("net_check_in", "NET CHECK IN", self._on_net_check_in),
             ("member_list", "MEMBER LIST", self._on_member_list),
             None,  # Separator
-            ("filter", "DISPLAY FILTER", self._on_filter),
             ("groups", "MANAGE GROUPS", self._on_groups),
             ("settings", "SETTINGS", self._on_settings),
             ("colors", "COLORS", self._on_colors),
@@ -780,6 +779,35 @@ class MainWindow(QtWidgets.QMainWindow):
         self.hide_map_action.triggered.connect(self._on_toggle_hide_map)
         self.menu.addAction(self.hide_map_action)
         self.actions["hide_map"] = self.hide_map_action
+
+        # Create the Filter menu
+        self.filter_menu = QtWidgets.QMenu("Filter", self.menubar)
+        self.menubar.addMenu(self.filter_menu)
+
+        # Add Display Filter option
+        filter_action = QtWidgets.QAction("DISPLAY FILTER", self)
+        filter_action.triggered.connect(self._on_filter)
+        self.filter_menu.addAction(filter_action)
+        self.actions["filter"] = filter_action
+
+        self.filter_menu.addSeparator()
+
+        # Add reset date options
+        reset_1day = QtWidgets.QAction("Reset to 1 day ago", self)
+        reset_1day.triggered.connect(lambda: self._reset_filter_date(1))
+        self.filter_menu.addAction(reset_1day)
+
+        reset_1month = QtWidgets.QAction("Reset to 1 month ago", self)
+        reset_1month.triggered.connect(lambda: self._reset_filter_date(30))
+        self.filter_menu.addAction(reset_1month)
+
+        reset_6months = QtWidgets.QAction("Reset to 6 months ago", self)
+        reset_6months.triggered.connect(lambda: self._reset_filter_date(180))
+        self.filter_menu.addAction(reset_6months)
+
+        reset_1year = QtWidgets.QAction("Reset to 1 year ago", self)
+        reset_1year.triggered.connect(lambda: self._reset_filter_date(365))
+        self.filter_menu.addAction(reset_1year)
 
         # Add About, Help, Exit directly to menu bar
         about_action = QtWidgets.QAction("About", self)
@@ -1798,6 +1826,35 @@ class MainWindow(QtWidgets.QMainWindow):
             self._load_statrep_data()
             # Save map position before refresh, then reload map
             self._save_map_position(callback=self._load_map)
+
+    def _reset_filter_date(self, days_ago: int) -> None:
+        """Reset filter start date to specified days ago and apply."""
+        from datetime import datetime, timedelta
+
+        # Calculate new start date
+        new_start = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+        new_end = "2030-01-01"
+
+        # Update config.ini
+        config = ConfigParser()
+        config.read(CONFIG_FILE)
+
+        if not config.has_section("FILTER"):
+            config.add_section("FILTER")
+
+        config.set("FILTER", "start", new_start)
+        config.set("FILTER", "end", new_end)
+
+        with open(CONFIG_FILE, 'w') as f:
+            config.write(f)
+
+        # Reload config and refresh data
+        self.config = ConfigManager()
+        self._setup_filter_labels()
+        self._load_statrep_data()
+        self._save_map_position(callback=self._load_map)
+
+        print(f"Filter reset: start={new_start}, end={new_end}")
 
     def _on_toggle_heartbeat(self, checked: bool) -> None:
         """Toggle heartbeat message filtering in live feed."""
