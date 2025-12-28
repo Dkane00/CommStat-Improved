@@ -740,7 +740,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.actions[name] = action
 
         # Add checkable toggle for hiding heartbeat messages
-        self.hide_heartbeat_action = QtWidgets.QAction("HIDE HEARTBEAT", self)
+        self.hide_heartbeat_action = QtWidgets.QAction("HIDE CQ & HEARTBEAT", self)
         self.hide_heartbeat_action.setCheckable(True)
         self.hide_heartbeat_action.setChecked(self.config.get_hide_heartbeat())
         self.hide_heartbeat_action.triggered.connect(self._on_toggle_heartbeat)
@@ -1345,9 +1345,11 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             with open(full_path, 'r') as f:
                 lines = f.readlines()
-            # Filter out heartbeat messages if setting is enabled
+            # Filter out heartbeat and CQ messages if setting is enabled
             if self.config.get_hide_heartbeat():
-                lines = [line for line in lines if 'HEARTBEAT' not in line.upper()]
+                lines = [line for line in lines
+                         if 'HEARTBEAT' not in line.upper()
+                         and '@ALLCALL CQ' not in line.upper()]
             # Reverse the lines so newest is at top
             reversed_text = ''.join(reversed(lines))
             self.feed_text.setPlainText(reversed_text)
