@@ -435,18 +435,18 @@ class MessageParser:
         comments = arr2[5] if len(arr2) > 5 else ""
 
         self.cursor.execute(
-            "INSERT OR REPLACE INTO Statrep_Data "
+            "INSERT OR IGNORE INTO Statrep_Data "
             "(datetime, callsign, groupname, grid, SRid, prec, status, commpwr, pubwtr, "
-            "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "med, ota, trav, net, fuel, food, crime, civil, political, comments, source) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (utc, callsign, group, curgrid, srid, prec, fields['status'], fields['commpwr'],
              fields['pubwtr'], fields['med'], fields['ota'], fields['trav'], fields['net'],
-             fields['fuel'], fields['food'], fields['crime'], fields['civil'], fields['pol'], comments)
+             fields['fuel'], fields['food'], fields['crime'], fields['civil'], fields['pol'], comments, "1")
         )
         self.conn.commit()
 
         print_green(line.rstrip())
-        print_green(f"Added StatRep from: {callsign} ID: {srid}")
+        print_green(f"Added StatRep from: {callsign} ID: {srid} (Radio)")
 
     def _process_forwarded_statrep(self, line: str, group: str) -> None:
         """Process a forwarded statrep message."""
@@ -487,18 +487,18 @@ class MessageParser:
         comments = arr2[5] if len(arr2) > 5 else ""
 
         self.cursor.execute(
-            "INSERT OR REPLACE INTO Statrep_Data "
+            "INSERT OR IGNORE INTO Statrep_Data "
             "(datetime, callsign, groupname, grid, SRid, prec, status, commpwr, pubwtr, "
-            "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "med, ota, trav, net, fuel, food, crime, civil, political, comments, source) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (utc, orig_call, group, curgrid, srid, prec, fields['status'], fields['commpwr'],
              fields['pubwtr'], fields['med'], fields['ota'], fields['trav'], fields['net'],
-             fields['fuel'], fields['food'], fields['crime'], fields['civil'], fields['pol'], comments)
+             fields['fuel'], fields['food'], fields['crime'], fields['civil'], fields['pol'], comments, "1")
         )
         self.conn.commit()
 
         print_green(line.rstrip())
-        print_green(f"Added Forwarded StatRep from: {orig_call} ID: {srid}")
+        print_green(f"Added Forwarded StatRep from: {orig_call} ID: {srid} (Radio)")
 
     def _process_marquee(self, line: str, group: str) -> None:
         """Process a marquee message."""

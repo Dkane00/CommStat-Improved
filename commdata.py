@@ -145,10 +145,9 @@ class UI(QMainWindow):
         #print(crossquery)
 
         cur = conn.cursor()
-        #cur.execute("INSERT OR REPLACE INTO StatRep_Data SELECT NULL, datetime, date, T1, freq, SRid, callsign, groupname, grid, prec, status, commpwr, pubwtr, med, ota,"
-        #            " trav, net, fuel, food, crime, civil, political, comments FROM StatRep_Data_temp ")
-
-        test = cur.execute("INSERT OR REPLACE INTO StatRep_Data SELECT NULL, datetime, date, T1, freq, callsign, groupname, grid, SRid, prec, status, commpwr, pubwtr, med, ota, trav, net, fuel, food, crime, civil, political, comments FROM StatRep_Data_temp")
+        # Import from CSV - use INSERT OR IGNORE to avoid overwriting existing records
+        # source column: 1=Radio, 2=Internet
+        test = cur.execute("INSERT OR IGNORE INTO StatRep_Data SELECT NULL, datetime, date, source, freq, callsign, groupname, grid, SRid, prec, status, commpwr, pubwtr, med, ota, trav, net, fuel, food, crime, civil, political, comments FROM StatRep_Data_temp")
         conn.commit()
         #cur.execute("INSERT OR REPLACE INTO StatRep_Data SELECT * FROM StatRep_Data_temp")
         #print(test)

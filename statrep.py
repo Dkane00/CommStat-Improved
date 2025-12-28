@@ -470,8 +470,8 @@ class StatRepDialog(QDialog):
                     INSERT INTO StatRep_Data(
                         datetime, callsign, groupname, grid, SRid, prec,
                         status, commpwr, pubwtr, med, ota, trav, net,
-                        fuel, food, crime, civil, political, comments
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        fuel, food, crime, civil, political, comments, source
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     date,
                     self.callsign.upper(),
@@ -492,6 +492,7 @@ class StatRepDialog(QDialog):
                     values["civil"],
                     values["political"],
                     remarks,
+                    "1",  # source: 1=Radio, 2=Internet
                 ))
                 conn.commit()
         except sqlite3.Error as e:
