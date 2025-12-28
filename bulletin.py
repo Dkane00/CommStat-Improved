@@ -160,12 +160,27 @@ class Ui_FormBull:
             userinfo = config["USERINFO"]
             self.callsign = userinfo.get("callsign", "")
             self.grid = userinfo.get("grid", "")
-            self.selected_group = userinfo.get("selectedgroup", "")
 
         if "DIRECTEDCONFIG" in config:
             systeminfo = config["DIRECTEDCONFIG"]
             self.server_ip = systeminfo.get("server", "127.0.0.1")
             self.server_port = systeminfo.get("UDP_port", "2242")
+
+        # Get active group from database (not config.ini)
+        self.selected_group = self._get_active_group_from_db()
+
+    def _get_active_group_from_db(self) -> str:
+        """Get the active group from the database."""
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM Groups WHERE is_active = 1")
+                result = cursor.fetchone()
+                if result:
+                    return result[0]
+        except sqlite3.Error as e:
+            print(f"Error reading active group from database: {e}")
+        return ""
 
     def _show_error(self, message: str) -> None:
         """Display an error message box."""

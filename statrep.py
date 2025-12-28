@@ -131,7 +131,7 @@ class StatRepDialog(QDialog):
         self._setup_ui()
 
     def _load_config(self) -> None:
-        """Load configuration from config.ini."""
+        """Load configuration from config.ini and database."""
         if not os.path.exists(CONFIG_FILE):
             return
 
@@ -142,12 +142,27 @@ class StatRepDialog(QDialog):
             userinfo = config["USERINFO"]
             self.callsign = userinfo.get("callsign", "")
             self.grid = userinfo.get("grid", "")
-            self.selected_group = userinfo.get("selectedgroup", "")
 
         if "DIRECTEDCONFIG" in config:
             dirconfig = config["DIRECTEDCONFIG"]
             self.server_ip = dirconfig.get("server", "127.0.0.1")
             self.server_port = dirconfig.get("udp_port", "2242")
+
+        # Get active group from database (not config.ini)
+        self.selected_group = self._get_active_group_from_db()
+
+    def _get_active_group_from_db(self) -> str:
+        """Get the active group from the database."""
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM Groups WHERE is_active = 1")
+                result = cursor.fetchone()
+                if result:
+                    return result[0]
+        except sqlite3.Error as e:
+            print(f"Error reading active group from database: {e}")
+        return ""
 
     def _generate_statrep_id(self) -> None:
         """Generate a unique StatRep ID that doesn't exist in the database."""
