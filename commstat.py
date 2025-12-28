@@ -1244,26 +1244,47 @@ class MainWindow(QtWidgets.QMainWindow):
             return None
 
     def _load_slideshow_images(self) -> None:
-        """Load images from remote playlist if available, otherwise local folder."""
+        """Load images with priority: URL > my_images > images > 00-default.png."""
         self.slideshow_items = []
         self.slideshow_index = 0
+        valid_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
 
-        # Fetch remote playlist
+        # Priority 1: Fetch remote playlist
         remote_items = self._fetch_remote_playlist()
 
         if remote_items:
             # Use remote playlist only
             self.slideshow_items.extend(remote_items)
-        else:
-            # No remote playlist - load local images from images folder
-            images_folder = os.path.join(os.getcwd(), "images")
-            if os.path.isdir(images_folder):
-                valid_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
-                files = sorted(os.listdir(images_folder))
-                for filename in files:
-                    if filename.lower().endswith(valid_extensions):
-                        image_path = os.path.join(images_folder, filename)
-                        self.slideshow_items.append((image_path, None))
+            return
+
+        # Priority 2: Check my_images folder
+        my_images_folder = os.path.join(os.getcwd(), "my_images")
+        if os.path.isdir(my_images_folder):
+            files = sorted(os.listdir(my_images_folder))
+            for filename in files:
+                if filename.lower().endswith(valid_extensions):
+                    image_path = os.path.join(my_images_folder, filename)
+                    self.slideshow_items.append((image_path, None))
+
+        if self.slideshow_items:
+            return
+
+        # Priority 3: Check images folder
+        images_folder = os.path.join(os.getcwd(), "images")
+        if os.path.isdir(images_folder):
+            files = sorted(os.listdir(images_folder))
+            for filename in files:
+                if filename.lower().endswith(valid_extensions):
+                    image_path = os.path.join(images_folder, filename)
+                    self.slideshow_items.append((image_path, None))
+
+        if self.slideshow_items:
+            return
+
+        # Priority 4: Use default image
+        default_image = os.path.join(os.getcwd(), "00-default.png")
+        if os.path.isfile(default_image):
+            self.slideshow_items.append((default_image, None))
 
     def _start_slideshow(self) -> None:
         """Start the image slideshow or display playlist message."""
