@@ -47,8 +47,9 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
 **Released:** 6/05/2025
 
 - **Author:** Rich W. Whittington ~KD9DSS  
-- **Repository:**  
-  https://amrron.com/wp-content/uploads/2025/07/Download-2025-07-18T18_31_39.zip  
+- **ZIP Update Package (applies to CommStat 1.0.5 only):**  
+  https://amrron.com/wp-content/uploads/2025/07/Download-2025-07-18T18_31_39.zip 
+
 - **Highlight:** Added the AmRRON StatRep 5.1 form
 
 ---
@@ -57,8 +58,9 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
 **Released:** 11/17/2025
 
 - **Author:** Rich W. Whittington ~KD9DSS  
-- **Repository:**  
-  https://amrron.com/2025/11/17/commstat-v2-3-offline-mapping/  
+- **ZIP Update Package (must be applied after CommStat 2.2.0):**  
+  https://amrron.com/2025/11/17/commstat-v2-3-offline-mapping/
+ 
 - **Highlight:** Introduced Offline Maps
 
 ---
