@@ -1,30 +1,74 @@
-# CommStatOne Version 1.0.5 Released 10/15/2023
-CommStat One Version 1.0.5 add on software for JS8Call groups<br>
-Commstat One is a Python version of the CommStat software <b>designed to run on on Win10 AND Linux</b><br>
-- Author: Daniel M Hurd ~W5DMH
-- Repository: https://github.com/W5DMH/commstatone
-<br><br>
+# CommStat / CommStatOne / CommStat-Improved  
+Situational Awareness Companion Software for JS8Call
 
-# CommStat Version 2.0.0 Released 6/05/2025
-- Author: Rick W Whittington ~KD9DSS
-- Repository: https://amrron.com/wp-content/uploads/2025/07/Download-2025-07-18T18_31_39.zip
-- Highlight: Added the AmRRON StatRep 5.1 form
-<br><br>
+---
 
-# CommStat Version 2.3.0 Released 11/17/2025
-- Author: Rick W Whittington ~KD9DSS
-- Repository: https://amrron.com/2025/11/17/commstat-v2-3-offline-mapping/
-- Highlight: Introduced Offline Maps
-<br><br>
+## Project Context and Intended Use
 
-# CommStat-Improved Version 2.5.0 Released 12/25/2025
-- Author: Manuel G Ochoa ~N0DDK
-- AI Code Assistant: ﻿Claude (Anthropic), ChatGPT (OpenAI)
-<br>
+CommStat and its related projects were created to support **organized HF digital communications** using **JS8Call**, with a focus on situational awareness, structured reporting, and group coordination.
 
-<h3>Project rebuild and modernization effort - December 2025<br>
-Summary of Changes and Improvements</h3>
-<br>
+Over time, these tools have been used by members and participants associated with organizations and communities such as **AmRRON**, **MPURN**, **PREPPERNET**, and other independent emergency communications and preparedness groups.
+
+> **Important Notice**  
+> References to AmRRON, MPURN, PREPPERNET, or any other organization are **historical and descriptive only** and do **not** imply endorsement, sponsorship, or official affiliation unless explicitly stated by those organizations.
+
+---
+
+## Project Lineage Overview
+
+The CommStat ecosystem consists of multiple related projects developed independently over time:
+
+- **CommStat** – Original application concept and implementation  
+- **CommStatOne** – Python-based, cross-platform rewrite  
+- **CommStat-Improved** – Community-driven rebuild and modernization effort  
+
+Each project builds upon earlier ideas while maintaining compatibility with **JS8Call** and its API.
+
+---
+
+# CommStatOne Version 1.0.5  
+**Released:** 10/15/2023
+
+CommStatOne Version 1.0.5 is add-on software for JS8Call groups.  
+CommStatOne is a Python version of the CommStat software **designed to run on Windows 10 and Linux**.
+
+- **Author:** Daniel M. Hurd ~W5DMH  
+- **Credit:** Special credit to **L. Hutchinson (M0IAX), England**, for the *JS8CallAPISupport* script, which enables message transmission.  
+  Additional JS8Call tools: https://github.com/m0iax  
+- **Repository:** https://github.com/W5DMH/commstatone
+
+---
+
+# CommStat Version 2.0.0  
+**Released:** 6/05/2025
+
+- **Author:** Rich W. Whittington ~KD9DSS  
+- **Repository:**  
+  https://amrron.com/wp-content/uploads/2025/07/Download-2025-07-18T18_31_39.zip  
+- **Highlight:** Added the AmRRON StatRep 5.1 form
+
+---
+
+# CommStat Version 2.3.0  
+**Released:** 11/17/2025
+
+- **Author:** Rich W. Whittington ~KD9DSS  
+- **Repository:**  
+  https://amrron.com/2025/11/17/commstat-v2-3-offline-mapping/  
+- **Highlight:** Introduced Offline Maps
+
+---
+
+# CommStat-Improved Version 2.5.0  
+**Released:** 12/25/2025
+
+- **Author:** Manuel G. Ochoa ~N0DDK  
+- **AI Code Assistant:** Claude (Anthropic), ChatGPT (OpenAI)
+
+---
+
+## Project rebuild and modernization effort – December 2025  
+### Summary of Changes and Improvements
 
 1. NEW MAIN APPLICATION
 --------------------------------------
@@ -133,17 +177,8 @@ Summary of Changes and Improvements</h3>
 10. MENU ACTIVATION (December 2025)
 -----------------------------------
 - JS8EMAIL: Send emails via APRS gateway
-  - Cleaned up js8mail.py: removed globals, added helper methods
-  - Added APRS email info link and service availability warning
-  - Fixed "CommStatX" references to "CommStat-Improved"
 - JS8SMS: Send SMS via APRS gateway
-  - Cleaned up js8sms.py: same improvements as js8mail
-  - Fixed error messages (was incorrectly saying "email" instead of "phone/SMS")
-  - Added APRS SMS info link and service availability warning
-- DISPLAY FILTER: Simplified filter dialog (filter.py)
-  - Date range picker (start/end dates)
-  - Shows all status colors (green/yellow/red) - no color filtering
-  - Removed complex grid filter (now shows all stations)
+- DISPLAY FILTER: Simplified filter dialog
 - Removed unused DATA MANAGER menu option
 
 
@@ -156,120 +191,56 @@ Summary of Changes and Improvements</h3>
 12. GROUP MANAGEMENT
 --------------------
 - Groups now stored in database (Groups table) instead of config.ini
-- Unlimited groups supported (previously limited to 2)
+- Unlimited groups supported
 - Group names: max 15 characters, stored in UPPERCASE
 - Default groups seeded on first run: MAGNET, AMRRON, PREPPERNET
-- New "MANAGE GROUPS" menu option with dialog to:
-  - View all groups (active group shown in bold)
-  - Add new groups
-  - Remove groups (cannot remove last group)
-  - Set any group as active
-- Removed group settings from Settings dialog
+- New "MANAGE GROUPS" menu option
 - All data refreshes when active group changes
 
 
 13. FILE CLEANUP AND REORGANIZATION (December 2025)
 ----------------------------------------------------
-- Renamed modernized files (removed "2" suffix):
-  - commstat2.py → commstat.py
-  - statrep2.py → statrep.py
-  - js8mail2.py → js8mail.py
-  - js8sms2.py → js8sms.py
-  - filter2.py → filter.py
-  - settings2.py → settings.py
-  - commdata2.ui → commdata.ui
-- Replaced USA-32.png/jpg with radiation-32.jpg across all files
-- Moved obsolete files to trash/ folder:
-  - Old versions of renamed files
-  - Unused HTML files (CommStatStatrep, CommStatX-help, statrep-5v-bottom)
-  - Unused PNG files (statrep images, grid.png, CommStatXBeta.png)
-  - Unused code (server.py, heardlist.py, filter.ui)
-- Updated menu labels: "JS8EMAIL" → "JS8 EMAIL", "JS8SMS" → "JS8 SMS"
-- Fixed dialog spacing and font sizes in JS8 EMAIL and JS8 SMS
-- Added window icon to view_statrep.py
-- Cleaned up unused imports and outdated comments
+- Renamed modernized files
+- Replaced images and icons
+- Moved obsolete files to trash/
+- Cleaned up UI labels and spacing
 
 
 14. MODERNIZED DIALOGS
 ----------------------
-- StatRep (statrep.py): Complete rewrite with modern QDialog pattern
-  - Auto-populated fields (To, From, Grid, DTG)
-  - Simplified status legend (Green=Normal, Yellow=Limited, Red=Collapsed)
-  - Terminal output on save/transmit
-- JS8 EMAIL (js8mail.py): Modern dialog with proper spacing and styling
-- JS8 SMS (js8sms.py): Modern dialog with phone input mask
-- Filter (filter.py): Simplified date range filter
-- Settings (settings.py): Cleaned up settings dialog
+- StatRep
+- JS8 EMAIL
+- JS8 SMS
+- Filter
+- Settings
 
 
 15. GIT COMMITS
 ---------------
-- Add commstat.py - rebuilt application with best practices
-- Refactor datareader.py with Python best practices
-- Use os.path.join for cross-platform path handling
-- Add psutil to install.py and clean up package installation
-- Add color validation and menu bar styling improvements
-- Add template files and rename port to UDP_port
-- Fix filter labels blocking resize and add datareader call
-- Import datareader as module with timestamp tracking
-- Activate JS8EMAIL and JS8SMS menu options
-- Activate Display Filter menu with simplified dialog
-- Add map position preservation during refresh
-- Add dynamic group management with database storage
-- File cleanup and reorganization
-
-
-
-
-
-
-
-<b>NOTE: ALL USERS MUST RUN INSTALL ON THIS VERSION!<br></b>
-<br>
-
-<b>Commstat One WINDOWS INSTALL PROCEDURE</B>
-<br>
-NOTE : Saavy users can "git clone t"
-<br>
- To install, simply unzip the zipped folder below then: <br>
- <b>Type : cd commstatone <br>
-  Type : python install.py </b> (or use : python3 install.py  if necessary) <br>
- You should get your settings popup, complete the settings then :<br>
- <b>Type : python commstat.py    or    python3 commstat.py (if your system requires python3) <b> NOT commstatx.py this has changed to commstat.py</b> 
-
-<br>
- <br>
- 
-<b>Commstat One LINUX INSTALL PROCEDURE (Mint 20.03 & 21.1 Supported, Pi4 64bit may work)</B><br>
-NOTE : Saavy users can "git clone https://github.com/W5DMH/commstatone.git"<br>
- <b>Type : cd commstatone <br>
- type : chmod +x linuxinstall.sh <br>
- type : ./linuxinstall.sh <br>
- enter your sudo password <br>
- After some installation you should get your settings popup, complete the settings then :<br>
- <b>Type : python commstat.py    or    python3 commstat.py (if your system requires python3) <b> NOT commstatx.py this has changed to commstat.py</b> 
-
-<br><br><br>
-=======
- 
-<h3>Here is a link to the archive file:&nbsp;<a href="https://github.com/W5DMH/commstatone/raw/main/commstatone.zip" target="_blank" rel="noopener">CommStat One 1.0.5 for Win10 & Win11 & Linux </a></h3>
-
-
-
-
-I must give credit to m0iax for his JS8CallAPISupport Script as that is what makes the transmitting possible.See the rest of his JS8Call Tools here : https://github.com/m0iax
-<br>
+- Application rebuild
+- Refactoring and cleanup
+- Feature activation
+- Group management overhaul
+- File reorganization
 
 ---
 
 ## License & Copyright
 
-Copyright (c) 2025 Manuel Ochoa
+Copyright © 2025 Manuel Ochoa
 
-This project is licensed under the GNU General Public License v3.0.
+This project is licensed under the **GNU General Public License v3.0**.
 
-CommStat-Improved is based on CommStatX, originally created by Dan Hurd W5DMH and designed by AmRRON, MPURN and PREPPERNET.
+CommStat-Improved is derived from earlier CommStat projects originally created by **Daniel M. Hurd (W5DMH)** and later expanded by **Rich W. Whittington (KD9DSS)**.  
+The original CommStat design incorporated concepts and workflows developed in collaboration with **AmRRON**, **MPURN**, and **PREPPERNET**.
 
-AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
+References to organizations are **historical and descriptive only**.
 
-For questions, comments or suggestions, email: mochoa@protonmail.com
+AI assistance provided by **Claude (Anthropic)** and **ChatGPT (OpenAI)**.
+
+---
+
+## Contact
+
+For questions, comments, or suggestions:  
+**mochoa@protonmail.com**
