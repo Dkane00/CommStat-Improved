@@ -14,6 +14,7 @@ import sys
 import os
 import io
 import base64
+import socket
 import sqlite3
 import threading
 import subprocess
@@ -98,6 +99,27 @@ _GUCCI = [
 ]
 _BACKBONE = base64.b64decode(_GUCCI[-1]).decode()
 _PING = _BACKBONE + "/playlist.php"
+
+# Internet connectivity check interval (30 minutes in ms)
+INTERNET_CHECK_INTERVAL = 30 * 60 * 1000
+
+
+def check_internet() -> bool:
+    """
+    Check internet connectivity by attempting to connect to DNS servers.
+
+    Returns:
+        True if internet is available, False otherwise.
+    """
+    for host in ("8.8.8.8", "1.1.1.1"):
+        try:
+            sock = socket.create_connection((host, 53), timeout=3)
+            sock.close()
+            return True
+        except (socket.timeout, socket.error):
+            continue
+    return False
+
 
 # Map and layout dimensions defaults
 # MAP_WIDTH = 604
@@ -685,6 +707,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config = config
         self.db = db
 
+        # Internet connectivity state
+        self._internet_available = False
+        self._check_internet_on_startup()
+
         # Initialize JS8Call connector manager and TCP connection pool
         self.connector_manager = ConnectorManager()
         self.connector_manager.init_connectors_table()
@@ -813,8 +839,32 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_live_feed()
         self._load_message_data()
 
-        # Check ping on startup for Force/Skip commands
-        self._check_ping_on_startup()
+        # Check ping on startup for Force/Skip commands (only if internet available)
+        if self._internet_available:
+            self._check_ping_on_startup()
+
+    def _check_internet_on_startup(self) -> None:
+        """Check internet connectivity at startup."""
+        self._internet_available = check_internet()
+        if self._internet_available:
+            print("Internet connectivity: Available")
+        else:
+            print("Internet connectivity: Not available (will retry in 30 minutes)")
+
+    def _retry_internet_check(self) -> None:
+        """Retry internet connectivity check (called by timer)."""
+        was_available = self._internet_available
+        self._internet_available = check_internet()
+
+        if self._internet_available and not was_available:
+            # Internet just became available
+            print("Internet connectivity: Now available")
+            self.internet_timer.stop()
+            # Start ping timer and do initial ping check
+            self.ping_timer.start(60000)
+            self._check_ping_on_startup()
+        elif not self._internet_available:
+            print("Internet connectivity: Still not available (will retry in 30 minutes)")
 
     def _setup_menu(self) -> None:
         """Create the menu bar with all actions."""
@@ -1823,10 +1873,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clock_timer.start(1000)
         self._update_time()  # Initial display
 
-        # Ping timer - runs every 60 seconds
+        # Ping timer - runs every 60 seconds (only when internet available)
         self.ping_timer = QTimer(self)
         self.ping_timer.timeout.connect(self._check_ping)
-        self.ping_timer.start(60000)
+        if self._internet_available:
+            self.ping_timer.start(60000)
+
+        # Internet check timer - retries every 30 minutes if offline
+        self.internet_timer = QTimer(self)
+        self.internet_timer.timeout.connect(self._retry_internet_check)
+        if not self._internet_available:
+            self.internet_timer.start(INTERNET_CHECK_INTERVAL)
 
         # Marquee animation timeline
         self.marquee_timeline = QtCore.QTimeLine()
@@ -1849,6 +1906,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _check_ping(self) -> None:
         """Check playlist for Force command in background."""
+        if not self._internet_available:
+            return
         thread = threading.Thread(target=self._check_ping_for_force_async, daemon=True)
         thread.start()
 
