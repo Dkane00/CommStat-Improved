@@ -49,3 +49,11 @@ data_foreground = #000000
 # Live feed colors
 feed_background = #000000
 feed_foreground = #FFFFFF
+
+[QRZ]
+# QRZ.com XML API credentials for callsign lookups
+# Requires QRZ XML subscription for full data access
+# Set active = False to disable QRZ lookups (auto-disabled on auth failure)
+active = False
+username =
+password =
