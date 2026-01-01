@@ -1,16 +1,20 @@
 [DIRECTEDCONFIG]
-# Path to JS8Call data directory (for file-based operations if any remain)
-path = C:\Users\YourUser\AppData\Local\JS8Call
+# Path to JS8Call data directory (used for live feed display)
+# Windows: C:\Users\YourUser\AppData\Local\JS8Call
+# macOS:   ~/Library/Application Support/JS8Call
+# Linux:   ~/.local/share/JS8Call
+path =
+
 # State abbreviation for display purposes
 state = TX
+
 # Display options
 hide_heartbeat = False
 show_all_groups = False
 hide_map = False
 
-# NOTE: Callsign, grid, server IP, and TCP port are now configured
-# in the JS8 Connectors menu. Use Menu > JS8 CONNECTORS to add/manage
-# connections to JS8Call instances.
+# NOTE: Callsign, grid, and TCP connections are configured in the
+# JS8 CONNECTORS menu (Menu > JS8 CONNECTORS)
 
 [FILTER]
 start = 2024-01-01
