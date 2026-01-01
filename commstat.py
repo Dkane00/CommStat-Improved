@@ -62,7 +62,6 @@ DATABASE_FILE = "traffic.db3"
 
 # Default filter date range
 DEFAULT_FILTER_START = "2023-01-01"
-DEFAULT_FILTER_END = "2030-01-01"
 
 # Group settings
 MAX_GROUP_NAME_LENGTH = 15
@@ -71,7 +70,7 @@ DEFAULT_GROUPS = ["MAGNET", "AMRRON", "PREPPERNET"]
 # Map and layout dimensions
 MAP_WIDTH = 604
 MAP_HEIGHT = 340
-FILTER_HEIGHT = 20
+FILTER_HEIGHT = 24
 SLIDESHOW_INTERVAL = 1  # Minutes between image changes
 PLAYLIST_URL = "https://js8call-improved.com/playlist.php"
 
@@ -252,12 +251,19 @@ class ConfigManager:
             self.directed_config = {'hide_heartbeat': False, 'show_all_groups': False, 'hide_map': False}
 
     def _load_filter_settings(self, config: ConfigParser) -> None:
-        """Load filter settings section."""
-        if config.has_section("FILTER"):
-            self.filter_settings = {
-                'start': config.get("FILTER", "start", fallback=DEFAULT_FILTER_START),
-                'end': config.get("FILTER", "end", fallback=DEFAULT_FILTER_END)
-            }
+        """Load filter settings section.
+
+        Note: Start date is always set to today on startup.
+        End date is empty by default (no upper limit).
+        Users can change both via Display Filter dialog to view historical data.
+        """
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        self.filter_settings = {
+            'start': today,  # Always start from today on launch
+            'end': ''        # No end date by default
+        }
 
     def _load_colors(self, config: ConfigParser) -> None:
         """Load color scheme from config, using defaults for missing values."""
@@ -378,14 +384,15 @@ class DatabaseManager:
         self,
         group: Optional[str],
         start: str,
-        end: str
+        end: str = ''
     ) -> List[Tuple]:
         """
         Fetch StatRep data from database.
 
         Args:
             group: Selected group name, or None for all groups
-            start/end: Date range filter
+            start: Start date filter (required)
+            end: End date filter (optional, empty string means no upper limit)
 
         Returns:
             List of tuples containing StatRep records
@@ -393,25 +400,34 @@ class DatabaseManager:
         try:
             with sqlite3.connect(self.db_path, timeout=10) as connection:
                 cursor = connection.cursor()
-                if group:
-                    query = """
-                        SELECT datetime, groupname, callsign, grid, prec, status,
-                               commpwr, pubwtr, med, ota, trav, net,
-                               fuel, food, crime, civil, political, comments
-                        FROM StatRep_Data
-                        WHERE groupname = ?
-                          AND datetime BETWEEN ? AND ?
-                    """
-                    params = [group, start, end]
+
+                # Build date condition based on whether end date is provided
+                if end:
+                    date_condition = "datetime BETWEEN ? AND ?"
+                    date_params = [start, end]
                 else:
-                    query = """
+                    date_condition = "datetime >= ?"
+                    date_params = [start]
+
+                if group:
+                    query = f"""
                         SELECT datetime, groupname, callsign, grid, prec, status,
                                commpwr, pubwtr, med, ota, trav, net,
                                fuel, food, crime, civil, political, comments
                         FROM StatRep_Data
-                        WHERE datetime BETWEEN ? AND ?
+                        WHERE groupname = ? AND {date_condition}
                     """
-                    params = [start, end]
+                    params = [group] + date_params
+                else:
+                    query = f"""
+                        SELECT datetime, groupname, callsign, grid, prec, status,
+                               commpwr, pubwtr, med, ota, trav, net,
+                               fuel, food, crime, civil, political, comments
+                        FROM StatRep_Data
+                        WHERE {date_condition}
+                    """
+                    params = date_params
+
                 cursor.execute(query, params)
                 return cursor.fetchall()
         except sqlite3.Error as error:
@@ -422,14 +438,15 @@ class DatabaseManager:
         self,
         group: Optional[str],
         start: str,
-        end: str
+        end: str = ''
     ) -> List[Tuple]:
         """
         Fetch bulletin data from database.
 
         Args:
             group: Selected group name, or None for all groups
-            start/end: Date range filter
+            start: Start date filter (required)
+            end: End date filter (optional, empty string means no upper limit)
 
         Returns:
             List of tuples containing bulletin records
@@ -437,20 +454,27 @@ class DatabaseManager:
         try:
             with sqlite3.connect(self.db_path, timeout=10) as connection:
                 cursor = connection.cursor()
-                if group:
-                    cursor.execute(
-                        """SELECT datetime, groupid, callsign, message
-                           FROM bulletins_Data
-                           WHERE groupid = ? AND datetime BETWEEN ? AND ?""",
-                        [group, start, end]
-                    )
+
+                # Build date condition based on whether end date is provided
+                if end:
+                    date_condition = "datetime BETWEEN ? AND ?"
+                    date_params = [start, end]
                 else:
-                    cursor.execute(
-                        """SELECT datetime, groupid, callsign, message
-                           FROM bulletins_Data
-                           WHERE datetime BETWEEN ? AND ?""",
-                        [start, end]
-                    )
+                    date_condition = "datetime >= ?"
+                    date_params = [start]
+
+                if group:
+                    query = f"""SELECT datetime, groupid, callsign, message
+                               FROM bulletins_Data
+                               WHERE groupid = ? AND {date_condition}"""
+                    params = [group] + date_params
+                else:
+                    query = f"""SELECT datetime, groupid, callsign, message
+                               FROM bulletins_Data
+                               WHERE {date_condition}"""
+                    params = date_params
+
+                cursor.execute(query, params)
                 return cursor.fetchall()
         except sqlite3.Error as error:
             print(f"Database error: {error}")
@@ -755,7 +779,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_menu()
         self._setup_header()
         self._setup_statrep_table()
-        self._setup_filter_labels()
+        self._setup_placeholder_area()
         self._setup_map_widget()
         self._setup_live_feed()
         self._setup_bulletin_table()
@@ -1022,28 +1046,22 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add to layout (row 1, spans all columns)
         self.main_layout.addWidget(self.statrep_table, 1, 0, 1, 2)
 
-    def _setup_filter_labels(self) -> None:
-        """Create the filter status labels below the StatRep table."""
-        filters = self.config.filter_settings
+    def _setup_placeholder_area(self) -> None:
+        """Create placeholder area above bulletin (for future use)."""
         fg_color = self.config.get_color('program_foreground')
-        font = QtGui.QFont("Arial", 9)
 
-        # Size policy that allows labels to shrink
+        # Size policy that allows area to shrink
         shrink_policy = QtWidgets.QSizePolicy(
             QtWidgets.QSizePolicy.Ignored,
             QtWidgets.QSizePolicy.Preferred
         )
 
-        # Filter label (date range only) - positioned above bulletin
-        self.label_filter = QtWidgets.QLabel(self.central_widget)
-        self.label_filter.setFont(font)
-        self.label_filter.setStyleSheet(f"color: {fg_color};")
-        self.label_filter.setText(
-            f"Bulletin Filter:   Start Date: {filters.get('start', '')}  |  End Date: {filters.get('end', '')}"
-        )
-        self.label_filter.setSizePolicy(shrink_policy)
-        self.label_filter.setFixedHeight(FILTER_HEIGHT)
-        self.main_layout.addWidget(self.label_filter, 3, 1, 1, 1)
+        self.placeholder_area = QtWidgets.QLabel(self.central_widget)
+        self.placeholder_area.setStyleSheet(f"color: {fg_color};")
+        self.placeholder_area.setText("")
+        self.placeholder_area.setSizePolicy(shrink_policy)
+        self.placeholder_area.setFixedHeight(FILTER_HEIGHT)
+        self.main_layout.addWidget(self.placeholder_area, 3, 1, 1, 1)
 
     def _setup_map_widget(self) -> None:
         """Create the map widget using QWebEngineView."""
@@ -1564,7 +1582,7 @@ class MainWindow(QtWidgets.QMainWindow):
         data = self.db.get_bulletin_data(
             group=group,
             start=filters.get('start', DEFAULT_FILTER_START),
-            end=filters.get('end', DEFAULT_FILTER_END)
+            end=filters.get('end', '')
         )
 
         # Clear and populate table
@@ -1604,7 +1622,7 @@ class MainWindow(QtWidgets.QMainWindow):
             data = self.db.get_statrep_data(
                 group=group,
                 start=filters.get('start', DEFAULT_FILTER_START),
-                end=filters.get('end', DEFAULT_FILTER_END)
+                end=filters.get('end', '')
             )
 
             gridlist = []
@@ -1726,7 +1744,7 @@ class MainWindow(QtWidgets.QMainWindow):
         data = self.db.get_statrep_data(
             group=group,
             start=filters.get('start', DEFAULT_FILTER_START),
-            end=filters.get('end', DEFAULT_FILTER_END)
+            end=filters.get('end', '')
         )
 
         # Clear and populate table
@@ -1917,11 +1935,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_filter(self) -> None:
         """Open Display Filter window."""
-        dialog = FilterDialog(self)
+        dialog = FilterDialog(self.config.filter_settings, self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            # Reload config and refresh data
-            self.config = ConfigManager()
-            self._setup_filter_labels()
+            # Update filter settings directly
+            self.config.filter_settings = dialog.get_filters()
+            # Refresh data with new filters
             self._load_statrep_data()
             self._load_bulletin_data()
             # Save map position before refresh, then reload map
@@ -1933,29 +1951,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Calculate new start date
         new_start = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
-        new_end = "2030-01-01"
 
-        # Update config.ini
-        config = ConfigParser()
-        config.read(CONFIG_FILE)
+        # Update in-memory filter settings
+        self.config.filter_settings = {
+            'start': new_start,
+            'end': ''  # No end date
+        }
 
-        if not config.has_section("FILTER"):
-            config.add_section("FILTER")
-
-        config.set("FILTER", "start", new_start)
-        config.set("FILTER", "end", new_end)
-
-        with open(CONFIG_FILE, 'w') as f:
-            config.write(f)
-
-        # Reload config and refresh data
-        self.config = ConfigManager()
-        self._setup_filter_labels()
+        # Refresh data with new filters
         self._load_statrep_data()
         self._load_bulletin_data()
         self._save_map_position(callback=self._load_map)
 
-        print(f"Filter reset: start={new_start}, end={new_end}")
+        print(f"Filter reset: start={new_start}")
 
     def _on_toggle_heartbeat(self, checked: bool) -> None:
         """Toggle heartbeat message filtering in live feed."""
@@ -2363,8 +2371,64 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
     def _on_tools(self) -> None:
-        """Tools menu placeholder."""
-        pass
+        """Show Solar Conditions dialog."""
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Solar Conditions")
+        dialog.setMinimumSize(480, 200)
+        dialog.setWindowFlags(
+            Qt.Window |
+            Qt.CustomizeWindowHint |
+            Qt.WindowTitleHint |
+            Qt.WindowCloseButtonHint
+        )
+
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Image label
+        image_label = QtWidgets.QLabel("Loading solar conditions...")
+        image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(image_label)
+
+        # Link label
+        link_label = QtWidgets.QLabel(
+            '<a href="https://www.hamqsl.com/solar.html">View full solar data at hamqsl.com</a>'
+        )
+        link_label.setOpenExternalLinks(True)
+        link_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(link_label)
+
+        # Close button
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.clicked.connect(dialog.close)
+        layout.addWidget(close_btn, alignment=Qt.AlignCenter)
+
+        # Fetch image in background
+        def fetch_image():
+            try:
+                url = "https://www.hamqsl.com/solarmuf.php"
+                request = urllib.request.Request(url, headers={'User-Agent': 'CommStat-Improved/2.5'})
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    data = response.read()
+                    pixmap = QtGui.QPixmap()
+                    pixmap.loadFromData(data)
+                    # Update UI from main thread
+                    QtCore.QMetaObject.invokeMethod(
+                        image_label, "setPixmap",
+                        Qt.QueuedConnection,
+                        QtCore.Q_ARG(QtGui.QPixmap, pixmap)
+                    )
+            except Exception as e:
+                QtCore.QMetaObject.invokeMethod(
+                    image_label, "setText",
+                    Qt.QueuedConnection,
+                    QtCore.Q_ARG(str, f"Failed to load solar data: {e}")
+                )
+
+        thread = threading.Thread(target=fetch_image, daemon=True)
+        thread.start()
+
+        dialog.exec_()
 
     def _on_about(self) -> None:
         """Open About window."""

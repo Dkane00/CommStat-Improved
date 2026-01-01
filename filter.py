@@ -8,8 +8,6 @@ Display Filter Dialog for CommStat-Improved
 Filter StatRep and map data by date range.
 """
 
-import os
-from configparser import ConfigParser
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtWidgets import (
@@ -21,8 +19,11 @@ from PyQt5.QtWidgets import (
 class FilterDialog(QDialog):
     """Simple filter dialog for date range."""
 
-    def __init__(self, parent=None):
+    def __init__(self, current_filters: dict = None, parent=None):
         super().__init__(parent)
+        self.current_filters = current_filters or {}
+        self.result_filters = {}
+
         self.setWindowTitle("CommStat-Improved Display Filter")
         self.setFixedSize(400, 150)
         self.setWindowFlags(
@@ -45,7 +46,7 @@ class FilterDialog(QDialog):
         self.setFont(font)
 
         self._setup_ui()
-        self._load_config()
+        self._load_from_current()
 
     def _setup_ui(self) -> None:
         """Setup the UI layout."""
@@ -89,48 +90,36 @@ class FilterDialog(QDialog):
 
         layout.addLayout(button_layout)
 
-    def _load_config(self) -> None:
-        """Load current filter settings from config.ini."""
+    def _load_from_current(self) -> None:
+        """Load current filter settings into the dialog."""
         # Set defaults
-        self.start_date.setDate(QDate(2023, 1, 1))
+        self.start_date.setDate(QDate.currentDate())
         self.end_date.setDate(QDate(2030, 12, 31))
 
-        if not os.path.exists("config.ini"):
-            return
-
-        config = ConfigParser()
-        config.read("config.ini")
-
-        if "FILTER" in config:
-            filters = config["FILTER"]
-
-            # Parse start date
-            start_str = filters.get("start", "2023-01-01")
+        # Load from current filters if provided
+        start_str = self.current_filters.get('start', '')
+        if start_str:
             start_date = QDate.fromString(start_str[:10], "yyyy-MM-dd")
             if start_date.isValid():
                 self.start_date.setDate(start_date)
 
-            # Parse end date
-            end_str = filters.get("end", "2030-12-31")
+        end_str = self.current_filters.get('end', '')
+        if end_str:
             end_date = QDate.fromString(end_str[:10], "yyyy-MM-dd")
             if end_date.isValid():
                 self.end_date.setDate(end_date)
 
     def _save_filter(self) -> None:
-        """Save filter settings to config.ini."""
-        config = ConfigParser()
-        if os.path.exists("config.ini"):
-            config.read("config.ini")
-
-        config["FILTER"] = {
-            "start": self.start_date.date().toString("yyyy-MM-dd"),
-            "end": self.end_date.date().toString("yyyy-MM-dd")
+        """Save filter settings and close dialog."""
+        self.result_filters = {
+            'start': self.start_date.date().toString("yyyy-MM-dd"),
+            'end': self.end_date.date().toString("yyyy-MM-dd")
         }
-
-        with open("config.ini", "w") as f:
-            config.write(f)
-
         self.accept()
+
+    def get_filters(self) -> dict:
+        """Return the selected filter settings."""
+        return self.result_filters
 
 
 if __name__ == "__main__":

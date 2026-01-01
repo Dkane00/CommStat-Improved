@@ -10,9 +10,8 @@ hide_map = False
 # NOTE: Callsign, grid, and TCP connections are configured in the
 # JS8 CONNECTORS menu (Menu > JS8 CONNECTORS)
 
-[FILTER]
-start = 2024-01-01
-end = 2030-12-31
+# NOTE: Filter start date is automatically set to today on startup.
+# Use Display Filter menu to view historical data.
 
 [COLORS]
 # Color of overall program
