@@ -22,7 +22,7 @@ program_foreground = #FFFFFF
 menu_background = #3050CC
 menu_foreground = #FFFFFF
 
-# Table header colors (StatRep Data & Bulletins)
+# Table header colors (StatRep Data & Messages)
 title_bar_background = #EE4400
 title_bar_foreground = #FFFFFF
 
@@ -42,7 +42,7 @@ condition_yellow = #FFFF77
 condition_red = #BB0000
 condition_gray = #808080
 
-# StatRep and Bulletin data colors
+# StatRep and Message data colors
 data_background = #EEEEEE
 data_foreground = #000000
 

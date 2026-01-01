@@ -36,7 +36,7 @@ MSG_CHECKIN = "{~%}"
 MSG_CS_REQUEST = "CS?"
 
 # Field count requirements for each message type
-FIELD_COUNT_BULLETIN = 9
+FIELD_COUNT_MESSAGE = 9
 FIELD_COUNT_STATREP = 12
 FIELD_COUNT_FORWARDED_STATREP = 13
 FIELD_COUNT_MARQUEE = 10
@@ -332,7 +332,7 @@ class MessageParser:
 
             # Determine message type and process (regardless of group)
             if MSG_BULLETIN in line:
-                self._process_bulletin(line, group)
+                self._process_message(line, group)
             elif MSG_FORWARDED_STATREP in line:
                 self._process_forwarded_statrep(line, group)
             elif MSG_STATREP in line:
@@ -370,8 +370,8 @@ class MessageParser:
         callsign = self.extract_callsign(arr2[0])
         return utc, arr2, callsign
 
-    def _process_bulletin(self, line: str, group: str) -> None:
-        """Process a bulletin message."""
+    def _process_message(self, line: str, group: str) -> None:
+        """Process a message (JS8Call message type)."""
         arr = line.split('\t')
         utc = arr[0]
         callsignmix = arr[4]
@@ -379,22 +379,22 @@ class MessageParser:
 
         # Validate field count
         count = len(arr) + len(arr2)
-        if count != FIELD_COUNT_BULLETIN:
+        if count != FIELD_COUNT_MESSAGE:
             return
 
         id_num = arr2[1]
         callsign = self.extract_callsign(arr2[0])
-        bulletin = arr2[2]
+        msg_content = arr2[2]
 
         self.cursor.execute(
-            "INSERT OR REPLACE INTO bulletins_Data (datetime, idnum, groupid, callsign, message) "
+            "INSERT OR REPLACE INTO messages_Data (datetime, idnum, groupid, callsign, message) "
             "VALUES(?, ?, ?, ?, ?)",
-            (utc, id_num, group, callsign, bulletin)
+            (utc, id_num, group, callsign, msg_content)
         )
         self.conn.commit()
 
         print_green(line.rstrip())
-        print_green(f"Added Bulletin from: {callsign} ID: {id_num}")
+        print_green(f"Added Message from: {callsign} ID: {id_num}")
         print_yellow(f"Attempting to add callsign: {callsign} to members list")
 
     def _process_statrep(self, line: str, group: str) -> None:

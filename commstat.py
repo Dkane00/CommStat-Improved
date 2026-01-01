@@ -7,7 +7,7 @@
 CommStat-Improved v2.5.0 - Rebuilt with best practices
 
 A PyQt5 application for monitoring JS8Call communications,
-displaying status reports, bulletins, and live data feeds.
+displaying status reports, messages, and live data feeds.
 """
 
 import sys
@@ -43,7 +43,7 @@ from groups import GroupsDialog
 from js8mail import JS8MailDialog
 from js8sms import JS8SMSDialog
 from marquee import Ui_FormMarquee
-from bulletin import Ui_FormBull
+from message import Ui_FormMessage
 from statrep import StatRepDialog
 from connector_manager import ConnectorManager
 from js8_tcp_client import TCPConnectionPool
@@ -435,14 +435,14 @@ class DatabaseManager:
             print(f"Database error: {error}")
             return []
 
-    def get_bulletin_data(
+    def get_message_data(
         self,
         group: Optional[str],
         start: str,
         end: str = ''
     ) -> List[Tuple]:
         """
-        Fetch bulletin data from database.
+        Fetch message data from database.
 
         Args:
             group: Selected group name, or None for all groups
@@ -450,7 +450,7 @@ class DatabaseManager:
             end: End date filter (optional, empty string means no upper limit)
 
         Returns:
-            List of tuples containing bulletin records
+            List of tuples containing message records
         """
         try:
             with sqlite3.connect(self.db_path, timeout=10) as connection:
@@ -466,12 +466,12 @@ class DatabaseManager:
 
                 if group:
                     query = f"""SELECT datetime, groupid, callsign, message
-                               FROM bulletins_Data
+                               FROM messages_Data
                                WHERE groupid = ? AND {date_condition}"""
                     params = [group] + date_params
                 else:
                     query = f"""SELECT datetime, groupid, callsign, message
-                               FROM bulletins_Data
+                               FROM messages_Data
                                WHERE {date_condition}"""
                     params = date_params
 
@@ -775,7 +775,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_layout.setRowStretch(1, 1)  # StatRep table (50%)
         self.main_layout.setRowStretch(2, 1)  # Feed text (50%)
         self.main_layout.setRowStretch(3, 0)  # Map row 1 / Filter (fixed)
-        self.main_layout.setRowStretch(4, 0)  # Map row 2 / Bulletin (fixed)
+        self.main_layout.setRowStretch(4, 0)  # Map row 2 / Messages (fixed)
 
         # Setup components
         self._setup_menu()
@@ -784,7 +784,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_placeholder_area()
         self._setup_map_widget()
         self._setup_live_feed()
-        self._setup_bulletin_table()
+        self._setup_message_table()
         self._setup_timers()
 
         # Load initial data
@@ -792,7 +792,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_marquee()
         self._load_map()
         self._load_live_feed()
-        self._load_bulletin_data()
+        self._load_message_data()
 
         # Check playlist on startup for Force/Skip commands
         self._check_playlist_on_startup()
@@ -832,7 +832,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Define menu actions: (name, text, handler)
         menu_items = [
             ("statrep", "STATREP", self._on_statrep),
-            ("flash_bulletin", "FLASH BULLETIN", self._on_flash_bulletin),
+            ("send_message", "SEND MESSAGE", self._on_send_message),
             ("new_marquee", "NEW MARQUEE", self._on_new_marquee),
             ("js8email", "JS8 EMAIL", self._on_js8email),
             ("js8sms", "JS8 SMS", self._on_js8sms),
@@ -1049,7 +1049,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_layout.addWidget(self.statrep_table, 1, 0, 1, 2)
 
     def _setup_placeholder_area(self) -> None:
-        """Create placeholder area above bulletin (for future use)."""
+        """Create placeholder area above message table (for future use)."""
         fg_color = self.config.get_color('program_foreground')
 
         # Size policy that allows area to shrink
@@ -1078,7 +1078,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add to layout (row 3-4, column 0 only, spanning 2 rows)
         self.main_layout.addWidget(self.map_widget, 3, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
 
-        # Set column stretches: map column fixed, bulletin column stretches
+        # Set column stretches: map column fixed, message column stretches
         self.main_layout.setColumnStretch(0, 0)  # Map (fixed)
 
         # Setup map disabled label (hidden by default)
@@ -1524,12 +1524,12 @@ class MainWindow(QtWidgets.QMainWindow):
         # Join messages (already in newest-first order)
         self.feed_text.setPlainText('\n'.join(messages))
 
-    def _setup_bulletin_table(self) -> None:
-        """Create the bulletin data table."""
-        self.bulletin_table = QtWidgets.QTableWidget(self.central_widget)
-        self.bulletin_table.setObjectName("bulletinTable")
-        self.bulletin_table.setColumnCount(4)
-        self.bulletin_table.setRowCount(0)
+    def _setup_message_table(self) -> None:
+        """Create the message data table."""
+        self.message_table = QtWidgets.QTableWidget(self.central_widget)
+        self.message_table.setObjectName("messageTable")
+        self.message_table.setColumnCount(4)
+        self.message_table.setRowCount(0)
 
         # Apply styling
         title_bg = self.config.get_color('title_bar_background')
@@ -1537,7 +1537,7 @@ class MainWindow(QtWidgets.QMainWindow):
         data_bg = self.config.get_color('data_background')
         data_fg = self.config.get_color('data_foreground')
 
-        self.bulletin_table.setStyleSheet(f"""
+        self.message_table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: {data_bg};
                 color: {data_fg};
@@ -1552,7 +1552,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
 
         # Explicitly style the horizontal header
-        self.bulletin_table.horizontalHeader().setStyleSheet(f"""
+        self.message_table.horizontalHeader().setStyleSheet(f"""
             QHeaderView::section {{
                 background-color: {title_bg};
                 color: {title_fg};
@@ -1562,41 +1562,41 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
 
         # Set headers
-        self.bulletin_table.setHorizontalHeaderLabels([
-            "Date Time UTC", "Group", "Callsign", "Bulletin"
+        self.message_table.setHorizontalHeaderLabels([
+            "Date Time UTC", "Group", "Callsign", "Message"
         ])
 
         # Configure header behavior
-        header = self.bulletin_table.horizontalHeader()
+        header = self.message_table.horizontalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
         header.setStretchLastSection(True)
-        self.bulletin_table.verticalHeader().setVisible(False)
-        self.bulletin_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.bulletin_table.setFixedHeight(MAP_HEIGHT - FILTER_HEIGHT)
+        self.message_table.verticalHeader().setVisible(False)
+        self.message_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.message_table.setFixedHeight(MAP_HEIGHT - FILTER_HEIGHT)
 
         # Add to layout (row 4, column 1)
-        self.main_layout.addWidget(self.bulletin_table, 4, 1, 1, 1)
+        self.main_layout.addWidget(self.message_table, 4, 1, 1, 1)
 
-    def _load_bulletin_data(self) -> None:
-        """Load bulletin data from database into the table."""
+    def _load_message_data(self) -> None:
+        """Load message data from database into the table."""
         filters = self.config.filter_settings
         group = None if self.config.get_show_all_groups() else self.db.get_active_group()
-        data = self.db.get_bulletin_data(
+        data = self.db.get_message_data(
             group=group,
             start=filters.get('start', DEFAULT_FILTER_START),
             end=filters.get('end', '')
         )
 
         # Clear and populate table
-        self.bulletin_table.setRowCount(0)
+        self.message_table.setRowCount(0)
         for row_num, row_data in enumerate(data):
-            self.bulletin_table.insertRow(row_num)
+            self.message_table.insertRow(row_num)
             for col_num, value in enumerate(row_data):
                 item = QTableWidgetItem(str(value) if value is not None else "")
-                self.bulletin_table.setItem(row_num, col_num, item)
+                self.message_table.setItem(row_num, col_num, item)
 
         # Sort by datetime descending
-        self.bulletin_table.sortItems(0, QtCore.Qt.DescendingOrder)
+        self.message_table.sortItems(0, QtCore.Qt.DescendingOrder)
 
     def _load_map(self) -> None:
         """Generate and display the folium map with StatRep pins."""
@@ -1805,10 +1805,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.marquee_chars = 0
 
     def _refresh_data(self) -> None:
-        """Refresh StatRep, bulletin data, and map from database."""
+        """Refresh StatRep, message data, and map from database."""
         # Reload data from database (TCP handler inserts data directly)
         self._load_statrep_data()
-        self._load_bulletin_data()
+        self._load_message_data()
 
         # Save map position before refresh, then reload map
         self._save_map_position(callback=self._load_map)
@@ -1928,10 +1928,10 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.ui.setupUi(dialog)
         dialog.exec_()
 
-    def _on_flash_bulletin(self) -> None:
-        """Open Flash Bulletin window."""
+    def _on_send_message(self) -> None:
+        """Open Send Message window."""
         dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormBull(self.tcp_pool, self.connector_manager)
+        dialog.ui = Ui_FormMessage(self.tcp_pool, self.connector_manager)
         dialog.ui.setupUi(dialog)
         dialog.exec_()
 
@@ -1943,7 +1943,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.config.filter_settings = dialog.get_filters()
             # Refresh data with new filters
             self._load_statrep_data()
-            self._load_bulletin_data()
+            self._load_message_data()
             # Save map position before refresh, then reload map
             self._save_map_position(callback=self._load_map)
 
@@ -1962,7 +1962,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Refresh data with new filters
         self._load_statrep_data()
-        self._load_bulletin_data()
+        self._load_message_data()
         self._save_map_position(callback=self._load_map)
 
         print(f"Filter reset: start={new_start}")
@@ -1976,7 +1976,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Toggle showing data from all groups."""
         self.config.set_show_all_groups(checked)
         self._load_statrep_data()
-        self._load_bulletin_data()
+        self._load_message_data()
         self._load_marquee()
 
     def _on_toggle_hide_map(self, checked: bool) -> None:
@@ -2000,7 +2000,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._update_active_group_label()
         # Refresh data for new group
         self._load_statrep_data()
-        self._load_bulletin_data()
+        self._load_message_data()
         self._load_marquee()
         self._save_map_position(callback=self._load_map)
 
@@ -2102,8 +2102,8 @@ class MainWindow(QtWidgets.QMainWindow):
             if data_type == "statrep":
                 self._load_statrep_data()
                 self._save_map_position(callback=self._load_map)
-            elif data_type == "bulletin":
-                self._load_bulletin_data()
+            elif data_type == "message":
+                self._load_message_data()
             elif data_type == "marquee":
                 self._load_marquee()
             elif data_type == "checkin":
@@ -2166,7 +2166,7 @@ class MainWindow(QtWidgets.QMainWindow):
             utc: UTC timestamp string.
 
         Returns:
-            Message type string ("statrep", "bulletin", "marquee", "checkin") or empty string.
+            Message type string ("statrep", "message", "marquee", "checkin") or empty string.
         """
         import re
         import maidenhead as mh
@@ -2201,24 +2201,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Determine message type and process
             if MSG_BULLETIN in value:
-                # Parse bulletin: {^%} ID,MESSAGE
+                # Parse message: {^%} ID,MESSAGE
                 match = re.search(r'\{\^\%\}\s*(.+)', value)
                 if match:
                     fields = match.group(1).split(",")
                     if len(fields) >= 2:
                         id_num = fields[0].strip()
-                        bulletin = ",".join(fields[1:]).strip()
+                        message_text = ",".join(fields[1:]).strip()
 
                         cursor.execute(
-                            "INSERT OR REPLACE INTO bulletins_Data "
+                            "INSERT OR REPLACE INTO messages_Data "
                             "(datetime, idnum, groupid, callsign, message, frequency) "
                             "VALUES(?, ?, ?, ?, ?, ?)",
-                            (utc, id_num, group, callsign, bulletin, freq)
+                            (utc, id_num, group, callsign, message_text, freq)
                         )
                         conn.commit()
-                        print(f"\033[92m[{rig_name}] Added Bulletin from: {callsign} ID: {id_num}\033[0m")
+                        print(f"\033[92m[{rig_name}] Added Message from: {callsign} ID: {id_num}\033[0m")
                         conn.close()
-                        return "bulletin"
+                        return "message"
 
             elif MSG_FORWARDED_STATREP in value:
                 # Parse forwarded statrep: {F%} GRID,PREC,SRID,SRCODE,COMMENTS,ORIG_CALL

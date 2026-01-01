@@ -697,8 +697,8 @@ class Ui_Form_Net_Manager(object):
 
         print("NETMANAGER load check ins complete")
 
-        #print("Load Bulletins & Marquee Completed")
-        #QtCore.QTimer.singleShot(30000, self.loadbulletins)
+        #print("Load Messages & Marquee Completed")
+        #QtCore.QTimer.singleShot(30000, self.loadmessages)
 
 
 

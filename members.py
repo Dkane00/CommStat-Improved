@@ -258,8 +258,8 @@ class Ui_FormMembers(object):
         self.tableWidget.sortItems(0, QtCore.Qt.DescendingOrder)
         self.gridLayout.addWidget(self.tableWidget, 2, 1, 1, 3)
 
-        #print("Load Bulletins & Marquee Completed")
-        #QtCore.QTimer.singleShot(30000, self.loadbulletins)
+        #print("Load Messages & Marquee Completed")
+        #QtCore.QTimer.singleShot(30000, self.loadmessages)
 
 
 

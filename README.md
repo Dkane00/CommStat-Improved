@@ -88,7 +88,7 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
 - Color validation with fallback to defaults for invalid config values
 - Menu bar styling with configurable colors and centered text
 - Filter labels use size policy to allow window resizing
-- 20-second auto-refresh for StatRep, bulletins, live feed, and map
+- 20-second auto-refresh for StatRep, messages, live feed, and map
 
 2. DATAREADER REFACTORING (datareader.py)
 -----------------------------------------
@@ -167,7 +167,7 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
 - config.ini.template (NEW)
 - traffic.db3.template (NEW)
 - .gitignore (updated)
-- bulletin.py, checkin.py, csresponder.py, filter.py,
+- message.py, checkin.py, csresponder.py, filter.py,
   js8mail.py, js8sms.py, marquee.py, members.py, netmanager.py,
   settings.py, statack.py, statrep.py (modernized dialogs)
 
@@ -224,10 +224,10 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
 - Connector configuration stored in database (js8_connectors table)
 - Server IP hardcoded to 127.0.0.1 (localhost)
 - Callsign and grid fetched automatically from JS8Call via API
-- Frequency stored in database when sending StatRep, Bulletin, or Marquee
+- Frequency stored in database when sending StatRep, Message, or Marquee
 - Rig dropdown added to all transmit dialogs:
   - StatRep
-  - Bulletin
+  - Message
   - Marquee
   - JS8 Email
   - JS8 SMS
@@ -242,7 +242,7 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
 - Replaced 20-second polling with event-driven updates
 - UI refreshes immediately when data is received via TCP:
   - StatRep received → StatRep table + map refresh
-  - Bulletin received → Bulletin table refresh
+  - Message received → Message table refresh
   - Marquee received → Marquee banner refresh
   - Check-in received → Map refresh
 - Playlist check moved to 60-second interval
