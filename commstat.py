@@ -2035,16 +2035,17 @@ class MainWindow(QtWidgets.QMainWindow):
             to_call = params.get("TO", "")
             grid = params.get("GRID", "")
             freq = params.get("FREQ", 0)
+            offset = params.get("OFFSET", 0)
             snr = params.get("SNR", 0)
             utc_ms = params.get("UTC", 0)
 
             # Convert UTC milliseconds to datetime string
             utc_str = datetime.utcfromtimestamp(utc_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
 
-            # Format feed line similar to DIRECTED.TXT format
-            # Format: UTC  SNR  FREQ  FROM: VALUE
-            freq_khz = freq / 1000 if freq else 0
-            feed_line = f"{utc_str}\t{snr:+d}\t{freq_khz:.1f}\t{from_call}: {value}"
+            # Format feed line to match DIRECTED.TXT format:
+            # DATETIME    FREQ_MHZ    OFFSET    SNR    CALLSIGN: MESSAGE
+            freq_mhz = freq / 1000000 if freq else 0
+            feed_line = f"{utc_str}    {freq_mhz:.6f}    {offset:04d}    {snr:+03d}    {from_call}: {value}"
 
             # Add to feed buffer (newest first)
             self._add_to_feed(feed_line, rig_name)
@@ -2063,13 +2064,14 @@ class MainWindow(QtWidgets.QMainWindow):
         elif msg_type == "RX.ACTIVITY":
             from_call = params.get("FROM", "")
             freq = params.get("FREQ", 0)
+            offset = params.get("OFFSET", 0)
             snr = params.get("SNR", 0)
             utc_ms = params.get("UTC", 0)
 
             if value and from_call:
                 utc_str = datetime.utcfromtimestamp(utc_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
-                freq_khz = freq / 1000 if freq else 0
-                feed_line = f"{utc_str}\t{snr:+d}\t{freq_khz:.1f}\t{from_call}: {value}"
+                freq_mhz = freq / 1000000 if freq else 0
+                feed_line = f"{utc_str}    {freq_mhz:.6f}    {offset:04d}    {snr:+03d}    {from_call}: {value}"
                 self._add_to_feed(feed_line, rig_name)
 
     def _add_to_feed(self, line: str, rig_name: str) -> None:
