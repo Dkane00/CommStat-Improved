@@ -2024,7 +2024,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # For connects, the full message with speed will come via status_message
         # For disconnects, add the message here
         if not is_connected:
-            status_line = f"[{rig_name}] Disconnected"
+            from datetime import datetime, timezone
+            utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
+            status_line = f"{utc_str}\t[{rig_name}] Disconnected"
             self.feed_messages.insert(0, status_line)
             self._update_feed_display()
 
@@ -2036,8 +2038,14 @@ class MainWindow(QtWidgets.QMainWindow):
             rig_name: Name of the rig.
             message: Status message to display.
         """
+        from datetime import datetime, timezone
+
+        # Format timestamp with 3 spaces between date and time (matches RX.DIRECTED format)
+        utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
+        timestamped_message = f"{utc_str}\t{message}"
+
         # Insert at beginning (newest first)
-        self.feed_messages.insert(0, message)
+        self.feed_messages.insert(0, timestamped_message)
 
         # Trim buffer if needed
         if len(self.feed_messages) > self.max_feed_messages:
@@ -2053,7 +2061,7 @@ class MainWindow(QtWidgets.QMainWindow):
             rig_name: Name of the rig that received the message.
             message: Parsed JSON message from JS8Call.
         """
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         msg_type = message.get("type", "")
         value = message.get("value", "")
@@ -2070,7 +2078,7 @@ class MainWindow(QtWidgets.QMainWindow):
             utc_ms = params.get("UTC", 0)
 
             # Convert UTC milliseconds to datetime string (3 spaces between date and time)
-            utc_str = datetime.utcfromtimestamp(utc_ms / 1000).strftime("%Y-%m-%d   %H:%M:%S")
+            utc_str = datetime.fromtimestamp(utc_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
 
             # Format feed line to match DIRECTED.TXT format:
             # DATETIME    FREQ_MHZ    OFFSET    SNR    CALLSIGN: MESSAGE

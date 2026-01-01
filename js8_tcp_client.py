@@ -269,14 +269,23 @@ class JS8CallTCPClient(QObject):
             print(f"[{self.rig_name}] Socket error: {self.socket.errorString()}")
 
         # Schedule reconnect on connection errors (if under max attempts)
-        if self._auto_reconnect and self._reconnect_attempts < MAX_RECONNECT_ATTEMPTS and error in (
+        if self._auto_reconnect and error in (
             QAbstractSocket.ConnectionRefusedError,
             QAbstractSocket.RemoteHostClosedError,
             QAbstractSocket.NetworkError
         ):
-            if not self._reconnect_timer.isActive():
-                print(f"[{self.rig_name}] Will retry in {RECONNECT_INTERVAL_MS // 1000}s...")
-                self._reconnect_timer.start(RECONNECT_INTERVAL_MS)
+            if self._reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
+                if not self._reconnect_timer.isActive():
+                    print(f"[{self.rig_name}] Will retry in {RECONNECT_INTERVAL_MS // 1000}s...")
+                    self._reconnect_timer.start(RECONNECT_INTERVAL_MS)
+            else:
+                # Max attempts reached, give up
+                self._auto_reconnect = False
+                print(f"[{self.rig_name}] Giving up after {MAX_RECONNECT_ATTEMPTS} attempts. Use JS8 Connectors to reconnect.")
+                self.status_message.emit(
+                    self.rig_name,
+                    f"[{self.rig_name}] Reconnect failed. Use Menu > JS8 CONNECTORS to reconnect."
+                )
 
     def _try_reconnect(self) -> None:
         """Attempt to reconnect to JS8Call."""
