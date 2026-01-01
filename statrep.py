@@ -211,18 +211,22 @@ class StatRepDialog(QDialog):
             print("[StatRep] No TCP pool available")
             return
 
+        # Disconnect signals from ALL clients to avoid duplicates
+        for client_name in self.tcp_pool.get_all_rig_names():
+            client = self.tcp_pool.get_client(client_name)
+            if client:
+                try:
+                    client.callsign_received.disconnect(self._on_callsign_received)
+                except TypeError:
+                    pass
+                try:
+                    client.grid_received.disconnect(self._on_grid_received)
+                except TypeError:
+                    pass
+
         client = self.tcp_pool.get_client(rig_name)
         if client and client.is_connected():
-            # Connect signals for this client (disconnect any existing first)
-            try:
-                client.callsign_received.disconnect(self._on_callsign_received)
-            except TypeError:
-                pass
-            try:
-                client.grid_received.disconnect(self._on_grid_received)
-            except TypeError:
-                pass
-
+            # Connect signals for this client
             client.callsign_received.connect(self._on_callsign_received)
             client.grid_received.connect(self._on_grid_received)
 
@@ -304,6 +308,7 @@ class StatRepDialog(QDialog):
         from_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
         self.from_field = QtWidgets.QLineEdit(self.callsign)
         self.from_field.setReadOnly(True)
+        self.from_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.from_field.setStyleSheet("background-color: #e9ecef;")
         self.from_field.setMinimumHeight(28)
         from_layout.addWidget(from_label)
@@ -336,6 +341,7 @@ class StatRepDialog(QDialog):
         grid_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
         self.grid_field = QtWidgets.QLineEdit(self.grid)
         self.grid_field.setReadOnly(True)
+        self.grid_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.grid_field.setStyleSheet("background-color: #e9ecef;")
         self.grid_field.setMinimumHeight(28)
         grid_layout.addWidget(grid_label)
