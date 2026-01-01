@@ -2392,7 +2392,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Link label
         link_label = QtWidgets.QLabel(
-            '<a href="https://www.hamqsl.com/solar.html">View full solar data at hamqsl.com</a>'
+            '<a href="http://www.n0nbh.com/">View more at n0nbh.com</a>'
         )
         link_label.setOpenExternalLinks(True)
         link_label.setAlignment(Qt.AlignCenter)
@@ -2406,9 +2406,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Fetch image in background
         def fetch_image():
             try:
-                url = "https://www.hamqsl.com/solarmuf.php"
+                url = "http://www.n0nbh.com/Sun/Solar.gif"
                 request = urllib.request.Request(url, headers={'User-Agent': 'CommStat-Improved/2.5'})
-                with urllib.request.urlopen(request, timeout=10) as response:
+                with urllib.request.urlopen(request, timeout=15) as response:
                     data = response.read()
                     pixmap = QtGui.QPixmap()
                     pixmap.loadFromData(data)
@@ -2417,6 +2417,11 @@ class MainWindow(QtWidgets.QMainWindow):
                         image_label, "setPixmap",
                         Qt.QueuedConnection,
                         QtCore.Q_ARG(QtGui.QPixmap, pixmap)
+                    )
+                    # Resize dialog to fit image
+                    QtCore.QMetaObject.invokeMethod(
+                        dialog, "adjustSize",
+                        Qt.QueuedConnection
                     )
             except Exception as e:
                 QtCore.QMetaObject.invokeMethod(
