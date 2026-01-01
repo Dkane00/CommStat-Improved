@@ -894,10 +894,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menubar.addAction(about_action)
         self.actions["about"] = about_action
 
-        help_action = QtWidgets.QAction("Help", self)
-        help_action.triggered.connect(self._on_help)
-        self.menubar.addAction(help_action)
-        self.actions["help"] = help_action
+        tools_action = QtWidgets.QAction("Tools", self)
+        tools_action.triggered.connect(self._on_tools)
+        self.menubar.addAction(tools_action)
+        self.actions["tools"] = tools_action
 
         exit_action = QtWidgets.QAction("Exit", self)
         exit_action.triggered.connect(qApp.quit)
@@ -1769,10 +1769,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clock_timer.start(1000)
         self._update_time()  # Initial display
 
-        # Data refresh timer - updates every 20 seconds
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(self._refresh_data)
-        self.refresh_timer.start(20000)
+        # Playlist check timer - runs every 60 seconds
+        self.playlist_timer = QTimer(self)
+        self.playlist_timer.timeout.connect(self._check_playlist)
+        self.playlist_timer.start(60000)
 
         # Marquee animation timeline
         self.marquee_timeline = QtCore.QTimeLine()
@@ -1793,7 +1793,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Save map position before refresh, then reload map
         self._save_map_position(callback=self._load_map)
 
-        # Check playlist for Force command in background (even when map is shown)
+    def _check_playlist(self) -> None:
+        """Check playlist for Force command in background."""
         thread = threading.Thread(target=self._check_playlist_for_force_async, daemon=True)
         thread.start()
 
@@ -2066,12 +2067,20 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"[{rig_name}] RX.DIRECTED: {from_call} -> {to_call}: {value}")
 
             # Process the message for database insertion
-            processed = self._process_directed_message(
+            data_type = self._process_directed_message(
                 rig_name, value, from_call, to_call, grid, freq, snr, utc_str
             )
 
-            if processed:
-                self._refresh_data()
+            # Refresh only the relevant UI component
+            if data_type == "statrep":
+                self._load_statrep_data()
+                self._save_map_position(callback=self._load_map)
+            elif data_type == "bulletin":
+                self._load_bulletin_data()
+            elif data_type == "marquee":
+                self._load_marquee()
+            elif data_type == "checkin":
+                self._save_map_position(callback=self._load_map)
 
         # Handle RX.ACTIVITY messages (band activity for live feed)
         elif msg_type == "RX.ACTIVITY":
@@ -2115,7 +2124,7 @@ class MainWindow(QtWidgets.QMainWindow):
         freq: int,
         snr: int,
         utc: str
-    ) -> bool:
+    ) -> str:
         """
         Process a directed message received via TCP.
 
@@ -2130,7 +2139,7 @@ class MainWindow(QtWidgets.QMainWindow):
             utc: UTC timestamp string.
 
         Returns:
-            True if message was processed and inserted into database.
+            Message type string ("statrep", "bulletin", "marquee", "checkin") or empty string.
         """
         import re
         import maidenhead as mh
@@ -2182,7 +2191,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         conn.commit()
                         print(f"\033[92m[{rig_name}] Added Bulletin from: {callsign} ID: {id_num}\033[0m")
                         conn.close()
-                        return True
+                        return "bulletin"
 
             elif MSG_FORWARDED_STATREP in value:
                 # Parse forwarded statrep: {F%} GRID,PREC,SRID,SRCODE,COMMENTS,ORIG_CALL
@@ -2215,7 +2224,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             conn.commit()
                             print(f"\033[92m[{rig_name}] Added Forwarded StatRep from: {orig_call} ID: {srid}\033[0m")
                             conn.close()
-                            return True
+                            return "statrep"
 
             elif MSG_STATREP in value:
                 # Parse statrep: {&%} GRID,PREC,SRID,SRCODE,COMMENTS
@@ -2247,7 +2256,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             conn.commit()
                             print(f"\033[92m[{rig_name}] Added StatRep from: {callsign} ID: {srid}\033[0m")
                             conn.close()
-                            return True
+                            return "statrep"
 
             elif MSG_MARQUEE in value:
                 # Parse marquee: {*%} ID,COLOR,MESSAGE
@@ -2268,7 +2277,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         conn.commit()
                         print(f"\033[92m[{rig_name}] Added Marquee from: {callsign} ID: {id_num}\033[0m")
                         conn.close()
-                        return True
+                        return "marquee"
 
             elif MSG_CHECKIN in value:
                 # Parse checkin: {~%} TRAFFIC,STATE,GRID
@@ -2320,7 +2329,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         conn.commit()
                         print(f"\033[92m[{rig_name}] Added Check-in from: {callsign}\033[0m")
                         conn.close()
-                        return True
+                        return "checkin"
 
             conn.close()
 
@@ -2329,7 +2338,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"\033[91m[{rig_name}] Error processing message: {e}\033[0m")
 
-        return False
+        return ""
 
     def _update_active_group_label(self) -> None:
         """Update the Active Group label in the header."""
@@ -2353,16 +2362,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Color changes will apply when you restart the application."
             )
 
-    def _on_help(self) -> None:
-        """Open Help documentation."""
-        pdf_path = Path("CommStat_Help.pdf").resolve()
-        if pdf_path.exists():
-            os.startfile(str(pdf_path))
-        else:
-            QtWidgets.QMessageBox.warning(
-                self, "Help Not Found",
-                "CommStat_Help.pdf not found in application directory."
-            )
+    def _on_tools(self) -> None:
+        """Tools menu placeholder."""
+        pass
 
     def _on_about(self) -> None:
         """Open About window."""

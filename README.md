@@ -237,6 +237,17 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
   - js8_connectors.py: Connector management dialog
 - Removed from config.ini: callsign, grid, server, UDP_port
 
+17. EVENT-DRIVEN UI UPDATES (January 2026)
+------------------------------------------
+- Replaced 20-second polling with event-driven updates
+- UI refreshes immediately when data is received via TCP:
+  - StatRep received → StatRep table + map refresh
+  - Bulletin received → Bulletin table refresh
+  - Marquee received → Marquee banner refresh
+  - Check-in received → Map refresh
+- Playlist check moved to 60-second interval
+- More responsive UI with reduced unnecessary database queries
+
 ---
 
 ## License & Copyright
