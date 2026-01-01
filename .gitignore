@@ -32,3 +32,6 @@ Thumbs.db
 *.log
 output.txt
 copyDIRECTED.TXT
+
+# Claude Code context file (private)
+CLAUDE.md
