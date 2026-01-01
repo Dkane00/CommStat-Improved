@@ -296,3 +296,5 @@ AI assistance provided by **Claude (Anthropic)** and **ChatGPT (OpenAI)**.
 
 For questions, comments, or suggestions:  
 **mochoa@protonmail.com**
+<br><br>
+<img src="https://thedeepmatrix.com/z-storage/pdf/shack/disney-me-th.jpg" style="margin: 6px 0px 6px 0px; float: none;">
