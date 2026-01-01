@@ -674,14 +674,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.feed_messages: List[str] = []
         self.max_feed_messages = 500  # Limit buffer size
 
-        # Add "Connecting..." messages for each configured rig before connecting
-        from datetime import datetime, timezone
-        connectors = self.connector_manager.get_all_connectors()
-        for conn in connectors:
-            utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
-            self.feed_messages.append(f"{utc_str}\t[{conn['rig_name']}] Connecting...")
-
-        # Now initiate connections
+        # Initiate TCP connections (Connecting... messages come via status_message signal)
         self.tcp_pool.connect_all()
 
         # Start tile server for map
