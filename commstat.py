@@ -915,10 +915,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menubar.addAction(about_action)
         self.actions["about"] = about_action
 
-        tools_action = QtWidgets.QAction("Tools", self)
-        tools_action.triggered.connect(self._on_tools)
-        self.menubar.addAction(tools_action)
-        self.actions["tools"] = tools_action
+        # Create Tools dropdown menu
+        self.tools_menu = QtWidgets.QMenu("Tools", self.menubar)
+        self.menubar.addMenu(self.tools_menu)
+
+        # Band Conditions option
+        band_conditions_action = QtWidgets.QAction("Band Conditions", self)
+        band_conditions_action.triggered.connect(self._on_band_conditions)
+        self.tools_menu.addAction(band_conditions_action)
+        self.actions["band_conditions"] = band_conditions_action
+
+        # World Map option (current solar conditions)
+        world_map_action = QtWidgets.QAction("World Map", self)
+        world_map_action.triggered.connect(self._on_world_map)
+        self.tools_menu.addAction(world_map_action)
+        self.actions["world_map"] = world_map_action
 
         exit_action = QtWidgets.QAction("Exit", self)
         exit_action.triggered.connect(qApp.quit)
@@ -2390,10 +2401,80 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Color changes will apply when you restart the application."
             )
 
-    def _on_tools(self) -> None:
-        """Show Solar Conditions dialog."""
+    def _on_band_conditions(self) -> None:
+        """Show Band Conditions dialog with N0NBH solar-terrestrial data."""
         dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("Solar Conditions")
+        dialog.setWindowTitle("Band Conditions")
+        dialog.setMinimumSize(480, 200)
+        dialog.setWindowFlags(
+            Qt.Window |
+            Qt.CustomizeWindowHint |
+            Qt.WindowTitleHint |
+            Qt.WindowCloseButtonHint
+        )
+
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Image label
+        image_label = QtWidgets.QLabel("Loading band conditions...")
+        image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(image_label)
+
+        # Link label
+        link_label = QtWidgets.QLabel(
+            '<a href="https://www.hamqsl.com/solar.html">Solar-Terrestrial Data provided by N0NBH</a>'
+        )
+        link_label.setOpenExternalLinks(True)
+        link_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(link_label)
+
+        # Close button
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.clicked.connect(dialog.close)
+        layout.addWidget(close_btn, alignment=Qt.AlignCenter)
+
+        # Storage for fetched data
+        fetch_result = {'data': None, 'error': None}
+
+        def fetch_image():
+            try:
+                url = "https://www.hamqsl.com/solarn0nbh.php"
+                request = urllib.request.Request(url, headers={'User-Agent': 'CommStat-Improved/2.5'})
+                # Create SSL context that bypasses certificate verification
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(request, timeout=15, context=ssl_context) as response:
+                    fetch_result['data'] = response.read()
+            except Exception as e:
+                fetch_result['error'] = str(e)
+
+        def update_ui():
+            if fetch_result['data']:
+                pixmap = QtGui.QPixmap()
+                pixmap.loadFromData(fetch_result['data'])
+                image_label.setPixmap(pixmap)
+                dialog.adjustSize()
+            elif fetch_result['error']:
+                image_label.setText(f"Failed to load band conditions: {fetch_result['error']}")
+            else:
+                # Still loading, check again
+                QTimer.singleShot(100, update_ui)
+
+        # Start fetch in background thread
+        thread = threading.Thread(target=fetch_image, daemon=True)
+        thread.start()
+
+        # Start polling for result
+        QTimer.singleShot(100, update_ui)
+
+        dialog.exec_()
+
+    def _on_world_map(self) -> None:
+        """Show World Map dialog."""
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("World Map")
         dialog.setMinimumSize(480, 200)
         dialog.setWindowFlags(
             Qt.Window |
