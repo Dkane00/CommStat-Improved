@@ -13,13 +13,16 @@ import re
 import random
 import sqlite3
 from configparser import ConfigParser
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, TYPE_CHECKING
 from dataclasses import dataclass
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDateTime, Qt
 from PyQt5.QtWidgets import QMessageBox, QDialog, QComboBox
-import js8callAPIsupport
+
+if TYPE_CHECKING:
+    from js8_tcp_client import TCPConnectionPool
+    from connector_manager import ConnectorManager
 
 
 # =============================================================================
@@ -91,8 +94,16 @@ WINDOW_HEIGHT = 480
 class StatRepDialog(QDialog):
     """Modern StatRep form for creating and transmitting status reports."""
 
-    def __init__(self, parent=None):
+    def __init__(
+        self,
+        tcp_pool: "TCPConnectionPool",
+        connector_manager: "ConnectorManager",
+        parent=None
+    ):
         super().__init__(parent)
+        self.tcp_pool = tcp_pool
+        self.connector_manager = connector_manager
+
         self.setWindowTitle("CommStat-Improved STATREP")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setWindowFlags(
@@ -108,12 +119,11 @@ class StatRepDialog(QDialog):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
 
         # Configuration
-        self.server_ip = "127.0.0.1"
-        self.server_port = "2242"
         self.callsign = ""
         self.grid = ""
         self.selected_group = ""
         self.statrep_id = ""
+        self._pending_frequency = 0  # For storing frequency during transmit
 
         # Status combo boxes
         self.status_combos: Dict[str, QComboBox] = {}
@@ -122,34 +132,17 @@ class StatRepDialog(QDialog):
         self._load_config()
         self._generate_statrep_id()
 
-        # Initialize API
-        self.api = js8callAPIsupport.js8CallUDPAPICalls(
-            self.server_ip, int(self.server_port)
-        )
-
         # Build UI
         self._setup_ui()
 
+        # Load rigs and select default
+        self._load_rigs()
+
     def _load_config(self) -> None:
-        """Load configuration from config.ini and database."""
-        if not os.path.exists(CONFIG_FILE):
-            return
-
-        config = ConfigParser()
-        config.read(CONFIG_FILE)
-
-        if "USERINFO" in config:
-            userinfo = config["USERINFO"]
-            self.callsign = userinfo.get("callsign", "")
-            self.grid = userinfo.get("grid", "")
-
-        if "DIRECTEDCONFIG" in config:
-            dirconfig = config["DIRECTEDCONFIG"]
-            self.server_ip = dirconfig.get("server", "127.0.0.1")
-            self.server_port = dirconfig.get("udp_port", "2242")
-
-        # Get active group from database (not config.ini)
+        """Load configuration from database."""
+        # Get active group from database
         self.selected_group = self._get_active_group_from_db()
+        # Callsign and grid will be loaded from JS8Call when rig is selected
 
     def _get_active_group_from_db(self) -> str:
         """Get the active group from the database."""
@@ -174,6 +167,80 @@ class StatRepDialog(QDialog):
         except sqlite3.Error as e:
             print(f"Error reading groups from database: {e}")
         return []
+
+    def _load_rigs(self) -> None:
+        """Load connected rigs into the rig dropdown."""
+        self.rig_combo.blockSignals(True)
+        self.rig_combo.clear()
+
+        # Add all connected rigs
+        connected_rigs = self.tcp_pool.get_connected_rig_names()
+        for rig_name in connected_rigs:
+            self.rig_combo.addItem(rig_name)
+
+        # If no connected rigs, add all configured rigs (disconnected)
+        if not connected_rigs:
+            all_rigs = self.tcp_pool.get_all_rig_names()
+            for rig_name in all_rigs:
+                self.rig_combo.addItem(f"{rig_name} (disconnected)")
+
+        # Select default rig
+        default = self.connector_manager.get_default_connector()
+        if default:
+            idx = self.rig_combo.findText(default["rig_name"])
+            if idx >= 0:
+                self.rig_combo.setCurrentIndex(idx)
+
+        self.rig_combo.blockSignals(False)
+
+        # Trigger rig changed to load callsign/grid
+        if self.rig_combo.count() > 0:
+            self._on_rig_changed(self.rig_combo.currentText())
+
+    def _on_rig_changed(self, rig_name: str) -> None:
+        """Handle rig selection change - fetch callsign and grid from JS8Call."""
+        if not rig_name or "(disconnected)" in rig_name:
+            self.callsign = ""
+            self.grid = ""
+            if hasattr(self, 'from_field'):
+                self.from_field.setText("")
+                self.grid_field.setText("")
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if client and client.is_connected():
+            # Connect signals for this client (disconnect any existing first)
+            try:
+                client.callsign_received.disconnect(self._on_callsign_received)
+            except TypeError:
+                pass
+            try:
+                client.grid_received.disconnect(self._on_grid_received)
+            except TypeError:
+                pass
+
+            client.callsign_received.connect(self._on_callsign_received)
+            client.grid_received.connect(self._on_grid_received)
+
+            # Request callsign and grid from JS8Call
+            client.get_callsign()
+            client.get_grid()
+
+    def _on_callsign_received(self, rig_name: str, callsign: str) -> None:
+        """Handle callsign received from JS8Call."""
+        # Only update if this is the currently selected rig
+        if self.rig_combo.currentText() == rig_name:
+            self.callsign = callsign
+            if hasattr(self, 'from_field'):
+                self.from_field.setText(callsign)
+
+    def _on_grid_received(self, rig_name: str, grid: str) -> None:
+        """Handle grid received from JS8Call."""
+        # Only update if this is the currently selected rig
+        if self.rig_combo.currentText() == rig_name:
+            self.grid = grid
+            if hasattr(self, 'grid_field'):
+                self.grid_field.setText(grid)
 
     def _generate_statrep_id(self) -> None:
         """Generate a unique StatRep ID that doesn't exist in the database."""
@@ -204,6 +271,19 @@ class StatRepDialog(QDialog):
         title.setFont(title_font)
         title.setStyleSheet("color: #333; margin-bottom: 10px;")
         layout.addWidget(title)
+
+        # Rig selection
+        rig_layout = QtWidgets.QHBoxLayout()
+        rig_label = QtWidgets.QLabel("Rig:")
+        rig_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        self.rig_combo = QtWidgets.QComboBox()
+        self.rig_combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.rig_combo.setMinimumWidth(150)
+        self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
+        rig_layout.addWidget(rig_label)
+        rig_layout.addWidget(self.rig_combo)
+        rig_layout.addStretch()
+        layout.addLayout(rig_layout)
 
         # Header info (To, From, Grid)
         header_layout = QtWidgets.QHBoxLayout()
@@ -487,8 +567,12 @@ class StatRepDialog(QDialog):
 
         return message
 
-    def _save_to_database(self) -> None:
-        """Save StatRep to database."""
+    def _save_to_database(self, frequency: int = 0) -> None:
+        """Save StatRep to database.
+
+        Args:
+            frequency: The frequency in Hz at the time of transmission.
+        """
         values = self._get_status_values()
         scope_text = self.scope_combo.currentText()
         remarks = self.remarks_field.text().strip().upper() or "NTR"
@@ -504,8 +588,8 @@ class StatRepDialog(QDialog):
                     INSERT INTO StatRep_Data(
                         datetime, callsign, groupname, grid, SRid, prec,
                         status, commpwr, pubwtr, med, ota, trav, net,
-                        fuel, food, crime, civil, political, comments, source
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        fuel, food, crime, civil, political, comments, source, frequency
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     date,
                     self.callsign.upper(),
@@ -527,6 +611,7 @@ class StatRepDialog(QDialog):
                     values["political"],
                     remarks,
                     "1",  # source: 1=Radio, 2=Internet
+                    frequency,
                 ))
                 conn.commit()
         except sqlite3.Error as e:
@@ -570,17 +655,55 @@ class StatRepDialog(QDialog):
             self._show_error(f"Failed to save StatRep: {e}")
 
     def _on_transmit(self) -> None:
-        """Validate, transmit, and save."""
+        """Validate, get frequency, transmit, and save."""
         if not self._validate():
             return
 
+        rig_name = self.rig_combo.currentText()
+        if "(disconnected)" in rig_name:
+            self._show_error("Cannot transmit: rig is disconnected")
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if not client or not client.is_connected():
+            self._show_error("Cannot transmit: not connected to rig")
+            return
+
+        # Connect frequency signal and request frequency
         try:
-            message = self._build_message()
-            self.api.sendMessage(js8callAPIsupport.TYPE_TX_SEND, message)
-            self._save_to_database()
+            client.frequency_received.disconnect(self._on_frequency_for_transmit)
+        except TypeError:
+            pass
+        client.frequency_received.connect(self._on_frequency_for_transmit)
+
+        # Store the message to transmit after we get frequency
+        self._pending_message = self._build_message()
+        client.get_frequency()
+
+    def _on_frequency_for_transmit(self, rig_name: str, frequency: int) -> None:
+        """Handle frequency received - now transmit and save."""
+        # Only process if this is the currently selected rig
+        if self.rig_combo.currentText() != rig_name:
+            return
+
+        # Disconnect signal to prevent multiple calls
+        client = self.tcp_pool.get_client(rig_name)
+        if client:
+            try:
+                client.frequency_received.disconnect(self._on_frequency_for_transmit)
+            except TypeError:
+                pass
+
+        try:
+            # Transmit via TCP
+            client.send_tx_message(self._pending_message)
+
+            # Save to database with frequency
+            self._save_to_database(frequency)
 
             # Print to terminal
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
+            freq_mhz = frequency / 1000000.0 if frequency else 0
             print(f"\n{'='*60}")
             print(f"STATREP TRANSMITTED - {now} UTC")
             print(f"{'='*60}")
@@ -589,7 +712,8 @@ class StatRepDialog(QDialog):
             print(f"  From:     {self.callsign}")
             print(f"  Grid:     {self.grid}")
             print(f"  Scope:    {self.scope_combo.currentText()}")
-            print(f"  Message:  {message}")
+            print(f"  Freq:     {freq_mhz:.6f} MHz")
+            print(f"  Message:  {self._pending_message}")
             print(f"{'='*60}\n")
 
             self._clear_copy_file()
@@ -604,7 +728,17 @@ class StatRepDialog(QDialog):
 
 if __name__ == "__main__":
     import sys
+    from connector_manager import ConnectorManager
+    from js8_tcp_client import TCPConnectionPool
+
     app = QtWidgets.QApplication(sys.argv)
-    dialog = StatRepDialog()
+
+    # Initialize dependencies
+    connector_manager = ConnectorManager()
+    connector_manager.init_connectors_table()
+    tcp_pool = TCPConnectionPool(connector_manager)
+    tcp_pool.connect_all()
+
+    dialog = StatRepDialog(tcp_pool, connector_manager)
     dialog.show()
     sys.exit(app.exec_())

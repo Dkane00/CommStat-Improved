@@ -215,6 +215,28 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
 - Group management overhaul
 - File reorganization
 
+16. JS8 TCP CONNECTOR SUPPORT (December 2025)
+---------------------------------------------
+- Replaced file-based DIRECTED.TXT polling with persistent TCP connections
+- Replaced UDP transmission with TCP API (TX.SEND_MESSAGE)
+- Support for up to 3 simultaneous JS8Call instances
+- New "JS8 CONNECTORS" menu for managing connections
+- Connector configuration stored in database (js8_connectors table)
+- Server IP hardcoded to 127.0.0.1 (localhost)
+- Callsign and grid fetched automatically from JS8Call via API
+- Frequency stored in database when sending StatRep, Bulletin, or Marquee
+- Rig dropdown added to all transmit dialogs:
+  - StatRep
+  - Bulletin
+  - Marquee
+  - JS8 Email
+  - JS8 SMS
+- New files:
+  - connector_manager.py: Database operations for connectors
+  - js8_tcp_client.py: TCP client with Qt signals
+  - js8_connectors.py: Connector management dialog
+- Removed from config.ini: callsign, grid, server, UDP_port
+
 ---
 
 ## License & Copyright

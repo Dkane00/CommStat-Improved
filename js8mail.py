@@ -11,11 +11,15 @@ Allows sending emails via JS8Call APRS gateway.
 import os
 import re
 from configparser import ConfigParser
+from typing import TYPE_CHECKING
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDateTime, Qt
 from PyQt5.QtWidgets import QMessageBox, QDialog
-import js8callAPIsupport
+
+if TYPE_CHECKING:
+    from js8_tcp_client import TCPConnectionPool
+    from connector_manager import ConnectorManager
 
 
 # =============================================================================
@@ -41,10 +45,18 @@ WINDOW_HEIGHT = 340
 class JS8MailDialog(QDialog):
     """Modern JS8 Email form for sending emails via APRS gateway."""
 
-    def __init__(self, parent=None):
+    def __init__(
+        self,
+        tcp_pool: "TCPConnectionPool" = None,
+        connector_manager: "ConnectorManager" = None,
+        parent=None
+    ):
         super().__init__(parent)
+        self.tcp_pool = tcp_pool
+        self.connector_manager = connector_manager
+
         self.setWindowTitle("CommStat-Improved JS8Mail")
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT + 40)
         self.setWindowFlags(
             Qt.Window |
             Qt.CustomizeWindowHint |
@@ -57,31 +69,40 @@ class JS8MailDialog(QDialog):
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
 
-        # Configuration
-        self.server_ip = "127.0.0.1"
-        self.server_port = "2242"
-
-        # Load config and initialize API
-        self._load_config()
-        self.api = js8callAPIsupport.js8CallUDPAPICalls(
-            self.server_ip, int(self.server_port)
-        )
-
         # Build UI
         self._setup_ui()
 
-    def _load_config(self) -> None:
-        """Load configuration from config.ini."""
-        if not os.path.exists(CONFIG_FILE):
+        # Load rigs
+        self._load_rigs()
+
+    def _load_rigs(self) -> None:
+        """Load connected rigs into the rig dropdown."""
+        if not self.tcp_pool:
             return
 
-        config = ConfigParser()
-        config.read(CONFIG_FILE)
+        self.rig_combo.blockSignals(True)
+        self.rig_combo.clear()
 
-        if "DIRECTEDCONFIG" in config:
-            dirconfig = config["DIRECTEDCONFIG"]
-            self.server_ip = dirconfig.get("server", "127.0.0.1")
-            self.server_port = dirconfig.get("udp_port", "2242")
+        # Add all connected rigs
+        connected_rigs = self.tcp_pool.get_connected_rig_names()
+        for rig_name in connected_rigs:
+            self.rig_combo.addItem(rig_name)
+
+        # If no connected rigs, add all configured rigs (disconnected)
+        if not connected_rigs:
+            all_rigs = self.tcp_pool.get_all_rig_names()
+            for rig_name in all_rigs:
+                self.rig_combo.addItem(f"{rig_name} (disconnected)")
+
+        # Select default rig
+        if self.connector_manager:
+            default = self.connector_manager.get_default_connector()
+            if default:
+                idx = self.rig_combo.findText(default["rig_name"])
+                if idx >= 0:
+                    self.rig_combo.setCurrentIndex(idx)
+
+        self.rig_combo.blockSignals(False)
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
@@ -96,6 +117,18 @@ class JS8MailDialog(QDialog):
         title.setFont(title_font)
         title.setStyleSheet("color: #333; margin-bottom: 5px;")
         layout.addWidget(title)
+
+        # Rig selection
+        rig_layout = QtWidgets.QHBoxLayout()
+        rig_label = QtWidgets.QLabel("Rig:")
+        rig_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        self.rig_combo = QtWidgets.QComboBox()
+        self.rig_combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.rig_combo.setMinimumWidth(150)
+        rig_layout.addWidget(rig_label)
+        rig_layout.addWidget(self.rig_combo)
+        rig_layout.addStretch()
+        layout.addLayout(rig_layout)
 
         # Warning
         warning = QtWidgets.QLabel("Sending email depends on APRS services being available.")
@@ -220,6 +253,20 @@ class JS8MailDialog(QDialog):
         if not self._validate():
             return
 
+        rig_name = self.rig_combo.currentText()
+        if "(disconnected)" in rig_name:
+            self._show_error("Cannot transmit: rig is disconnected")
+            return
+
+        if not self.tcp_pool:
+            self._show_error("Cannot transmit: TCP pool not available")
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if not client or not client.is_connected():
+            self._show_error("Cannot transmit: not connected to rig")
+            return
+
         email = self.email_field.text().strip()
         subject = self.subject_field.text().strip()
 
@@ -227,13 +274,14 @@ class JS8MailDialog(QDialog):
         message = f"@APRSIS CMD :EMAIL-2  :{email} {subject}{{03}}"
 
         try:
-            self.api.sendMessage(js8callAPIsupport.TYPE_TX_SETMESSAGE, message)
+            client.send_tx_message(message)
 
             # Print to terminal
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
             print(f"\n{'='*60}")
             print(f"JS8MAIL TRANSMITTED - {now} UTC")
             print(f"{'='*60}")
+            print(f"  Rig:      {rig_name}")
             print(f"  To:       {email}")
             print(f"  Message:  {subject}")
             print(f"  Full TX:  {message}")
@@ -251,7 +299,17 @@ class JS8MailDialog(QDialog):
 
 if __name__ == "__main__":
     import sys
+    from connector_manager import ConnectorManager
+    from js8_tcp_client import TCPConnectionPool
+
     app = QtWidgets.QApplication(sys.argv)
-    dialog = JS8MailDialog()
+
+    # Initialize dependencies
+    connector_manager = ConnectorManager()
+    connector_manager.init_connectors_table()
+    tcp_pool = TCPConnectionPool(connector_manager)
+    tcp_pool.connect_all()
+
+    dialog = JS8MailDialog(tcp_pool, connector_manager)
     dialog.show()
     sys.exit(app.exec_())

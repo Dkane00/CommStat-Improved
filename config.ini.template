@@ -1,16 +1,16 @@
-[USERINFO]
-callsign = YOURCALL
-callsignsuffix =
-grid = AA00
-
 [DIRECTEDCONFIG]
+# Path to JS8Call data directory (for file-based operations if any remain)
 path = C:\Users\YourUser\AppData\Local\JS8Call
-server = 127.0.0.1
-udp_port = 2242
+# State abbreviation for display purposes
 state = TX
+# Display options
 hide_heartbeat = False
 show_all_groups = False
 hide_map = False
+
+# NOTE: Callsign, grid, server IP, and TCP port are now configured
+# in the JS8 Connectors menu. Use Menu > JS8 CONNECTORS to add/manage
+# connections to JS8Call instances.
 
 [FILTER]
 start = 2024-01-01

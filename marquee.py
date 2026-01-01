@@ -13,12 +13,15 @@ import re
 import random
 import sqlite3
 from configparser import ConfigParser
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDateTime
 from PyQt5.QtWidgets import QMessageBox
-import js8callAPIsupport
+
+if TYPE_CHECKING:
+    from js8_tcp_client import TCPConnectionPool
+    from connector_manager import ConnectorManager
 
 
 # Constants
@@ -36,21 +39,26 @@ CALLSIGN_PATTERN = re.compile(r'[AKNW][A-Z]{0,2}[0-9][A-Z]{1,3}')
 class Ui_FormMarquee:
     """Marquee form for creating and transmitting marquee messages."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        tcp_pool: "TCPConnectionPool" = None,
+        connector_manager: "ConnectorManager" = None
+    ):
+        self.tcp_pool = tcp_pool
+        self.connector_manager = connector_manager
         self.MainWindow: Optional[QtWidgets.QWidget] = None
-        self.server_ip: str = "127.0.0.1"
-        self.server_port: str = "2242"
         self.callsign: str = ""
         self.grid: str = ""
         self.selected_group: str = ""
         self.marq_id: str = ""
-        self.api: Optional[js8callAPIsupport.js8CallUDPAPICalls] = None
+        self._pending_message: str = ""
+        self._pending_color: str = ""
 
     def setupUi(self, FormMarquee: QtWidgets.QWidget) -> None:
         """Initialize the UI components."""
         self.MainWindow = FormMarquee
         FormMarquee.setObjectName("FormMarquee")
-        FormMarquee.resize(835, 275)
+        FormMarquee.resize(835, 305)
 
         # Set font
         font = QtGui.QFont()
@@ -63,64 +71,78 @@ class Ui_FormMarquee:
         icon.addPixmap(QtGui.QPixmap("radiation-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         FormMarquee.setWindowIcon(icon)
 
+        # Rig dropdown
+        self.rig_label = QtWidgets.QLabel(FormMarquee)
+        self.rig_label.setGeometry(QtCore.QRect(15, 15, 60, 20))
+        self.rig_label.setFont(font)
+        self.rig_label.setText("Rig:")
+        self.rig_label.setObjectName("rig_label")
+
+        self.rig_combo = QtWidgets.QComboBox(FormMarquee)
+        self.rig_combo.setGeometry(QtCore.QRect(80, 15, 150, 22))
+        self.rig_combo.setFont(font)
+        self.rig_combo.setObjectName("rig_combo")
+
         # Color selection label
         self.label = QtWidgets.QLabel(FormMarquee)
-        self.label.setGeometry(QtCore.QRect(15, 55, 146, 20))
+        self.label.setGeometry(QtCore.QRect(15, 80, 146, 20))
         self.label.setFont(font)
         self.label.setObjectName("label")
 
         # Radio buttons for color selection
         self.radioButton_Green = QtWidgets.QRadioButton(FormMarquee)
-        self.radioButton_Green.setGeometry(QtCore.QRect(185, 25, 89, 20))
+        self.radioButton_Green.setGeometry(QtCore.QRect(185, 50, 89, 20))
         self.radioButton_Green.setObjectName("radioButton_Green")
 
         self.radioButton_Yellow = QtWidgets.QRadioButton(FormMarquee)
-        self.radioButton_Yellow.setGeometry(QtCore.QRect(185, 55, 89, 20))
+        self.radioButton_Yellow.setGeometry(QtCore.QRect(185, 80, 89, 20))
         self.radioButton_Yellow.setObjectName("radioButton_Yellow")
 
         self.radioButton_Red = QtWidgets.QRadioButton(FormMarquee)
-        self.radioButton_Red.setGeometry(QtCore.QRect(185, 85, 89, 20))
+        self.radioButton_Red.setGeometry(QtCore.QRect(185, 110, 89, 20))
         self.radioButton_Red.setObjectName("radioButton_Red")
 
         # Group dropdown
         self.group_label = QtWidgets.QLabel(FormMarquee)
-        self.group_label.setGeometry(QtCore.QRect(300, 55, 60, 20))
+        self.group_label.setGeometry(QtCore.QRect(300, 80, 60, 20))
         self.group_label.setFont(font)
         self.group_label.setText("Group:")
         self.group_label.setObjectName("group_label")
 
         self.group_combo = QtWidgets.QComboBox(FormMarquee)
-        self.group_combo.setGeometry(QtCore.QRect(360, 55, 150, 22))
+        self.group_combo.setGeometry(QtCore.QRect(360, 80, 150, 22))
         self.group_combo.setFont(font)
         self.group_combo.setObjectName("group_combo")
 
-        # Callsign input
+        # Callsign input (read-only, from JS8Call)
         self.label_3 = QtWidgets.QLabel(FormMarquee)
-        self.label_3.setGeometry(QtCore.QRect(70, 125, 146, 20))
+        self.label_3.setGeometry(QtCore.QRect(70, 150, 146, 20))
         self.label_3.setFont(font)
         self.label_3.setObjectName("label3")
 
         self.lineEdit_3 = QtWidgets.QLineEdit(FormMarquee)
-        self.lineEdit_3.setGeometry(QtCore.QRect(171, 126, 60, 22))
+        self.lineEdit_3.setGeometry(QtCore.QRect(171, 151, 60, 22))
         self.lineEdit_3.setFont(font)
         self.lineEdit_3.setMaxLength(MAX_CALLSIGN_LENGTH)
+        self.lineEdit_3.setReadOnly(True)
+        self.lineEdit_3.setStyleSheet("background-color: #e9ecef;")
         self.lineEdit_3.setObjectName("lineEdit_3")
 
         # Message input
         self.label_2 = QtWidgets.QLabel(FormMarquee)
-        self.label_2.setGeometry(QtCore.QRect(45, 155, 126, 20))
+        self.label_2.setGeometry(QtCore.QRect(45, 180, 126, 20))
         self.label_2.setFont(font)
         self.label_2.setObjectName("label_2")
 
         self.lineEdit_2 = QtWidgets.QLineEdit(FormMarquee)
-        self.lineEdit_2.setGeometry(QtCore.QRect(171, 156, 481, 22))
+        self.lineEdit_2.setGeometry(QtCore.QRect(171, 181, 481, 22))
         self.lineEdit_2.setFont(font)
         self.lineEdit_2.setMaxLength(MAX_MESSAGE_LENGTH)
         self.lineEdit_2.setObjectName("lineEdit_2")
 
         # Character limit note
         self.note_label = QtWidgets.QLabel(FormMarquee)
-        self.note_label.setGeometry(QtCore.QRect(171, 182, 481, 20))
+        self.note_label.setGeometry(QtCore.QRect(171, 207, 481, 20))
         note_font = QtGui.QFont()
         note_font.setFamily("Arial")
         note_font.setPointSize(9)
@@ -131,19 +153,19 @@ class Ui_FormMarquee:
 
         # Buttons
         self.pushButton_3 = QtWidgets.QPushButton(FormMarquee)
-        self.pushButton_3.setGeometry(QtCore.QRect(441, 220, 75, 24))
+        self.pushButton_3.setGeometry(QtCore.QRect(441, 250, 75, 24))
         self.pushButton_3.setFont(font)
         self.pushButton_3.setObjectName("pushButton_3")
         self.pushButton_3.clicked.connect(self._save_only)
 
         self.pushButton = QtWidgets.QPushButton(FormMarquee)
-        self.pushButton.setGeometry(QtCore.QRect(541, 220, 75, 24))
+        self.pushButton.setGeometry(QtCore.QRect(541, 250, 75, 24))
         self.pushButton.setFont(font)
         self.pushButton.setObjectName("pushButton")
         self.pushButton.clicked.connect(self._transmit)
 
         self.pushButton_2 = QtWidgets.QPushButton(FormMarquee)
-        self.pushButton_2.setGeometry(QtCore.QRect(641, 220, 75, 24))
+        self.pushButton_2.setGeometry(QtCore.QRect(641, 250, 75, 24))
         self.pushButton_2.setFont(font)
         self.pushButton_2.setObjectName("pushButton_2")
         self.pushButton_2.clicked.connect(self.MainWindow.close)
@@ -154,12 +176,12 @@ class Ui_FormMarquee:
         # Load config and initialize
         self._generate_marq_id()
         self._load_config()
-        self.api = js8callAPIsupport.js8CallUDPAPICalls(
-            self.server_ip, int(self.server_port)
-        )
 
-        # Set callsign in input field
-        self.lineEdit_3.setText(self.callsign)
+        # Connect rig combo signal
+        self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
+
+        # Load rigs into dropdown
+        self._load_rigs()
 
         self.MainWindow.setWindowFlags(
             QtCore.Qt.Window |
@@ -184,24 +206,8 @@ class Ui_FormMarquee:
         self.radioButton_Red.setText(_translate("FormMarquee", "Red"))
 
     def _load_config(self) -> None:
-        """Load configuration from config.ini."""
-        if not os.path.exists(CONFIG_FILE):
-            return
-
-        config = ConfigParser()
-        config.read(CONFIG_FILE)
-
-        if "USERINFO" in config:
-            userinfo = config["USERINFO"]
-            self.callsign = userinfo.get("callsign", "")
-            self.grid = userinfo.get("grid", "")
-
-        if "DIRECTEDCONFIG" in config:
-            systeminfo = config["DIRECTEDCONFIG"]
-            self.server_ip = systeminfo.get("server", "127.0.0.1")
-            self.server_port = systeminfo.get("UDP_port", "2242")
-
-        # Get active group from database (not config.ini)
+        """Load configuration from database."""
+        # Get active group from database
         self.selected_group = self._get_active_group_from_db()
 
         # Populate group dropdown
@@ -213,6 +219,67 @@ class Ui_FormMarquee:
             index = self.group_combo.findText(self.selected_group)
             if index >= 0:
                 self.group_combo.setCurrentIndex(index)
+        # Callsign will be loaded from JS8Call when rig is selected
+
+    def _load_rigs(self) -> None:
+        """Load connected rigs into the rig dropdown."""
+        if not self.tcp_pool:
+            return
+
+        self.rig_combo.blockSignals(True)
+        self.rig_combo.clear()
+
+        # Add all connected rigs
+        connected_rigs = self.tcp_pool.get_connected_rig_names()
+        for rig_name in connected_rigs:
+            self.rig_combo.addItem(rig_name)
+
+        # If no connected rigs, add all configured rigs (disconnected)
+        if not connected_rigs:
+            all_rigs = self.tcp_pool.get_all_rig_names()
+            for rig_name in all_rigs:
+                self.rig_combo.addItem(f"{rig_name} (disconnected)")
+
+        # Select default rig
+        if self.connector_manager:
+            default = self.connector_manager.get_default_connector()
+            if default:
+                idx = self.rig_combo.findText(default["rig_name"])
+                if idx >= 0:
+                    self.rig_combo.setCurrentIndex(idx)
+
+        self.rig_combo.blockSignals(False)
+
+        # Trigger rig changed to load callsign
+        if self.rig_combo.count() > 0:
+            self._on_rig_changed(self.rig_combo.currentText())
+
+    def _on_rig_changed(self, rig_name: str) -> None:
+        """Handle rig selection change - fetch callsign from JS8Call."""
+        if not rig_name or "(disconnected)" in rig_name or not self.tcp_pool:
+            self.callsign = ""
+            self.lineEdit_3.setText("")
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if client and client.is_connected():
+            # Connect signal for this client (disconnect any existing first)
+            try:
+                client.callsign_received.disconnect(self._on_callsign_received)
+            except TypeError:
+                pass
+
+            client.callsign_received.connect(self._on_callsign_received)
+
+            # Request callsign from JS8Call
+            client.get_callsign()
+
+    def _on_callsign_received(self, rig_name: str, callsign: str) -> None:
+        """Handle callsign received from JS8Call."""
+        # Only update if this is the currently selected rig
+        if self.rig_combo.currentText() == rig_name:
+            self.callsign = callsign
+            self.lineEdit_3.setText(callsign)
 
     def _get_active_group_from_db(self) -> str:
         """Get the active group from the database."""
@@ -312,8 +379,15 @@ class Ui_FormMarquee:
         group = "@" + self.group_combo.currentText()
         return f"{group} ,{self.marq_id},{color},{message},{{*%}}"
 
-    def _save_to_database(self, callsign: str, color: str, message: str) -> None:
-        """Save marquee to database."""
+    def _save_to_database(self, callsign: str, color: str, message: str, frequency: int = 0) -> None:
+        """Save marquee to database.
+
+        Args:
+            callsign: The callsign of the sender.
+            color: The color code (1=green, 2=yellow, 3=red).
+            message: The marquee message.
+            frequency: The frequency in Hz at the time of transmission.
+        """
         now = QDateTime.currentDateTime()
         date = now.toUTC().toString("yyyy-MM-dd HH:mm")
 
@@ -322,12 +396,13 @@ class Ui_FormMarquee:
             cur = conn.cursor()
             cur.execute(
                 "INSERT OR REPLACE INTO marquees_Data "
-                "(idnum, callsign, groupname, date, color, message) "
-                "VALUES(?, ?, ?, ?, ?, ?)",
-                (self.marq_id, callsign, self.group_combo.currentText(), date, color, message)
+                "(idnum, callsign, groupname, date, color, message, frequency) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?)",
+                (self.marq_id, callsign, self.group_combo.currentText(), date, color, message, frequency)
             )
             conn.commit()
-            print(f"{date}, {self.group_combo.currentText()}, {self.marq_id}, {callsign}, {message}")
+            freq_mhz = frequency / 1000000.0 if frequency else 0
+            print(f"{date}, {self.group_combo.currentText()}, {self.marq_id}, {callsign}, {message}, {freq_mhz:.6f} MHz")
         finally:
             conn.close()
 
@@ -342,27 +417,72 @@ class Ui_FormMarquee:
         self.MainWindow.close()
 
     def _transmit(self) -> None:
-        """Validate, transmit, and save marquee message."""
+        """Validate, get frequency, transmit, and save marquee message."""
         result = self._validate_input(validate_callsign=False)
         if result is None:
             return
 
+        rig_name = self.rig_combo.currentText()
+        if "(disconnected)" in rig_name:
+            self._show_error("Cannot transmit: rig is disconnected")
+            return
+
+        if not self.tcp_pool:
+            self._show_error("Cannot transmit: TCP pool not available")
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if not client or not client.is_connected():
+            self._show_error("Cannot transmit: not connected to rig")
+            return
+
         callsign, message, color = result
 
-        # Build and send message
-        tx_message = self._build_message(color, message)
-        self.api.sendMessage(js8callAPIsupport.TYPE_TX_SEND, tx_message)
+        # Store pending values for transmission after frequency is received
+        self._pending_message = self._build_message(color, message)
+        self._pending_color = color
 
-        self._show_info(f"CommStat-Improved will transmit:\n{tx_message}")
+        # Connect frequency signal and request frequency
+        try:
+            client.frequency_received.disconnect(self._on_frequency_for_transmit)
+        except TypeError:
+            pass
+        client.frequency_received.connect(self._on_frequency_for_transmit)
 
-        # Save to database
-        self._save_to_database(self.callsign, color, message)
+        client.get_frequency()
 
-        # Clear the copy file to trigger refresh
-        with open("copyDIRECTED.TXT", "w") as f:
-            f.write("blank line \n")
+    def _on_frequency_for_transmit(self, rig_name: str, frequency: int) -> None:
+        """Handle frequency received - now transmit and save."""
+        # Only process if this is the currently selected rig
+        if self.rig_combo.currentText() != rig_name:
+            return
 
-        self.MainWindow.close()
+        # Disconnect signal to prevent multiple calls
+        client = self.tcp_pool.get_client(rig_name)
+        if client:
+            try:
+                client.frequency_received.disconnect(self._on_frequency_for_transmit)
+            except TypeError:
+                pass
+
+        try:
+            # Transmit via TCP
+            client.send_tx_message(self._pending_message)
+
+            self._show_info(f"CommStat-Improved will transmit:\n{self._pending_message}")
+
+            # Save to database with frequency
+            message = self.lineEdit_2.text()
+            message = re.sub(r"[^ -~]+", " ", message).upper()
+            self._save_to_database(self.callsign, self._pending_color, message, frequency)
+
+            # Clear the copy file to trigger refresh
+            with open("copyDIRECTED.TXT", "w") as f:
+                f.write("blank line \n")
+
+            self.MainWindow.close()
+        except Exception as e:
+            self._show_error(f"Failed to transmit marquee: {e}")
 
     def _generate_marq_id(self) -> None:
         """Generate a unique marquee ID that doesn't exist in the database."""
@@ -386,9 +506,19 @@ class Ui_FormMarquee:
 
 if __name__ == "__main__":
     import sys
+    from connector_manager import ConnectorManager
+    from js8_tcp_client import TCPConnectionPool
+
     app = QtWidgets.QApplication(sys.argv)
+
+    # Initialize dependencies
+    connector_manager = ConnectorManager()
+    connector_manager.init_connectors_table()
+    tcp_pool = TCPConnectionPool(connector_manager)
+    tcp_pool.connect_all()
+
     FormMarquee = QtWidgets.QWidget()
-    ui = Ui_FormMarquee()
+    ui = Ui_FormMarquee(tcp_pool, connector_manager)
     ui.setupUi(FormMarquee)
     FormMarquee.show()
     sys.exit(app.exec_())

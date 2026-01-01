@@ -45,6 +45,9 @@ from js8sms import JS8SMSDialog
 from marquee import Ui_FormMarquee
 from bulletin import Ui_FormBull
 from statrep import StatRepDialog
+from connector_manager import ConnectorManager
+from js8_tcp_client import TCPConnectionPool
+from js8_connectors import JS8ConnectorsDialog
 
 
 # =============================================================================
@@ -637,6 +640,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config = config
         self.db = db
 
+        # Initialize JS8Call connector manager and TCP connection pool
+        self.connector_manager = ConnectorManager()
+        self.connector_manager.init_connectors_table()
+        self.connector_manager.add_frequency_columns()
+        self.tcp_pool = TCPConnectionPool(self.connector_manager, self)
+        self.tcp_pool.any_message_received.connect(self._handle_tcp_message)
+        self.tcp_pool.connect_all()
+
         # Initialize datareader for parsing DIRECTED.TXT
         self.datareader_config = datareader.Config()
         self.datareader_parser = datareader.MessageParser(self.datareader_config)
@@ -802,6 +813,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("member_list", "MEMBER LIST", self._on_member_list),
             None,  # Separator
             ("groups", "MANAGE GROUPS", self._on_groups),
+            ("js8_connectors", "JS8 CONNECTORS", self._on_js8_connectors),
             ("settings", "SETTINGS", self._on_settings),
             ("colors", "COLORS", self._on_colors),
             None,  # Separator
@@ -1862,17 +1874,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_js8email(self) -> None:
         """Open JS8 Email window."""
-        dialog = JS8MailDialog(self)
+        dialog = JS8MailDialog(self.tcp_pool, self.connector_manager, self)
         dialog.exec_()
 
     def _on_js8sms(self) -> None:
         """Open JS8 SMS window."""
-        dialog = JS8SMSDialog(self)
+        dialog = JS8SMSDialog(self.tcp_pool, self.connector_manager, self)
         dialog.exec_()
 
     def _on_statrep(self) -> None:
         """Open StatRep window."""
-        dialog = StatRepDialog(self)
+        dialog = StatRepDialog(self.tcp_pool, self.connector_manager, self)
         dialog.exec_()
 
     def _on_net_check_in(self) -> None:
@@ -1894,14 +1906,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_new_marquee(self) -> None:
         """Open New Marquee window."""
         dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormMarquee()
+        dialog.ui = Ui_FormMarquee(self.tcp_pool, self.connector_manager)
         dialog.ui.setupUi(dialog)
         dialog.exec_()
 
     def _on_flash_bulletin(self) -> None:
         """Open Flash Bulletin window."""
         dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormBull()
+        dialog.ui = Ui_FormBull(self.tcp_pool, self.connector_manager)
         dialog.ui.setupUi(dialog)
         dialog.exec_()
 
@@ -1983,6 +1995,40 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_bulletin_data()
         self._load_marquee()
         self._save_map_position(callback=self._load_map)
+
+    def _on_js8_connectors(self) -> None:
+        """Open JS8 Connectors management window."""
+        dialog = JS8ConnectorsDialog(self.connector_manager, self.tcp_pool, self)
+        dialog.exec_()
+
+    def _handle_tcp_message(self, rig_name: str, message: dict) -> None:
+        """
+        Handle incoming TCP message from JS8Call.
+
+        Args:
+            rig_name: Name of the rig that received the message.
+            message: Parsed JSON message from JS8Call.
+        """
+        msg_type = message.get("type", "")
+        params = message.get("params", {})
+
+        if msg_type == "RX.DIRECTED":
+            # Extract data from the directed message
+            value = message.get("value", "")
+            from_call = params.get("FROM", "")
+            to_call = params.get("TO", "")
+            cmd = params.get("CMD", "")
+            grid = params.get("GRID", "")
+            freq = params.get("FREQ", 0)
+            snr = params.get("SNR", 0)
+            utc = params.get("UTC", 0)
+
+            print(f"[{rig_name}] RX.DIRECTED: {from_call} -> {to_call}: {value}")
+
+            # The datareader already handles parsing DIRECTED.TXT
+            # For now, just refresh the UI to pick up any new data
+            # Future: Process RX.DIRECTED directly without file polling
+            self._refresh_data()
 
     def _update_active_group_label(self) -> None:
         """Update the Active Group label in the header."""
