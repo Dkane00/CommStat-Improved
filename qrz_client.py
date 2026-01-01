@@ -414,8 +414,10 @@ if __name__ == "__main__":
         callsign = input("Callsign to lookup (default AA7BQ): ") or "AA7BQ"
 
     # Test
+    print(f"\nLooking up: {callsign}")
     client = QRZClient(username, password)
 
+    print("Attempting login...")
     if client.login():
         print()
         result = client.lookup(callsign)
@@ -447,3 +449,7 @@ if __name__ == "__main__":
                 value = result.get(key)
                 if value:
                     print(f"{label:15}: {value}")
+        else:
+            print(f"No results for {callsign}")
+    else:
+        print("Login failed - check credentials")
