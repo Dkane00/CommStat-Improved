@@ -1182,6 +1182,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tools_menu.addAction(band_conditions_action)
         self.actions["band_conditions"] = band_conditions_action
 
+        # Solar Flux option
+        solar_flux_action = QtWidgets.QAction("Solar Flux", self)
+        solar_flux_action.triggered.connect(self._on_solar_flux)
+        self.tools_menu.addAction(solar_flux_action)
+        self.actions["solar_flux"] = solar_flux_action
+
         # World Map option (current solar conditions)
         world_map_action = QtWidgets.QAction("World Map", self)
         world_map_action.triggered.connect(self._on_world_map)
@@ -2846,6 +2852,76 @@ class MainWindow(QtWidgets.QMainWindow):
                 dialog.adjustSize()
             elif fetch_result['error']:
                 image_label.setText(f"Failed to load band conditions: {fetch_result['error']}")
+            else:
+                # Still loading, check again
+                QTimer.singleShot(100, update_ui)
+
+        # Start fetch in background thread
+        thread = threading.Thread(target=fetch_image, daemon=True)
+        thread.start()
+
+        # Start polling for result
+        QTimer.singleShot(100, update_ui)
+
+        dialog.exec_()
+
+    def _on_solar_flux(self) -> None:
+        """Show Solar Flux dialog with N0NBH solar flux chart."""
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Solar Flux")
+        dialog.setMinimumSize(480, 200)
+        dialog.setWindowFlags(
+            Qt.Window |
+            Qt.CustomizeWindowHint |
+            Qt.WindowTitleHint |
+            Qt.WindowCloseButtonHint
+        )
+
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Image label
+        image_label = QtWidgets.QLabel("Loading solar flux data...")
+        image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(image_label)
+
+        # Link label
+        link_label = QtWidgets.QLabel(
+            '<a href="https://www.hamqsl.com/solar.html">Solar-Terrestrial Data provided by N0NBH</a>'
+        )
+        link_label.setOpenExternalLinks(True)
+        link_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(link_label)
+
+        # Close button
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.clicked.connect(dialog.close)
+        layout.addWidget(close_btn, alignment=Qt.AlignCenter)
+
+        # Storage for fetched data
+        fetch_result = {'data': None, 'error': None}
+
+        def fetch_image():
+            try:
+                url = "https://www.hamqsl.com/marston.php"
+                request = urllib.request.Request(url, headers={'User-Agent': 'CommStat-Improved/2.5'})
+                # Create SSL context that bypasses certificate verification
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(request, timeout=15, context=ssl_context) as response:
+                    fetch_result['data'] = response.read()
+            except Exception as e:
+                fetch_result['error'] = str(e)
+
+        def update_ui():
+            if fetch_result['data']:
+                pixmap = QtGui.QPixmap()
+                pixmap.loadFromData(fetch_result['data'])
+                image_label.setPixmap(pixmap)
+                dialog.adjustSize()
+            elif fetch_result['error']:
+                image_label.setText(f"Failed to load solar flux data: {fetch_result['error']}")
             else:
                 # Still loading, check again
                 QTimer.singleShot(100, update_ui)
