@@ -719,6 +719,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tcp_pool.any_message_received.connect(self._handle_tcp_message)
         self.tcp_pool.any_connection_changed.connect(self._handle_connection_changed)
         self.tcp_pool.any_status_message.connect(self._handle_status_message)
+        self.tcp_pool.any_callsign_received.connect(self._handle_callsign_received)
+
+        # Store callsigns by rig name (persists even if connection is lost)
+        self.rig_callsigns: Dict[str, str] = {}
+
+        # Active groups (currently single, but list for future multi-group support)
+        self.active_groups: List[str] = [self.db.get_active_group()]
 
         # Live feed message buffer (stores messages from all TCP connections)
         self.feed_messages: List[str] = []
@@ -2110,14 +2117,42 @@ class MainWindow(QtWidgets.QMainWindow):
             rig_name: Name of the rig.
             is_connected: True if connected, False if disconnected.
         """
-        # For connects, the full message with speed will come via status_message
-        # For disconnects, add the message here
-        if not is_connected:
+        if is_connected:
+            # Request callsign from JS8Call when connected
+            client = self.tcp_pool.get_client(rig_name)
+            if client:
+                client.get_callsign()
+        else:
+            # For disconnects, add the message here
             from datetime import datetime, timezone
             utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
             status_line = f"{utc_str}\t[{rig_name}] Disconnected"
             self.feed_messages.insert(0, status_line)
             self._update_feed_display()
+
+    def _handle_callsign_received(self, rig_name: str, callsign: str) -> None:
+        """
+        Handle callsign received from JS8Call.
+
+        Args:
+            rig_name: Name of the rig.
+            callsign: Callsign configured in JS8Call.
+        """
+        if callsign:
+            self.rig_callsigns[rig_name] = callsign
+            print(f"[{rig_name}] Callsign: {callsign}")
+
+    def get_callsign_for_rig(self, rig_name: str) -> str:
+        """
+        Get cached callsign for a rig.
+
+        Args:
+            rig_name: Name of the rig.
+
+        Returns:
+            Callsign string or empty string if not known.
+        """
+        return self.rig_callsigns.get(rig_name, "")
 
     def _handle_status_message(self, rig_name: str, message: str) -> None:
         """
@@ -2452,6 +2487,35 @@ class MainWindow(QtWidgets.QMainWindow):
                         print(f"\033[92m[{rig_name}] Added Check-in from: {callsign}\033[0m")
                         conn.close()
                         return "checkin"
+
+            # Check for standard JS8Call MSG format (no special marker)
+            # Format: "MSG message_text" in value
+            # Save if: to group OR to one of user's callsigns
+            if " MSG " in value or value.startswith("MSG "):
+                # Check if this message should be saved
+                is_to_group = to_call.startswith("@")
+                is_to_user = to_call in self.rig_callsigns.values()
+
+                if is_to_group or is_to_user:
+                    # Extract message text after "MSG "
+                    msg_match = re.search(r'\bMSG\s+(.+)', value)
+                    if msg_match:
+                        message_text = msg_match.group(1).strip()
+
+                        # Generate a simple ID based on timestamp
+                        import time
+                        id_num = str(int(time.time()) % 100000)
+
+                        cursor.execute(
+                            "INSERT OR REPLACE INTO messages_Data "
+                            "(datetime, idnum, groupid, callsign, message, frequency) "
+                            "VALUES(?, ?, ?, ?, ?, ?)",
+                            (utc, id_num, group, callsign, message_text, freq)
+                        )
+                        conn.commit()
+                        print(f"\033[92m[{rig_name}] Added MSG from: {callsign} to: {to_call}\033[0m")
+                        conn.close()
+                        return "message"
 
             conn.close()
 

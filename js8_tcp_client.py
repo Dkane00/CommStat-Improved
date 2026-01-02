@@ -329,6 +329,7 @@ class TCPConnectionPool(QObject):
     any_message_received = pyqtSignal(str, dict)    # rig_name, message
     any_connection_changed = pyqtSignal(str, bool)  # rig_name, is_connected
     any_status_message = pyqtSignal(str, str)       # rig_name, message (for live feed)
+    any_callsign_received = pyqtSignal(str, str)    # rig_name, callsign
 
     def __init__(self, connector_manager: ConnectorManager, parent: QObject = None):
         """
@@ -397,6 +398,7 @@ class TCPConnectionPool(QObject):
         client.message_received.connect(self.any_message_received)
         client.connection_changed.connect(self.any_connection_changed)
         client.status_message.connect(self.any_status_message)
+        client.callsign_received.connect(self.any_callsign_received)
 
         self.clients[rig_name] = client
         client.connect_to_host()
