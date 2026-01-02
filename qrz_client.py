@@ -8,7 +8,6 @@ Provides callsign lookups via QRZ.com with local database caching
 to minimize API calls.
 """
 
-import configparser
 import sqlite3
 import sys
 import urllib.request
@@ -23,7 +22,6 @@ from pathlib import Path
 QRZ_API_URL = "https://xmldata.qrz.com/xml/current/"
 CACHE_DAYS = 30  # How long to cache callsign data
 DB_PATH = Path(__file__).parent / "traffic.db3"
-CONFIG_PATH = Path(__file__).parent / "config.ini"
 
 # Debug mode via --debug command line flag
 _DEBUG = "--debug" in sys.argv
@@ -35,77 +33,32 @@ def debug_print(msg: str) -> None:
         print(msg)
 
 
-def ensure_qrz_config() -> None:
-    """
-    Ensure config.ini exists and has [QRZ] section with default values.
-    Creates config.ini from template if missing.
-    """
-    template_path = Path(__file__).parent / "config.ini.template"
-
-    try:
-        # If config.ini doesn't exist, create from template
-        if not CONFIG_PATH.exists():
-            if template_path.exists():
-                import shutil
-                shutil.copy(template_path, CONFIG_PATH)
-                debug_print(f"QRZ: Created config.ini from template")
-            else:
-                # Create minimal config.ini
-                config = configparser.ConfigParser()
-                config.add_section("QRZ")
-                config.set("QRZ", "active", "False")
-                config.set("QRZ", "username", "")
-                config.set("QRZ", "password", "")
-                with open(CONFIG_PATH, "w") as f:
-                    config.write(f)
-                debug_print(f"QRZ: Created new config.ini")
-                return
-
-        # Ensure [QRZ] section exists
-        config = configparser.ConfigParser()
-        config.read(CONFIG_PATH)
-
-        if not config.has_section("QRZ"):
-            config.add_section("QRZ")
-            config.set("QRZ", "active", "False")
-            config.set("QRZ", "username", "")
-            config.set("QRZ", "password", "")
-
-            with open(CONFIG_PATH, "w") as f:
-                config.write(f)
-            debug_print("QRZ: Added [QRZ] section to config.ini")
-    except Exception as e:
-        debug_print(f"Error ensuring QRZ config: {e}")
-
-
 def load_qrz_config() -> Tuple[bool, Optional[str], Optional[str]]:
     """
-    Load QRZ configuration from config.ini.
-    Creates [QRZ] section if missing.
+    Load QRZ configuration from database.
 
     Returns:
         Tuple of (active, username, password)
     """
-    # Ensure section exists
-    ensure_qrz_config()
-
     try:
-        config = configparser.ConfigParser()
-        config.read(CONFIG_PATH)
-
-        active = config.getboolean("QRZ", "active", fallback=False)
-        username = config.get("QRZ", "username", fallback="").strip()
-        password = config.get("QRZ", "password", fallback="").strip()
-
-        return active, username or None, password or None
-    except Exception as e:
-        debug_print(f"Error reading QRZ config: {e}")
+        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, password, is_active FROM qrz_settings WHERE id = 1")
+            result = cursor.fetchone()
+            if result:
+                username = result[0] or ""
+                password = result[1] or ""
+                is_active = bool(result[2])
+                return is_active, username or None, password or None
+            return False, None, None
+    except sqlite3.Error as e:
+        debug_print(f"Error reading QRZ config from database: {e}")
         return False, None, None
 
 
 def set_qrz_active(active: bool) -> bool:
     """
-    Set the QRZ active flag in config.ini.
+    Set the QRZ active flag in database.
 
     Args:
         active: True to enable, False to disable
@@ -114,26 +67,22 @@ def set_qrz_active(active: bool) -> bool:
         True if successful
     """
     try:
-        config = configparser.ConfigParser()
-        config.read(CONFIG_PATH)
-
-        if not config.has_section("QRZ"):
-            config.add_section("QRZ")
-
-        config.set("QRZ", "active", str(active))
-
-        with open(CONFIG_PATH, "w") as f:
-            config.write(f)
-
-        return True
-    except Exception as e:
-        debug_print(f"Error writing QRZ config: {e}")
+        with sqlite3.connect(DB_PATH, timeout=10) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE qrz_settings SET is_active = ? WHERE id = 1",
+                (1 if active else 0,)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        debug_print(f"Error writing QRZ config to database: {e}")
         return False
 
 
 # Legacy function for backwards compatibility
 def load_qrz_credentials() -> Tuple[Optional[str], Optional[str]]:
-    """Load QRZ credentials from config.ini."""
+    """Load QRZ credentials from database."""
     active, username, password = load_qrz_config()
     return username, password
 
@@ -473,25 +422,25 @@ if __name__ == "__main__":
     print("QRZ.com API Test")
     print("-" * 40)
 
-    # Get config - try config.ini first
+    # Get config from database
     active, username, password = load_qrz_config()
 
     print(f"QRZ Active: {active}")
 
     if username and password:
-        print(f"Using credentials from config.ini (user: {username})")
+        print(f"Using credentials from database (user: {username})")
     elif len(sys.argv) >= 3:
         username = sys.argv[1]
         password = sys.argv[2]
         active = True  # Override for command-line testing
     else:
-        print("No credentials in config.ini")
+        print("No credentials in database")
         username = input("QRZ Username: ")
         password = input("QRZ Password: ")
         active = True  # Override for manual testing
 
     if not active:
-        print("\nQRZ is disabled. Set active = True in config.ini to enable.")
+        print("\nQRZ is disabled. Enable it in Menu > QRZ ENABLE.")
         sys.exit(0)
 
     # Get callsign to lookup

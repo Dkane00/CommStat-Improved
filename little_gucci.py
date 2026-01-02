@@ -855,6 +855,104 @@ class DatabaseManager:
             print(f"Migration error: {error}")
             return False
 
+    def init_qrz_table(self) -> None:
+        """Create QRZ settings table if it doesn't exist (single record only)."""
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS qrz_settings (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        username TEXT,
+                        password TEXT,
+                        is_active INTEGER DEFAULT 0
+                    )
+                """)
+                connection.commit()
+
+                # Check if table is empty and seed with empty record
+                cursor.execute("SELECT COUNT(*) FROM qrz_settings")
+                if cursor.fetchone()[0] == 0:
+                    cursor.execute(
+                        "INSERT INTO qrz_settings (id, username, password, is_active) VALUES (1, '', '', 0)"
+                    )
+                    connection.commit()
+        except sqlite3.Error as error:
+            print(f"Database error initializing qrz_settings table: {error}")
+
+    def get_qrz_settings(self) -> Tuple[str, str, bool]:
+        """
+        Get QRZ settings from database.
+
+        Returns:
+            Tuple of (username, password, is_active)
+        """
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute("SELECT username, password, is_active FROM qrz_settings WHERE id = 1")
+                result = cursor.fetchone()
+                if result:
+                    return (result[0] or "", result[1] or "", bool(result[2]))
+                return ("", "", False)
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return ("", "", False)
+
+    def set_qrz_settings(self, username: str, password: str, is_active: bool) -> bool:
+        """
+        Save QRZ settings to database.
+
+        Args:
+            username: QRZ.com username
+            password: QRZ.com password
+            is_active: Whether QRZ lookups are enabled
+
+        Returns:
+            True if successful
+        """
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute(
+                    "UPDATE qrz_settings SET username = ?, password = ?, is_active = ? WHERE id = 1",
+                    (username, password, 1 if is_active else 0)
+                )
+                if cursor.rowcount == 0:
+                    # No row exists, insert one
+                    cursor.execute(
+                        "INSERT INTO qrz_settings (id, username, password, is_active) VALUES (1, ?, ?, ?)",
+                        (username, password, 1 if is_active else 0)
+                    )
+                connection.commit()
+                return True
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return False
+
+    def set_qrz_active(self, is_active: bool) -> bool:
+        """
+        Toggle QRZ active status.
+
+        Args:
+            is_active: Whether QRZ lookups are enabled
+
+        Returns:
+            True if successful
+        """
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                cursor.execute(
+                    "UPDATE qrz_settings SET is_active = ? WHERE id = 1",
+                    (1 if is_active else 0,)
+                )
+                connection.commit()
+                return cursor.rowcount > 0
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return False
+
 
 # =============================================================================
 # MainWindow - Main application window
@@ -1109,6 +1207,7 @@ class MainWindow(QtWidgets.QMainWindow):
             None,  # Separator
             ("js8_connectors", "JS8 CONNECTORS", self._on_js8_connectors),
             ("settings", "SETTINGS", self._on_settings),
+            ("qrz_enable", "QRZ ENABLE", self._on_qrz_enable),
             ("colors", "COLORS", self._on_colors),
             None,  # Separator
         ]
@@ -2919,6 +3018,84 @@ class MainWindow(QtWidgets.QMainWindow):
             # Reload config after settings are saved
             self.config = ConfigManager()
 
+    def _on_qrz_enable(self) -> None:
+        """Open QRZ Enable dialog for managing QRZ.com credentials."""
+        # Get current settings
+        username, password, is_active = self.db.get_qrz_settings()
+
+        # Create dialog
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("QRZ Enable")
+        dialog.setFixedWidth(400)
+        layout = QtWidgets.QVBoxLayout(dialog)
+
+        # Warning message
+        warning_label = QtWidgets.QLabel(
+            "NOTE: You must have a QRZ XML subscription for this feature to work.\n"
+            "Visit qrz.com to subscribe."
+        )
+        warning_label.setStyleSheet("color: #FF6600; font-weight: bold;")
+        warning_label.setWordWrap(True)
+        layout.addWidget(warning_label)
+
+        layout.addSpacing(10)
+
+        # Enable checkbox
+        enable_checkbox = QtWidgets.QCheckBox("Enable QRZ Lookups")
+        enable_checkbox.setChecked(is_active)
+        layout.addWidget(enable_checkbox)
+
+        layout.addSpacing(10)
+
+        # Form layout for credentials
+        form_layout = QtWidgets.QFormLayout()
+
+        username_input = QtWidgets.QLineEdit()
+        username_input.setText(username)
+        username_input.setPlaceholderText("QRZ.com username")
+        form_layout.addRow("Username:", username_input)
+
+        password_input = QtWidgets.QLineEdit()
+        password_input.setText(password)
+        password_input.setPlaceholderText("QRZ.com password")
+        password_input.setEchoMode(QtWidgets.QLineEdit.Password)
+        form_layout.addRow("Password:", password_input)
+
+        layout.addLayout(form_layout)
+
+        layout.addSpacing(20)
+
+        # Buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        save_btn = QtWidgets.QPushButton("Save")
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+
+        save_btn.clicked.connect(dialog.accept)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        button_layout.addStretch()
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            # Save settings
+            new_username = username_input.text().strip()
+            new_password = password_input.text()
+            new_active = enable_checkbox.isChecked()
+
+            if self.db.set_qrz_settings(new_username, new_password, new_active):
+                status = "enabled" if new_active else "disabled"
+                QtWidgets.QMessageBox.information(
+                    self, "QRZ Settings",
+                    f"QRZ settings saved. Lookups are {status}."
+                )
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self, "Error",
+                    "Failed to save QRZ settings."
+                )
+
     def _on_colors(self) -> None:
         """Open Colors customization window."""
         dialog = ColorsDialog(self)
@@ -3181,6 +3358,9 @@ def main() -> None:
 
     # Initialize db_version table (creates if needed, seeds version 1)
     db.init_db_version_table()
+
+    # Initialize QRZ settings table (creates if needed)
+    db.init_qrz_table()
 
     # Create and show main window
     window = MainWindow(config, db, debug_mode=debug_mode)
