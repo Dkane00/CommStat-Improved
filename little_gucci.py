@@ -761,17 +761,19 @@ class DatabaseManager:
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window for CommStat-Improved."""
 
-    def __init__(self, config: ConfigManager, db: DatabaseManager):
+    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False):
         """
         Initialize the main window.
 
         Args:
             config: ConfigManager instance with loaded settings
             db: DatabaseManager instance for database operations
+            debug_mode: Enable debug features when True
         """
         super().__init__()
         self.config = config
         self.db = db
+        self.debug_mode = debug_mode
 
         # Internet connectivity state
         self._internet_available = False
@@ -1099,6 +1101,13 @@ class MainWindow(QtWidgets.QMainWindow):
         world_map_action.triggered.connect(self._on_world_map)
         self.tools_menu.addAction(world_map_action)
         self.actions["world_map"] = world_map_action
+
+        # Debug menu item (only visible in debug mode)
+        if self.debug_mode:
+            debug_action = QtWidgets.QAction("Debug", self)
+            debug_action.triggered.connect(self._on_debug)
+            self.menubar.addAction(debug_action)
+            self.actions["debug"] = debug_action
 
         exit_action = QtWidgets.QAction("Exit", self)
         exit_action.triggered.connect(qApp.quit)
@@ -2834,6 +2843,10 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.ui.setupUi(dialog)
         dialog.exec_()
 
+    def _on_debug(self) -> None:
+        """Debug menu handler - placeholder for future functionality."""
+        pass
+
 
 # =============================================================================
 # Application Entry Point
@@ -2841,6 +2854,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main() -> None:
     """Application entry point."""
+    # Check for debug mode
+    debug_mode = "--debug" in sys.argv
+
     # Check for pending update - refuse to run if update.zip exists
     update_zip = Path(__file__).parent / "updates" / "update.zip"
     if update_zip.exists():
@@ -2867,8 +2883,11 @@ def main() -> None:
     db.init_db_version_table()
 
     # Create and show main window
-    window = MainWindow(config, db)
+    window = MainWindow(config, db, debug_mode=debug_mode)
     window.show()
+
+    if debug_mode:
+        print("Debug mode enabled")
 
     sys.exit(app.exec_())
 

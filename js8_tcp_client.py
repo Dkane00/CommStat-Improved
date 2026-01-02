@@ -260,13 +260,16 @@ class JS8CallTCPClient(QObject):
     def _on_error(self, error: QAbstractSocket.SocketError) -> None:
         """Handle socket errors."""
         if error == QAbstractSocket.ConnectionRefusedError:
-            print(f"[{self.rig_name}] Connection refused - is JS8Call running?")
+            msg = f"[{self.rig_name}] Connection refused - is JS8Call running on port {self.port}?"
         elif error == QAbstractSocket.RemoteHostClosedError:
-            print(f"[{self.rig_name}] Connection closed by JS8Call")
+            msg = f"[{self.rig_name}] Connection closed by JS8Call"
         elif error == QAbstractSocket.HostNotFoundError:
-            print(f"[{self.rig_name}] Host not found: {self.host}")
+            msg = f"[{self.rig_name}] Host not found: {self.host}"
         else:
-            print(f"[{self.rig_name}] Socket error: {self.socket.errorString()}")
+            msg = f"[{self.rig_name}] Socket error: {self.socket.errorString()}"
+
+        print(msg)
+        self.status_message.emit(self.rig_name, msg)
 
         # Schedule reconnect on connection errors (if under max attempts)
         if self._auto_reconnect and error in (
