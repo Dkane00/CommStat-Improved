@@ -60,7 +60,6 @@ class JS8CallTCPClient(QObject):
         self.buffer = b""
         self._auto_reconnect = True
         self._reconnect_attempts = 0
-        self._pending_connect_speed = False  # Waiting for speed after connect
 
         # Create socket
         self.socket = QTcpSocket(self)
@@ -176,9 +175,13 @@ class JS8CallTCPClient(QObject):
         self._reconnect_timer.stop()
         self._reconnect_attempts = 0  # Reset counter on successful connection
         self._auto_reconnect = True   # Re-enable auto-reconnect
-        self._pending_connect_speed = True  # Wait for speed before emitting full status
         self.connection_changed.emit(self.rig_name, True)
-        self.get_speed()  # Request speed mode
+        # Emit connected message immediately
+        self.status_message.emit(
+            self.rig_name,
+            f"[{self.rig_name}] Connected on TCP port {self.port}"
+        )
+        self.get_speed()  # Request speed mode (will show in separate message)
 
     def _on_disconnected(self) -> None:
         """Handle disconnection."""
@@ -234,14 +237,11 @@ class JS8CallTCPClient(QObject):
         elif msg_type == "MODE.SPEED":
             speed = params.get("SPEED", 0)
             self.speed_received.emit(self.rig_name, speed)
-            # If this is the speed response after connecting, emit the full status
-            if self._pending_connect_speed:
-                self._pending_connect_speed = False
-                speed_name = self.SPEED_NAMES.get(speed, f"MODE {speed}")
-                self.status_message.emit(
-                    self.rig_name,
-                    f"[{self.rig_name}] Connected on TCP port {self.port}  Running in {speed_name} mode"
-                )
+            speed_name = self.SPEED_NAMES.get(speed, f"MODE {speed}")
+            self.status_message.emit(
+                self.rig_name,
+                f"[{self.rig_name}] Running in {speed_name} mode"
+            )
 
         elif msg_type == "RX.DIRECTED":
             # Directed message received - emit for processing
