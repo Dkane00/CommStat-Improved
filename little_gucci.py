@@ -1646,16 +1646,24 @@ class MainWindow(QtWidgets.QMainWindow):
             return False
 
         # Look for Date: line (should be first line)
+        # Supports: YYYY-MM-DD, YYYY-MM-DD HH:MM, YYYY-MM-DD HH:MM:SS
         date_line = lines[0].strip()
-        match = re.match(r'Date:\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?', date_line, re.IGNORECASE)
+        match = re.match(
+            r'Date:\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2})(?::(\d{2}))?)?',
+            date_line, re.IGNORECASE
+        )
         if not match:
             return False
 
         date_str = match.group(1)
         time_str = match.group(2) or "23:59"  # Default to end of day if no time
+        seconds_str = match.group(3) or "00"
 
         try:
-            expiry = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+            expiry = datetime.strptime(
+                f"{date_str} {time_str}:{seconds_str}",
+                "%Y-%m-%d %H:%M:%S"
+            )
             return expiry > datetime.now()
         except ValueError:
             return False
