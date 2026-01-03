@@ -39,7 +39,6 @@ from PyQt5.QtCore import QTimer, QDateTime, Qt
 from PyQt5.QtWidgets import qApp
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 from about import Ui_FormAbout
-from colors import ColorsDialog
 from filter import FilterDialog
 from groups import GroupsDialog
 from debug_features import DebugFeatures
@@ -258,39 +257,30 @@ class ConfigManager:
         """
         self.config_path = Path(config_path)
         self.colors = DEFAULT_COLORS.copy()
-        self.user_info: Dict[str, str] = {}
         self.directed_config: Dict[str, str] = {}
         self.filter_settings: Dict[str, Any] = {}
         self._load()
 
     def _load(self) -> None:
-        """Load all configuration sections from file."""
+        """Load configuration from file."""
+        # Initialize filter settings (always reset on startup)
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        self.filter_settings = {
+            'start': today,
+            'end': ''
+        }
+
+        # Load toggle settings from config if it exists
         if not self.config_path.exists():
-            print(f"Warning: Config file '{self.config_path}' not found. Using defaults.")
+            self.directed_config = {'hide_heartbeat': False, 'show_all_groups': False, 'hide_map': False}
             return
 
         config = ConfigParser()
         config.read(self.config_path)
 
-        self._load_user_info(config)
-        self._load_directed_config(config)
-        self._load_filter_settings(config)
-        self._load_colors(config)
-
-    def _load_user_info(self, config: ConfigParser) -> None:
-        """Load user information section."""
-        if config.has_section("USERINFO"):
-            self.user_info = {
-                'callsign': config.get("USERINFO", "callsign", fallback=""),
-                'callsign_suffix': config.get("USERINFO", "callsignsuffix", fallback=""),
-                'grid': config.get("USERINFO", "grid", fallback=""),
-            }
-
-    def _load_directed_config(self, config: ConfigParser) -> None:
-        """Load display configuration section."""
         if config.has_section("DIRECTEDCONFIG"):
             self.directed_config = {
-                'state': config.get("DIRECTEDCONFIG", "state", fallback=""),
                 'hide_heartbeat': config.getboolean("DIRECTEDCONFIG", "hide_heartbeat", fallback=False),
                 'show_all_groups': config.getboolean("DIRECTEDCONFIG", "show_all_groups", fallback=False),
                 'hide_map': config.getboolean("DIRECTEDCONFIG", "hide_map", fallback=False),
@@ -298,70 +288,9 @@ class ConfigManager:
         else:
             self.directed_config = {'hide_heartbeat': False, 'show_all_groups': False, 'hide_map': False}
 
-    def _load_filter_settings(self, config: ConfigParser) -> None:
-        """Load filter settings section.
-
-        Note: Start date is always set to today on startup.
-        End date is empty by default (no upper limit).
-        Users can change both via Display Filter dialog to view historical data.
-        """
-        from datetime import datetime
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        self.filter_settings = {
-            'start': today,  # Always start from today on launch
-            'end': ''        # No end date by default
-        }
-
-    def _load_colors(self, config: ConfigParser) -> None:
-        """Load color scheme from config, using defaults for missing values."""
-        needs_save = False
-
-        if not config.has_section("COLORS"):
-            config.add_section("COLORS")
-            needs_save = True
-
-        for key in self.colors:
-            if config.has_option("COLORS", key):
-                self.colors[key] = config.get("COLORS", key)
-            else:
-                # Missing key - add default to config
-                config.set("COLORS", key, self.colors[key])
-                needs_save = True
-
-        # Write defaults to config.ini if any were missing
-        if needs_save:
-            try:
-                with open(CONFIG_FILE, 'w') as f:
-                    config.write(f)
-                print("Rebuilt missing colors in config.ini")
-            except IOError as e:
-                print(f"Warning: Could not save colors to config: {e}")
-
     def get_color(self, key: str) -> str:
-        """
-        Get a color value by key with validation.
-
-        Args:
-            key: The color key name
-
-        Returns:
-            The hex color value, or default if invalid
-        """
-        color = self.colors.get(key, '#FFFFFF')
-        if not QColor(color).isValid():
-            default = DEFAULT_COLORS.get(key, '#FFFFFF')
-            print(f"Warning: Invalid color '{color}' for '{key}', using default '{default}'")
-            return default
-        return color
-
-    def get_callsign(self) -> str:
-        """Get the user's callsign with optional suffix."""
-        callsign = self.user_info.get('callsign', '')
-        suffix = self.user_info.get('callsign_suffix', '')
-        if suffix:
-            return f"{callsign}/{suffix}"
-        return callsign
+        """Get a color value by key."""
+        return self.colors.get(key, '#FFFFFF')
 
     def get_hide_heartbeat(self) -> bool:
         """Get the hide heartbeat setting."""
@@ -1209,7 +1138,6 @@ class MainWindow(QtWidgets.QMainWindow):
             None,  # Separator
             ("js8_connectors", "JS8 CONNECTORS", self._on_js8_connectors),
             ("qrz_enable", "QRZ ENABLE", self._on_qrz_enable),
-            ("colors", "COLORS", self._on_colors),
             None,  # Separator
         ]
 
@@ -3097,17 +3025,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     self, "Error",
                     "Failed to save QRZ settings."
                 )
-
-    def _on_colors(self) -> None:
-        """Open Colors customization window."""
-        dialog = ColorsDialog(self)
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            # Reload config - colors apply on restart
-            self.config = ConfigManager()
-            QtWidgets.QMessageBox.information(
-                self, "Colors Saved",
-                "Color changes will apply when you restart the application."
-            )
 
     def _on_band_conditions(self) -> None:
         """Show Band Conditions dialog with N0NBH solar-terrestrial data."""
