@@ -426,6 +426,7 @@ class StatRepDialog(QDialog):
         self.remarks_field.setMinimumHeight(36)
         self.remarks_field.setMaxLength(60)
         self.remarks_field.setPlaceholderText("Optional - max 60 characters")
+        self.remarks_field.setText(self._get_default_remarks())
         remarks_layout.addWidget(remarks_label)
         remarks_layout.addWidget(self.remarks_field)
         layout.addLayout(remarks_layout)
@@ -566,20 +567,16 @@ class StatRepDialog(QDialog):
     def _on_all_green(self) -> None:
         """Set all statuses to Green."""
         self._set_all_status("Green")
-        self.remarks_field.setText(self._get_default_remarks())
 
     def _on_all_gray(self) -> None:
         """Set all statuses to Unknown (Gray)."""
         self._set_all_status("Unknown")
-        self.remarks_field.setText(self._get_default_remarks())
 
     def _build_message(self) -> str:
         """Build the StatRep message string for transmission."""
         values = self._get_status_values()
         scope_code = self.scope_combo.currentData()
         remarks = self.remarks_field.text().strip().upper()
-        if not remarks:
-            remarks = self._get_default_remarks()
 
         # Clean remarks - only alphanumeric, spaces, hyphens, asterisks
         remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
@@ -621,7 +618,7 @@ class StatRepDialog(QDialog):
         """
         values = self._get_status_values()
         scope_text = self.scope_combo.currentText()
-        remarks = self.remarks_field.text().strip().upper() or self._get_default_remarks()
+        remarks = self.remarks_field.text().strip().upper()
         remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
 
         now = QDateTime.currentDateTimeUtc()
