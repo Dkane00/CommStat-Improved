@@ -264,7 +264,7 @@ class JS8CallTCPClient(QObject):
     def _on_error(self, error: QAbstractSocket.SocketError) -> None:
         """Handle socket errors."""
         if error == QAbstractSocket.ConnectionRefusedError:
-            msg = f"[{self.rig_name}] Attempting to connect on port {self.port}..."
+            msg = f"[{self.rig_name}] Attempting to connect on TCP port {self.port}"
         elif error == QAbstractSocket.RemoteHostClosedError:
             msg = f"[{self.rig_name}] Connection closed by JS8Call"
         elif error == QAbstractSocket.HostNotFoundError:
