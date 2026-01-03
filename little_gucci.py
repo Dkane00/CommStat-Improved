@@ -1239,12 +1239,6 @@ class MainWindow(QtWidgets.QMainWindow):
         show_all_groups_action.setDefaultWidget(self.show_all_groups_checkbox)
         self.filter_menu.addAction(show_all_groups_action)
 
-        # Add About, Help, Exit directly to menu bar
-        about_action = QtWidgets.QAction("About", self)
-        about_action.triggered.connect(self._on_about)
-        self.menubar.addAction(about_action)
-        self.actions["about"] = about_action
-
         # Create Tools dropdown menu
         self.tools_menu = QtWidgets.QMenu("Tools", self.menubar)
         self.menubar.addMenu(self.tools_menu)
@@ -1267,15 +1261,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tools_menu.addAction(world_map_action)
         self.actions["world_map"] = world_map_action
 
-        # Debug menu (only visible in debug mode)
-        if self.debug_mode:
-            self.debug_features = DebugFeatures(self)
-            self.debug_features.setup_debug_menu()
+        # About (left of Exit)
+        about_action = QtWidgets.QAction("About", self)
+        about_action.triggered.connect(self._on_about)
+        self.menubar.addAction(about_action)
+        self.actions["about"] = about_action
 
+        # Exit
         exit_action = QtWidgets.QAction("Exit", self)
         exit_action.triggered.connect(qApp.quit)
         self.menubar.addAction(exit_action)
         self.actions["exit"] = exit_action
+
+        # Debug menu (right of Exit, only visible in debug mode)
+        if self.debug_mode:
+            self.debug_features = DebugFeatures(self)
+            self.debug_features.setup_debug_menu()
 
         # Add status bar
         self.statusbar = QtWidgets.QStatusBar(self)
