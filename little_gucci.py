@@ -1106,12 +1106,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_layout = QtWidgets.QGridLayout(self.central_widget)
         self.main_layout.setObjectName("mainLayout")
 
-        # Row stretches: header and labels don't stretch
-        self.main_layout.setRowStretch(0, 0)  # Header
-        self.main_layout.setRowStretch(1, 1)  # StatRep table (50%)
-        self.main_layout.setRowStretch(2, 1)  # Feed text (50%)
-        self.main_layout.setRowStretch(3, 0)  # Map row 1 / Filter (fixed)
-        self.main_layout.setRowStretch(4, 0)  # Map row 2 / Messages (fixed)
+        # Row stretches: menu bar row 0, then content rows
+        self.main_layout.setRowStretch(0, 0)  # Menu bar (fixed)
+        self.main_layout.setRowStretch(1, 0)  # Header
+        self.main_layout.setRowStretch(2, 1)  # StatRep table (50%)
+        self.main_layout.setRowStretch(3, 1)  # Feed text (50%)
+        self.main_layout.setRowStretch(4, 0)  # Map row 1 / Filter (fixed)
+        self.main_layout.setRowStretch(5, 0)  # Map row 2 / Messages (fixed)
 
         # Setup components
         self._setup_menu()
@@ -1187,7 +1188,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {menu_bg};
             }}
         """)
-        self.setMenuBar(self.menubar)
+        # Add menu bar to layout row 0 (fixes Linux global menu issues)
+        self.main_layout.addWidget(self.menubar, 0, 0, 1, 2)
 
         # Create the main menu
         self.menu = QtWidgets.QMenu("Menu", self.menubar)
@@ -1399,8 +1401,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.time_label.setAlignment(QtCore.Qt.AlignCenter)
         self.header_layout.addWidget(self.time_label)
 
-        # Add header to main layout (row 0, spans all columns)
-        self.main_layout.addWidget(self.header_widget, 0, 0, 1, 2)
+        # Add header to main layout (row 1, spans all columns)
+        self.main_layout.addWidget(self.header_widget, 1, 0, 1, 2)
 
     def _setup_statrep_table(self) -> None:
         """Create the StatRep data table."""
@@ -1451,8 +1453,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Connect click handler
         self.statrep_table.itemClicked.connect(self._on_statrep_click)
 
-        # Add to layout (row 1, spans all columns)
-        self.main_layout.addWidget(self.statrep_table, 1, 0, 1, 2)
+        # Add to layout (row 2, spans all columns)
+        self.main_layout.addWidget(self.statrep_table, 2, 0, 1, 2)
 
     def _setup_placeholder_area(self) -> None:
         """Create placeholder area above message table (for future use)."""
@@ -1469,7 +1471,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.placeholder_area.setText("")
         self.placeholder_area.setSizePolicy(shrink_policy)
         self.placeholder_area.setFixedHeight(FILTER_HEIGHT)
-        self.main_layout.addWidget(self.placeholder_area, 3, 1, 1, 1)
+        self.main_layout.addWidget(self.placeholder_area, 4, 1, 1, 1)
 
     def _setup_map_widget(self) -> None:
         """Create the map widget using QWebEngineView."""
@@ -1481,8 +1483,8 @@ class MainWindow(QtWidgets.QMainWindow):
         custom_page = CustomWebEnginePage(self)
         self.map_widget.setPage(custom_page)
 
-        # Add to layout (row 3-4, column 0 only, spanning 2 rows)
-        self.main_layout.addWidget(self.map_widget, 3, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
+        # Add to layout (row 4-5, column 0 only, spanning 2 rows)
+        self.main_layout.addWidget(self.map_widget, 4, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
 
         # Set column stretches: map column fixed, message column stretches
         self.main_layout.setColumnStretch(0, 0)  # Map (fixed)
@@ -1514,7 +1516,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
         # Add to same layout position as map
-        self.main_layout.addWidget(self.map_disabled_label, 3, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
+        self.main_layout.addWidget(self.map_disabled_label, 4, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
 
         # Image slideshow state: list of (image_path, click_url) tuples
         self.slideshow_items: List[Tuple[str, Optional[str]]] = []
@@ -1898,8 +1900,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.feed_text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.feed_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
-        # Add to layout (row 2, full width)
-        self.main_layout.addWidget(self.feed_text, 2, 0, 1, 2)
+        # Add to layout (row 3, full width)
+        self.main_layout.addWidget(self.feed_text, 3, 0, 1, 2)
 
     def _load_live_feed(self) -> None:
         """Initialize the live feed display from buffer."""
@@ -1981,8 +1983,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.message_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.message_table.setFixedHeight(MAP_HEIGHT - FILTER_HEIGHT)
 
-        # Add to layout (row 4, column 1)
-        self.main_layout.addWidget(self.message_table, 4, 1, 1, 1)
+        # Add to layout (row 5, column 1)
+        self.main_layout.addWidget(self.message_table, 5, 1, 1, 1)
 
     def _load_message_data(self) -> None:
         """Load message data from database into the table."""
