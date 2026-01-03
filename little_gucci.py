@@ -927,7 +927,7 @@ class DatabaseManager:
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window for CommStat-Improved."""
 
-    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False, demo_mode: bool = False):
+    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False, demo_mode: bool = False, demo_version: int = 1, demo_duration: int = 60):
         """
         Initialize the main window.
 
@@ -936,12 +936,16 @@ class MainWindow(QtWidgets.QMainWindow):
             db: DatabaseManager instance for database operations
             debug_mode: Enable debug features when True
             demo_mode: Enable demo mode with simulated disaster data
+            demo_version: Demo scenario version (1, 2, 3, etc.)
+            demo_duration: Demo playback duration in seconds (default 60)
         """
         super().__init__()
         self.config = config
         self.db = db
         self.debug_mode = debug_mode
         self.demo_mode = demo_mode
+        self.demo_version = demo_version
+        self.demo_duration = demo_duration
         self.demo_runner = None
 
         # Internet connectivity state
@@ -1036,19 +1040,19 @@ class MainWindow(QtWidgets.QMainWindow):
             print("Closing TCP connections...")
             self.tcp_pool.disconnect_all()
 
-        # Demo mode cleanup - ask user if they want to delete demo data
+        # Demo mode cleanup - ask user if they want to delete demo data from traffic.db3
         if self.demo_mode:
             reply = QtWidgets.QMessageBox.question(
                 self,
                 "Demo Mode",
-                "Delete demo data before exiting?",
+                "Delete demo data from database before exiting?",
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                 QtWidgets.QMessageBox.Yes
             )
             if reply == QtWidgets.QMessageBox.Yes:
-                from demo_mode import cleanup_demo_data
-                cleanup_demo_data()
-                print("Demo data deleted")
+                from demo_mode import cleanup_demo_data_from_traffic
+                cleanup_demo_data_from_traffic()
+                print("Demo data deleted from traffic.db3")
 
         # Save window position
         self._save_window_position()
@@ -1089,8 +1093,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.main_layout = QtWidgets.QGridLayout(self.central_widget)
         self.main_layout.setObjectName("mainLayout")
 
-        # Row stretches: menu bar row 0, then content rows
-        self.main_layout.setRowStretch(0, 0)  # Menu bar (fixed)
+        # Row stretches (menu bar handled by QMainWindow.setMenuBar)
+        self.main_layout.setRowStretch(0, 0)  # Unused (was menu bar)
         self.main_layout.setRowStretch(1, 0)  # Header
         self.main_layout.setRowStretch(2, 1)  # StatRep table (50%)
         self.main_layout.setRowStretch(3, 1)  # Feed text (50%)
@@ -1148,8 +1152,11 @@ class MainWindow(QtWidgets.QMainWindow):
         """Create the menu bar with all actions."""
         self.menubar = QtWidgets.QMenuBar(self)
         self.menubar.setNativeMenuBar(False)  # Use Qt menu bar, not native (fixes Linux)
+        self.setMenuBar(self.menubar)  # Explicitly set as main window's menu bar
         self.menubar.setVisible(True)
-        self.menubar.setFixedHeight(24)
+        # Clear corner widgets that may interfere with menu layout on Linux
+        self.menubar.setCornerWidget(None, Qt.TopLeftCorner)
+        self.menubar.setCornerWidget(None, Qt.TopRightCorner)
         menu_bg = self.config.get_color('menu_background')
         menu_fg = self.config.get_color('menu_foreground')
         self.menubar.setStyleSheet(f"""
@@ -1171,8 +1178,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {menu_bg};
             }}
         """)
-        # Add menu bar to layout row 0 (fixes Linux global menu issues)
-        self.main_layout.addWidget(self.menubar, 0, 0, 1, 2)
 
         # Create the main menu
         self.menu = QtWidgets.QMenu("Menu", self.menubar)
@@ -1349,7 +1354,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Demo mode - start after window is shown
         if self.demo_mode:
             from demo_mode import DemoRunner
-            self.demo_runner = DemoRunner(self)
+            self.demo_runner = DemoRunner(self, self.demo_version, self.demo_duration)
             QTimer.singleShot(1000, self.demo_runner.start)
 
         # Add status bar
@@ -3360,9 +3365,23 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main() -> None:
     """Application entry point."""
-    # Check for debug mode and demo mode
+    # Check for debug mode
     debug_mode = "--debug" in sys.argv
-    demo_mode = "--demo-mode" in sys.argv
+
+    # Check for demo mode with version number and optional duration
+    # Usage: --demo-mode [version] [duration_seconds]
+    demo_mode = False
+    demo_version = 1
+    demo_duration = 60  # default 60 seconds
+    for i, arg in enumerate(sys.argv):
+        if arg == "--demo-mode":
+            demo_mode = True
+            # Check if next arg is a version number
+            if i + 1 < len(sys.argv) and sys.argv[i + 1].isdigit():
+                demo_version = int(sys.argv[i + 1])
+                # Check if there's also a duration
+                if i + 2 < len(sys.argv) and sys.argv[i + 2].isdigit():
+                    demo_duration = int(sys.argv[i + 2])
 
     # Check for pending update - refuse to run if update.zip exists
     update_zip = Path(__file__).parent / "updates" / "update.zip"
@@ -3379,8 +3398,14 @@ def main() -> None:
 
     app = QtWidgets.QApplication(sys.argv)
 
-    # Load configuration and database
+    # Load configuration
     config = ConfigManager()
+
+    # In demo mode, initialize demo database (but still use traffic.db3 for display)
+    if demo_mode:
+        from demo_mode import init_demo_database
+        init_demo_database()  # Creates demo.db3 if needed
+
     db = DatabaseManager()
 
     # Initialize Groups table (creates if needed, seeds defaults)
@@ -3393,13 +3418,13 @@ def main() -> None:
     db.init_qrz_table()
 
     # Create and show main window
-    window = MainWindow(config, db, debug_mode=debug_mode, demo_mode=demo_mode)
+    window = MainWindow(config, db, debug_mode=debug_mode, demo_mode=demo_mode, demo_version=demo_version, demo_duration=demo_duration)
     window.show()
 
     if debug_mode:
         print("Debug mode enabled")
     if demo_mode:
-        print("Demo mode enabled - 60 second disaster simulation")
+        print(f"Demo mode enabled - Version {demo_version} - {demo_duration} second disaster simulation")
 
     sys.exit(app.exec_())
 
