@@ -927,7 +927,7 @@ class DatabaseManager:
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window for CommStat-Improved."""
 
-    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False):
+    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False, demo_mode: bool = False):
         """
         Initialize the main window.
 
@@ -935,11 +935,14 @@ class MainWindow(QtWidgets.QMainWindow):
             config: ConfigManager instance with loaded settings
             db: DatabaseManager instance for database operations
             debug_mode: Enable debug features when True
+            demo_mode: Enable demo mode with simulated disaster data
         """
         super().__init__()
         self.config = config
         self.db = db
         self.debug_mode = debug_mode
+        self.demo_mode = demo_mode
+        self.demo_runner = None
 
         # Internet connectivity state
         self._internet_available = False
@@ -1032,6 +1035,20 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self, 'tcp_pool'):
             print("Closing TCP connections...")
             self.tcp_pool.disconnect_all()
+
+        # Demo mode cleanup - ask user if they want to delete demo data
+        if self.demo_mode:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Demo Mode",
+                "Delete demo data before exiting?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.Yes
+            )
+            if reply == QtWidgets.QMessageBox.Yes:
+                from demo_mode import cleanup_demo_data
+                cleanup_demo_data()
+                print("Demo data deleted")
 
         # Save window position
         self._save_window_position()
@@ -1328,6 +1345,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.debug_mode:
             self.debug_features = DebugFeatures(self)
             self.debug_features.setup_debug_menu()
+
+        # Demo mode - start after window is shown
+        if self.demo_mode:
+            from demo_mode import DemoRunner
+            self.demo_runner = DemoRunner(self)
+            QTimer.singleShot(1000, self.demo_runner.start)
 
         # Add status bar
         self.statusbar = QtWidgets.QStatusBar(self)
@@ -3337,8 +3360,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main() -> None:
     """Application entry point."""
-    # Check for debug mode
+    # Check for debug mode and demo mode
     debug_mode = "--debug" in sys.argv
+    demo_mode = "--demo-mode" in sys.argv
 
     # Check for pending update - refuse to run if update.zip exists
     update_zip = Path(__file__).parent / "updates" / "update.zip"
@@ -3369,11 +3393,13 @@ def main() -> None:
     db.init_qrz_table()
 
     # Create and show main window
-    window = MainWindow(config, db, debug_mode=debug_mode)
+    window = MainWindow(config, db, debug_mode=debug_mode, demo_mode=demo_mode)
     window.show()
 
     if debug_mode:
         print("Debug mode enabled")
+    if demo_mode:
+        print("Demo mode enabled - 60 second disaster simulation")
 
     sys.exit(app.exec_())
 
