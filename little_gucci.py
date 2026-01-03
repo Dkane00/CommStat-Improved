@@ -1248,9 +1248,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu.addAction(data_filter_label)
 
         # Add checkable toggle for hiding heartbeat messages (menu stays open)
+        menu_bg = self.config.get_color('menu_background')
+        menu_fg = self.config.get_color('menu_foreground')
+        checkbox_style = f"QCheckBox {{ padding: 4px 8px; background-color: {menu_bg}; color: {menu_fg}; }}"
         self.hide_heartbeat_checkbox = QtWidgets.QCheckBox("HIDE CQ & HEARTBEAT")
         self.hide_heartbeat_checkbox.setChecked(self.config.get_hide_heartbeat())
-        self.hide_heartbeat_checkbox.setStyleSheet("QCheckBox { padding: 4px 8px; }")
+        self.hide_heartbeat_checkbox.setStyleSheet(checkbox_style)
         self.hide_heartbeat_checkbox.stateChanged.connect(
             lambda state: self._on_toggle_heartbeat(state == Qt.Checked))
         hide_heartbeat_action = QtWidgets.QWidgetAction(self)
@@ -1260,7 +1263,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add checkable toggle for hiding map (menu stays open)
         self.hide_map_checkbox = QtWidgets.QCheckBox("HIDE MAP")
         self.hide_map_checkbox.setChecked(self.config.get_hide_map())
-        self.hide_map_checkbox.setStyleSheet("QCheckBox { padding: 4px 8px; }")
+        self.hide_map_checkbox.setStyleSheet(checkbox_style)
         self.hide_map_checkbox.stateChanged.connect(
             lambda state: self._on_toggle_hide_map(state == Qt.Checked))
         hide_map_action = QtWidgets.QWidgetAction(self)
@@ -1270,7 +1273,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add checkable toggle for showing all registered groups (menu stays open)
         self.show_all_groups_checkbox = QtWidgets.QCheckBox("SHOW ALL MY GROUPS")
         self.show_all_groups_checkbox.setChecked(self.config.get_show_all_groups())
-        self.show_all_groups_checkbox.setStyleSheet("QCheckBox { padding: 4px 8px; }")
+        self.show_all_groups_checkbox.setStyleSheet(checkbox_style)
         self.show_all_groups_checkbox.stateChanged.connect(
             lambda state: self._on_toggle_show_all_groups(state == Qt.Checked))
         show_all_groups_action = QtWidgets.QWidgetAction(self)
@@ -1280,7 +1283,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add checkable toggle for showing every group (no filtering) (menu stays open)
         self.show_every_group_checkbox = QtWidgets.QCheckBox("SHOW EVERY GROUP")
         self.show_every_group_checkbox.setChecked(self.config.get_show_every_group())
-        self.show_every_group_checkbox.setStyleSheet("QCheckBox { padding: 4px 8px; }")
+        self.show_every_group_checkbox.setStyleSheet(checkbox_style)
         self.show_every_group_checkbox.stateChanged.connect(
             lambda state: self._on_toggle_show_every_group(state == Qt.Checked))
         show_every_group_action = QtWidgets.QWidgetAction(self)
@@ -2532,11 +2535,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.groups_menu.removeAction(action)
 
         # Add groups alphabetically with checkboxes (menu stays open when clicked)
+        menu_bg = self.config.get_color('menu_background')
+        menu_fg = self.config.get_color('menu_foreground')
+        checkbox_style = f"QCheckBox {{ padding: 4px 8px; background-color: {menu_bg}; color: {menu_fg}; }}"
         groups = self.db.get_all_groups_with_status()
         for name, is_active in groups:  # Already sorted by name from DB
             checkbox = QtWidgets.QCheckBox(name)
             checkbox.setChecked(is_active)
-            checkbox.setStyleSheet("QCheckBox { padding: 4px 8px; }")
+            checkbox.setStyleSheet(checkbox_style)
             checkbox.stateChanged.connect(lambda state, n=name: self._toggle_group(n, state == Qt.Checked))
             widget_action = QtWidgets.QWidgetAction(self)
             widget_action.setDefaultWidget(checkbox)
