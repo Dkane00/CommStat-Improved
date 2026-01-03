@@ -3,186 +3,171 @@
 # Licensed under the GNU General Public License v3.0.
 
 """
-Demo mode - generates sample disaster simulation data for demonstration.
+Demo mode - plays back curated demo data for demonstration.
 
-Usage: python startup.py --demo-mode
+Two-part workflow:
+1. Populate demo.db3 with test data (use demo_populate.py or manual entry)
+2. Run: python startup.py --demo-mode 1
+
+The demo reads from demo.db3 and writes to traffic.db3 with real timestamps,
+paced over 60 seconds.
 """
 
 import sqlite3
-import random
+import os
 from datetime import datetime
 from PyQt5.QtCore import QTimer
 
-DATABASE_FILE = "traffic.db3"
-
-# Sample callsigns for demo
-CALLSIGNS = [
-    "N0DDK", "K5ABC", "W1AW", "KG7MXX", "WA6ABC",
-    "N7XYZ", "K0DEF", "W3GHI", "KA2JKL", "WB6MNO",
-    "KC8QQQ", "W4RRR", "N1SSS", "K6TTT", "WA9UUU",
-    "KD7VVV", "W2WWW", "N5YYY", "K3ZZZ", "WB4AAA",
-]
-
-# Grid squares by zone
-COASTAL_WEST_GRIDS = [
-    "CM93", "CM94", "CM95", "CM97", "CM98",
-    "CN70", "CN80", "CN81", "CN82", "CN83", "CN84", "CN85", "CN86", "CN87", "CN88",
-]
-
-COASTAL_NORTHEAST_GRIDS = [
-    "FN41", "FN42", "FN43", "FN44", "FN31", "FN32", "FN30", "FM29", "FM19",
-]
-
-INLAND_WEST_GRIDS = ["DM04", "DM13", "DM14", "DM26", "DN07", "DN17", "DN31"]
-
-INLAND_NORTHEAST_GRIDS = ["FN20", "FN21", "FN10", "FN11", "EN92", "EN91"]
-
-CENTRAL_GRIDS = [
-    "EM10", "EM12", "EM13", "DM91", "DM92",  # Texas
-    "EN72", "EN73", "EN82", "EN83",  # Michigan
-    "EM17", "EM27", "EM28", "EM29", "EN10", "EN20",  # Central states
-]
-
-# Zone-specific field weights (red=3, yellow=2, green=1)
-COASTAL_WEIGHTS = {
-    "power":    {"3": 70, "2": 20, "1": 10},
-    "water":    {"3": 60, "2": 30, "1": 10},
-    "medical":  {"3": 50, "2": 30, "1": 20},
-    "travel":   {"3": 80, "2": 15, "1": 5},
-    "comms":    {"3": 40, "2": 40, "1": 20},
-    "food":     {"3": 30, "2": 40, "1": 30},
-    "crime":    {"3": 40, "2": 30, "1": 30},
-    "internet": {"3": 90, "2": 10, "1": 0},
-}
-
-INLAND_WEIGHTS = {
-    "power":    {"3": 30, "2": 50, "1": 20},
-    "water":    {"3": 20, "2": 40, "1": 40},
-    "medical":  {"3": 20, "2": 30, "1": 50},
-    "travel":   {"3": 40, "2": 40, "1": 20},
-    "comms":    {"3": 20, "2": 40, "1": 40},
-    "food":     {"3": 10, "2": 30, "1": 60},
-    "crime":    {"3": 20, "2": 30, "1": 50},
-    "internet": {"3": 50, "2": 30, "1": 20},
-}
-
-CENTRAL_WEIGHTS = {
-    "power":    {"3": 0, "2": 10, "1": 90},
-    "water":    {"3": 0, "2": 10, "1": 90},
-    "medical":  {"3": 0, "2": 10, "1": 90},
-    "travel":   {"3": 0, "2": 10, "1": 90},
-    "comms":    {"3": 0, "2": 10, "1": 90},
-    "food":     {"3": 0, "2": 5, "1": 95},
-    "crime":    {"3": 0, "2": 10, "1": 90},
-    "internet": {"3": 0, "2": 10, "1": 90},
-}
-
-# Comments by zone (ALL CAPS - JS8Call format)
-COASTAL_COMMENTS = [
-    "EARTHQUAKE DAMAGE REQUESTING ASSISTANCE",
-    "TSUNAMI WARNING IN EFFECT",
-    "POWER OUT NO ETA FOR RESTORE",
-    "ROADS FLOODED IMPASSABLE",
-    "MAJOR STRUCTURAL DAMAGE",
-    "FIRES REPORTED MULTIPLE LOCATIONS",
-    "WATER MAIN BREAK NO WATER",
-    "BRIDGE COLLAPSED DETOUR REQUIRED",
-    "GAS LEAK EVACUATING AREA",
-    "EMERGENCY SERVICES OVERWHELMED",
-]
-
-INLAND_COMMENTS = [
-    "MINOR DAMAGE SOME POWER OUTAGES",
-    "ROADS OPEN WITH DELAYS",
-    "SHELTERS OPENING NEARBY",
-    "SOME CELL SERVICE RESTORED",
-    "POWER FLICKERING UNSTABLE",
-    "TRAFFIC HEAVY FROM EVACUEES",
-    "STORES LOW ON SUPPLIES",
-    "HOSPITAL ACCEPTING PATIENTS",
-]
-
-CENTRAL_COMMENTS = [
-    "ALL CLEAR NO ISSUES",
-    "NORMAL CONDITIONS",
-    "WEEKLY CHECKIN ALL OK",
-    "STANDING BY TO ASSIST",
-    "NO DAMAGE REPORTED",
-    "READY TO RELAY TRAFFIC",
-]
-
-# Messages (ALL CAPS - JS8Call format)
-DEMO_MESSAGES = [
-    "NEED MEDICAL SUPPLIES URGENT",
-    "EVACUATION ROUTE BLOCKED",
-    "SHELTER AT HIGH SCHOOL OPEN",
-    "WATER DISTRIBUTION AT CITY HALL",
-    "GRID DOWN COUNTY WIDE",
-    "AFTERSHOCK REPORTED 4.2",
-    "NATIONAL GUARD ARRIVING",
-    "CELL TOWERS DOWN USE HF",
-    "HOSPITAL AT CAPACITY",
-    "ROADS CLEAR TO EAST",
-]
-
-GROUPS = ["MAGNET", "AMRRON", "PREPPERNET"]
+DEMO_DATABASE = "demo.db3"
+TRAFFIC_DATABASE = "traffic.db3"
 
 
-def get_status_by_weight(weights: dict) -> str:
-    """Return status based on weighted probability.
-
-    Args:
-        weights: dict like {"1": 90, "2": 10, "3": 0} for green/yellow/red %
+def init_demo_database() -> str:
+    """Initialize the demo database with required tables.
 
     Returns:
-        Status string "1", "2", or "3"
+        Path to the demo database
     """
-    roll = random.randint(1, 100)
-    cumulative = 0
-    for status, weight in weights.items():
-        cumulative += weight
-        if roll <= cumulative:
-            return status
-    return "1"  # default green
+    if os.path.exists(DEMO_DATABASE):
+        print(f"Using existing demo database: {DEMO_DATABASE}")
+        return DEMO_DATABASE
+
+    print(f"Creating demo database: {DEMO_DATABASE}")
+
+    with sqlite3.connect(DEMO_DATABASE, timeout=10) as conn:
+        # Scenarios table - stores version info
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS demo_scenarios (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT
+            )
+        """)
+
+        # Demo statreps - no datetime, that's generated at playback
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS demo_statreps (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scenario_id INTEGER NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                callsign TEXT NOT NULL,
+                groupname TEXT,
+                grid TEXT,
+                status TEXT,
+                commpwr TEXT,
+                pubwtr TEXT,
+                med TEXT,
+                ota TEXT,
+                trav TEXT,
+                net TEXT,
+                fuel TEXT,
+                food TEXT,
+                crime TEXT,
+                civil TEXT,
+                political TEXT,
+                comments TEXT,
+                FOREIGN KEY (scenario_id) REFERENCES demo_scenarios(id)
+            )
+        """)
+
+        # Demo messages - no datetime
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS demo_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scenario_id INTEGER NOT NULL,
+                sequence_order INTEGER NOT NULL,
+                callsign TEXT NOT NULL,
+                groupid TEXT,
+                message TEXT,
+                FOREIGN KEY (scenario_id) REFERENCES demo_scenarios(id)
+            )
+        """)
+
+        conn.commit()
+
+    return DEMO_DATABASE
 
 
-def insert_demo_statrep(callsign: str, grid: str, group: str, zone: str = "central") -> None:
-    """Insert a demo statrep with mixed field statuses.
+def get_scenario_info(version: int) -> dict:
+    """Get scenario name and description.
 
     Args:
-        callsign: Amateur callsign
-        grid: 4-char Maidenhead grid
-        group: Group name (MAGNET, AMRRON, etc.)
-        zone: "coastal", "inland", or "central"
+        version: Scenario ID
+
+    Returns:
+        Dict with 'name' and 'description', or defaults if not found
     """
-    weights = {
-        "coastal": COASTAL_WEIGHTS,
-        "inland": INLAND_WEIGHTS,
-    }.get(zone, CENTRAL_WEIGHTS)
+    if not os.path.exists(DEMO_DATABASE):
+        return {"name": f"Scenario {version}", "description": "No demo database found"}
 
-    comments = {
-        "coastal": COASTAL_COMMENTS,
-        "inland": INLAND_COMMENTS,
-    }.get(zone, CENTRAL_COMMENTS)
+    with sqlite3.connect(DEMO_DATABASE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT name, description FROM demo_scenarios WHERE id = ?",
+            (version,)
+        ).fetchone()
 
-    # Generate each field independently
-    power = get_status_by_weight(weights["power"])
-    water = get_status_by_weight(weights["water"])
-    medical = get_status_by_weight(weights["medical"])
-    travel = get_status_by_weight(weights["travel"])
-    comms = get_status_by_weight(weights["comms"])
-    food = get_status_by_weight(weights["food"])
-    crime = get_status_by_weight(weights["crime"])
-    internet = get_status_by_weight(weights["internet"])
+        if row:
+            return {"name": row["name"], "description": row["description"]}
+        return {"name": f"Scenario {version}", "description": "Scenario not defined"}
 
-    # Overall status = worst of all fields
-    overall = max(power, water, medical, travel, comms, food, crime, internet)
 
+def get_demo_statreps(version: int) -> list:
+    """Get all statreps for a scenario, ordered by sequence.
+
+    Args:
+        version: Scenario ID
+
+    Returns:
+        List of statrep dicts
+    """
+    if not os.path.exists(DEMO_DATABASE):
+        return []
+
+    with sqlite3.connect(DEMO_DATABASE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """SELECT * FROM demo_statreps
+               WHERE scenario_id = ?
+               ORDER BY sequence_order""",
+            (version,)
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_demo_messages(version: int) -> list:
+    """Get all messages for a scenario, ordered by sequence.
+
+    Args:
+        version: Scenario ID
+
+    Returns:
+        List of message dicts
+    """
+    if not os.path.exists(DEMO_DATABASE):
+        return []
+
+    with sqlite3.connect(DEMO_DATABASE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """SELECT * FROM demo_messages
+               WHERE scenario_id = ?
+               ORDER BY sequence_order""",
+            (version,)
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def write_statrep_to_traffic(statrep: dict) -> None:
+    """Write a statrep to the traffic database with current timestamp.
+
+    Args:
+        statrep: Dict with statrep fields (no datetime)
+    """
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    srid = f"DEMO{random.randint(1000, 9999)}"
-    comment = random.choice(comments)
+    srid = f"DEMO{statrep['id']:04d}"
 
-    with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+    with sqlite3.connect(TRAFFIC_DATABASE, timeout=10) as conn:
         conn.execute("""
             INSERT INTO StatRep_Data(
                 datetime, callsign, groupname, grid, SRid, prec,
@@ -190,162 +175,138 @@ def insert_demo_statrep(callsign: str, grid: str, group: str, zone: str = "centr
                 fuel, food, crime, civil, political, comments, source, frequency
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            now, callsign, group, grid, srid, "2",  # scope=community
-            overall, power, water, medical, comms, travel, internet,
-            food, food, crime, crime, crime, comment, 1, 7078000
+            now,
+            statrep.get("callsign", ""),
+            statrep.get("groupname", ""),
+            statrep.get("grid", ""),
+            srid,
+            "2",  # precedence
+            statrep.get("status", "1"),
+            statrep.get("commpwr", "1"),
+            statrep.get("pubwtr", "1"),
+            statrep.get("med", "1"),
+            statrep.get("ota", "1"),
+            statrep.get("trav", "1"),
+            statrep.get("net", "1"),
+            statrep.get("fuel", "1"),
+            statrep.get("food", "1"),
+            statrep.get("crime", "1"),
+            statrep.get("civil", "1"),
+            statrep.get("political", "1"),
+            statrep.get("comments", "DEMO MODE"),
+            1,  # source
+            7078000  # frequency
         ))
         conn.commit()
 
 
-def insert_demo_message(callsign: str, group: str, message: str) -> None:
-    """Insert a demo message.
+def write_message_to_traffic(message: dict) -> None:
+    """Write a message to the traffic database with current timestamp.
 
     Args:
-        callsign: Amateur callsign
-        group: Group name
-        message: Message content (ALL CAPS)
+        message: Dict with message fields (no datetime)
     """
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    msg_id = random.randint(100, 999)
 
-    with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+    with sqlite3.connect(TRAFFIC_DATABASE, timeout=10) as conn:
         conn.execute("""
             INSERT INTO messages_Data(datetime, groupid, idnum, callsign, message, frequency)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (now, group, msg_id, callsign, message, 7078000))
+        """, (
+            now,
+            message.get("groupid", ""),
+            message.get("id", 0),
+            message.get("callsign", ""),
+            message.get("message", ""),
+            7078000
+        ))
         conn.commit()
 
 
-def cleanup_demo_data() -> None:
-    """Remove all demo-generated records from database."""
-    with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+def cleanup_demo_data_from_traffic() -> None:
+    """Remove demo-generated records from traffic database."""
+    with sqlite3.connect(TRAFFIC_DATABASE, timeout=10) as conn:
+        conn.execute("DELETE FROM StatRep_Data WHERE comments = 'DEMO MODE'")
         conn.execute("DELETE FROM StatRep_Data WHERE SRid LIKE 'DEMO%'")
-        conn.execute("DELETE FROM messages_Data WHERE message IN ({})".format(
-            ",".join("?" * len(DEMO_MESSAGES))
-        ), DEMO_MESSAGES)
+        conn.execute("DELETE FROM messages_Data WHERE callsign LIKE 'DEMO%'")
         conn.commit()
 
 
 class DemoRunner:
-    """Runs the demo mode sequence over 60 seconds."""
+    """Plays back demo data from demo.db3 to traffic.db3 over configurable duration."""
 
-    def __init__(self, main_window):
+    def __init__(self, main_window, version: int = 1, duration: int = 60):
         """Initialize demo runner.
 
         Args:
             main_window: Reference to MainWindow for UI refresh
+            version: Demo scenario version (1, 2, 3, etc.)
+            duration: Playback duration in seconds (default 60)
         """
         self.window = main_window
+        self.version = version
+        self.duration = duration
+        self.scenario = get_scenario_info(version)
+
+        # Load all demo data
+        self.statreps = get_demo_statreps(version)
+        self.messages = get_demo_messages(version)
+
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
-        self.elapsed = 0  # seconds elapsed
-        self.statrep_count = 0
-        self.message_count = 0
+        self.elapsed = 0
+        self.statrep_index = 0
         self.message_index = 0
 
+        # Calculate pacing - spread items over duration
+        self.total_items = len(self.statreps) + len(self.messages)
+
     def start(self) -> None:
-        """Start the demo sequence."""
-        print("Demo mode starting...")
-        cleanup_demo_data()  # Clear any previous demo data
-        self.timer.start(2000)  # tick every 2 seconds
+        """Start the demo playback."""
+        print(f"Demo mode starting: {self.scenario['name']}")
+        print(f"Description: {self.scenario['description']}")
+        print(f"Playing {len(self.statreps)} statreps and {len(self.messages)} messages over {self.duration} seconds")
+
+        if self.total_items == 0:
+            print("Warning: No demo data found for this scenario")
+            print(f"Populate {DEMO_DATABASE} with scenario_id={self.version}")
+            return
+
+        # Clear any previous demo data from traffic db
+        cleanup_demo_data_from_traffic()
+
+        self.timer.start(2000)  # tick every 2 seconds (30 ticks in 60 seconds)
         self._tick()  # initial tick
 
     def _tick(self) -> None:
-        """Called every 2 seconds during demo."""
+        """Called every 2 seconds during demo playback."""
         self.elapsed += 2
 
-        if self.elapsed <= 10:
-            # Phase 1 (0-10s): 5 green statreps in central
-            self._add_statreps_central(1)
-        elif self.elapsed <= 20:
-            # Phase 2 (10-20s): 10 statreps, west coast red + 1 message
-            self._add_statreps_coastal_west(2)
-            if self.elapsed == 20 and self.message_count < 1:
-                self._add_message()
-        elif self.elapsed <= 30:
-            # Phase 3 (20-30s): 20 statreps, northeast red + 2 messages
-            self._add_statreps_coastal_west(1)
-            self._add_statreps_coastal_northeast(3)
-            if self.elapsed in [24, 30] and self.message_count < 3:
-                self._add_message()
-        elif self.elapsed <= 40:
-            # Phase 4 (30-40s): 25 statreps, inland yellow + 3 messages
-            self._add_statreps_coastal_west(1)
-            self._add_statreps_coastal_northeast(1)
-            self._add_statreps_inland(3)
-            if self.elapsed in [32, 36, 40] and self.message_count < 6:
-                self._add_message()
-        elif self.elapsed <= 50:
-            # Phase 5 (40-50s): 25 statreps, mixed everywhere + 2 messages
-            self._add_statreps_coastal_west(2)
-            self._add_statreps_coastal_northeast(2)
-            self._add_statreps_inland(1)
-            if self.elapsed in [44, 50] and self.message_count < 8:
-                self._add_message()
-        elif self.elapsed <= 60:
-            # Phase 6 (50-60s): 15 statreps continued + 2 messages
-            self._add_statreps_coastal_west(1)
-            self._add_statreps_coastal_northeast(1)
-            self._add_statreps_inland(1)
-            if self.elapsed in [54, 60] and self.message_count < 10:
-                self._add_message()
-        else:
-            # Demo complete
+        if self.elapsed > self.duration:
             self.timer.stop()
-            print(f"Demo complete: {self.statrep_count} statreps, {self.message_count} messages")
+            print("Demo playback complete")
             return
+
+        # Calculate how many items should be shown by now
+        progress = self.elapsed / float(self.duration)
+        target_statreps = int(progress * len(self.statreps))
+        target_messages = int(progress * len(self.messages))
+
+        # Write statreps up to target
+        while self.statrep_index < target_statreps and self.statrep_index < len(self.statreps):
+            statrep = self.statreps[self.statrep_index]
+            write_statrep_to_traffic(statrep)
+            print(f"  StatRep: {statrep['callsign']} in {statrep['grid']}")
+            self.statrep_index += 1
+
+        # Write messages up to target
+        while self.message_index < target_messages and self.message_index < len(self.messages):
+            message = self.messages[self.message_index]
+            write_message_to_traffic(message)
+            print(f"  Message: {message['callsign']}: {message['message'][:40]}...")
+            self.message_index += 1
 
         # Refresh UI
         self.window._load_statrep_data()
         self.window._load_message_data()
         self.window._save_map_position(callback=self.window._load_map)
-
-    def _add_statreps_central(self, count: int) -> None:
-        """Add green statreps to central US."""
-        for _ in range(count):
-            grid = random.choice(CENTRAL_GRIDS)
-            callsign = random.choice(CALLSIGNS)
-            group = random.choice(GROUPS)
-            insert_demo_statrep(callsign, grid, group, zone="central")
-            self.statrep_count += 1
-
-    def _add_statreps_coastal_west(self, count: int) -> None:
-        """Add red statreps to west coast."""
-        for _ in range(count):
-            grid = random.choice(COASTAL_WEST_GRIDS)
-            callsign = random.choice(CALLSIGNS)
-            group = random.choice(GROUPS)
-            insert_demo_statrep(callsign, grid, group, zone="coastal")
-            self.statrep_count += 1
-
-    def _add_statreps_coastal_northeast(self, count: int) -> None:
-        """Add red statreps to northeast coast."""
-        for _ in range(count):
-            grid = random.choice(COASTAL_NORTHEAST_GRIDS)
-            callsign = random.choice(CALLSIGNS)
-            group = random.choice(GROUPS)
-            insert_demo_statrep(callsign, grid, group, zone="coastal")
-            self.statrep_count += 1
-
-    def _add_statreps_inland(self, count: int) -> None:
-        """Add yellow/mixed statreps to inland areas."""
-        for _ in range(count):
-            # Mix of west and northeast inland
-            if random.random() < 0.5:
-                grid = random.choice(INLAND_WEST_GRIDS)
-            else:
-                grid = random.choice(INLAND_NORTHEAST_GRIDS)
-            callsign = random.choice(CALLSIGNS)
-            group = random.choice(GROUPS)
-            insert_demo_statrep(callsign, grid, group, zone="inland")
-            self.statrep_count += 1
-
-    def _add_message(self) -> None:
-        """Add next demo message."""
-        if self.message_index < len(DEMO_MESSAGES):
-            callsign = random.choice(CALLSIGNS)
-            group = random.choice(GROUPS)
-            message = DEMO_MESSAGES[self.message_index]
-            insert_demo_message(callsign, group, message)
-            self.message_count += 1
-            self.message_index += 1
