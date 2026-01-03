@@ -2682,14 +2682,16 @@ class MainWindow(QtWidgets.QMainWindow):
             snr = params.get("SNR", 0)
             utc_ms = params.get("UTC", 0)
 
-            # Convert UTC milliseconds to datetime string (3 spaces between date and time)
-            utc_str = datetime.fromtimestamp(utc_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
+            # Convert UTC milliseconds to datetime strings
+            utc_dt = datetime.fromtimestamp(utc_ms / 1000, tz=timezone.utc)
+            utc_db = utc_dt.strftime("%Y-%m-%d %H:%M:%S")  # Single space for database
+            utc_display = utc_dt.strftime("%Y-%m-%d   %H:%M:%S")  # 3 spaces for feed display
 
             # Format feed line to match DIRECTED.TXT format:
             # DATETIME    FREQ_MHZ    OFFSET    SNR    CALLSIGN: MESSAGE
             # FREQ from JS8Call is dial + offset, so subtract offset to get dial frequency
             dial_freq_mhz = (freq - offset) / 1000000 if freq else 0
-            feed_line = f"{utc_str}\t{dial_freq_mhz:.3f}\t{offset}\t{snr:+03d}\t{from_call}: {value}"
+            feed_line = f"{utc_display}\t{dial_freq_mhz:.3f}\t{offset}\t{snr:+03d}\t{from_call}: {value}"
 
             # Add to feed buffer (newest first)
             self._add_to_feed(feed_line, rig_name)
@@ -2698,7 +2700,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Process the message for database insertion
             data_type = self._process_directed_message(
-                rig_name, value, from_call, to_call, grid, freq, snr, utc_str
+                rig_name, value, from_call, to_call, grid, freq, snr, utc_db
             )
 
             # Refresh only the relevant UI component
