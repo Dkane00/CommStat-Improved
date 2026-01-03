@@ -39,7 +39,6 @@ from PyQt5.QtCore import QTimer, QDateTime, Qt
 from PyQt5.QtWidgets import qApp
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
 from about import Ui_FormAbout
-from settings import SettingsDialog
 from colors import ColorsDialog
 from filter import FilterDialog
 from groups import GroupsDialog
@@ -1209,7 +1208,6 @@ class MainWindow(QtWidgets.QMainWindow):
             ("member_list", "MEMBER LIST", self._on_member_list),
             None,  # Separator
             ("js8_connectors", "JS8 CONNECTORS", self._on_js8_connectors),
-            ("settings", "SETTINGS", self._on_settings),
             ("qrz_enable", "QRZ ENABLE", self._on_qrz_enable),
             ("colors", "COLORS", self._on_colors),
             None,  # Separator
@@ -3021,13 +3019,6 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"\033[91m[{rig_name}] Error processing message: {e}\033[0m")
 
         return ""
-
-    def _on_settings(self) -> None:
-        """Open Settings window."""
-        dialog = SettingsDialog(self)
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            # Reload config after settings are saved
-            self.config = ConfigManager()
 
     def _on_qrz_enable(self) -> None:
         """Open QRZ Enable dialog for managing QRZ.com credentials."""
