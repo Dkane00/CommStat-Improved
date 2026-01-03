@@ -19,16 +19,13 @@ WINDOWS
 
 LINUX
 -----
-1. Run the Linux installer first (installs system dependencies):
+1. Run the Linux installer (installs everything):
    chmod +x linuxinstall.sh
    ./linuxinstall.sh
    - If you don't know how to do this, ask Claude (https://claude.ai),
      ChatGPT, Grok, Gemini, or your grandson.
 
-2. Run the Python installer:
-   python3 install.py
-
-3. Run CommStat:
+2. Run CommStat:
    python3 startup.py
 
 
