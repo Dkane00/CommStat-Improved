@@ -1599,87 +1599,321 @@ class MainWindow(QtWidgets.QMainWindow):
             self.map_disabled_label.show()
             self._start_slideshow()
 
-    def _fetch_remote_ping(self) -> List[Tuple[str, Optional[str]]]:
-        """Fetch and parse the remote playlist, download images to temp files.
+    def _parse_backbone_sections(self, content: str) -> dict:
+        """Parse backbone reply content into hierarchical sections.
 
-        Playlist format:
-        - Line 1: Date: YYYY-MM-DD (expiration date - if passed, ignore playlist)
-        - Line 2: Force or nothing (Force hides map on startup)
-        - Remaining: MESSAGE START/END block or image URLs
+        Args:
+            content: Raw backbone reply (already extracted from <pre> tags).
 
-        Returns empty list if date expired or if showing a message.
+        Returns:
+            Dict with keys: 'global', 'groups', 'callsign'
+            Each value is the raw text for that section (or None)
+        """
+        import re
+        sections = {'global': None, 'groups': None, 'callsign': None}
+
+        # Check if content has section markers
+        if '::GLOBAL::' not in content and '::GROUPS::' not in content and '::CALLSIGN::' not in content:
+            # Legacy format - no sections, return None for all
+            return sections
+
+        # Split by section markers and extract content
+        # Pattern captures section name and everything until next section or end
+        pattern = r'::(GLOBAL|GROUPS|CALLSIGN)::\s*(.*?)(?=::(?:GLOBAL|GROUPS|CALLSIGN)::|$)'
+        matches = re.findall(pattern, content, re.DOTALL | re.IGNORECASE)
+
+        for section_name, section_content in matches:
+            key = section_name.lower()
+            if key in sections:
+                sections[key] = section_content.strip()
+
+        return sections
+
+    def _is_backbone_date_valid(self, section_text: str) -> bool:
+        """Check if backbone section's date is in the future.
+
+        Args:
+            section_text: Raw section content (first line should be Date:)
+
+        Returns:
+            True if date is in the future, False otherwise.
         """
         import re
         from datetime import datetime
+
+        lines = section_text.strip().split('\n')
+        if not lines:
+            return False
+
+        # Look for Date: line (should be first line)
+        date_line = lines[0].strip()
+        match = re.match(r'Date:\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?', date_line, re.IGNORECASE)
+        if not match:
+            return False
+
+        date_str = match.group(1)
+        time_str = match.group(2) or "23:59"  # Default to end of day if no time
+
+        try:
+            expiry = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+            return expiry > datetime.now()
+        except ValueError:
+            return False
+
+    def _matches_user_groups(self, section_text: str) -> bool:
+        """Check if user has any matching active groups.
+
+        Args:
+            section_text: Raw section content.
+
+        Returns:
+            True if user has at least one matching group.
+        """
+        import re
+
+        # Look for "Group List:" line
+        match = re.search(r'Group List:\s*(.+)', section_text, re.IGNORECASE)
+        if not match:
+            return False
+
+        target_groups = [g.strip().upper() for g in match.group(1).split(',')]
+        user_groups = [g.upper() for g in self.db.get_active_groups()]
+
+        return bool(set(target_groups) & set(user_groups))
+
+    def _matches_user_callsign(self, section_text: str) -> bool:
+        """Check if user's callsign matches any in list.
+
+        Args:
+            section_text: Raw section content.
+
+        Returns:
+            True if any connected rig's callsign is in the list.
+        """
+        import re
+
+        # Look for "Callsign List:" line
+        match = re.search(r'Callsign List:\s*(.+)', section_text, re.IGNORECASE)
+        if not match:
+            return False
+
+        target_calls = [c.strip().upper() for c in match.group(1).split(',')]
+        user_calls = [c.upper() for c in self.rig_callsigns.values() if c]
+
+        return bool(set(target_calls) & set(user_calls))
+
+    def _extract_section_message(self, section_text: str) -> Optional[str]:
+        """Extract MESSAGE START/END block from section.
+
+        Args:
+            section_text: Raw section content.
+
+        Returns:
+            Message content or None if no message block found.
+        """
+        import re
+        msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', section_text, re.DOTALL)
+        return msg_match.group(1) if msg_match else None
+
+    def _extract_section_urls(self, section_text: str) -> List[Tuple[str, Optional[str]]]:
+        """Extract and download image URLs from section.
+
+        Args:
+            section_text: Raw section content.
+
+        Returns:
+            List of (temp_image_path, click_url) tuples.
+        """
+        import re
         items = []
+        lines = section_text.strip().split('\n')
+
+        for line in lines:
+            # Skip metadata lines
+            line_lower = line.lower().strip()
+            if (line_lower.startswith('date:') or
+                line_lower.startswith('group list:') or
+                line_lower.startswith('callsign list:') or
+                line_lower in ('message start', 'message end')):
+                continue
+
+            # Find all URLs in the line
+            urls = re.findall(r'https?://[^\s]+', line)
+            if not urls:
+                continue
+
+            image_url = urls[0]
+            click_url = urls[1] if len(urls) > 1 else None
+
+            # Download image to temp file
+            try:
+                temp_path = self._download_image(image_url)
+                if temp_path:
+                    items.append((temp_path, click_url))
+            except Exception as e:
+                print(f"Failed to download {image_url}: {e}")
+
+        return items
+
+    def _process_backbone_section(
+        self,
+        section_text: str,
+        section_type: str
+    ) -> Optional[Tuple[str, any]]:
+        """Process a single backbone reply section.
+
+        Args:
+            section_text: Raw text of the section.
+            section_type: 'global', 'groups', or 'callsign'.
+
+        Returns:
+            Tuple of (action, data) where:
+            - action is 'message' or 'playlist'
+            - data is message text or list of image tuples
+            Returns None if section doesn't apply.
+        """
+        if not section_text:
+            return None
+
+        # Check date validity
+        if not self._is_backbone_date_valid(section_text):
+            print(f"[Backbone] {section_type.upper()} section: date expired, skipping")
+            return None
+
+        # For groups/callsign sections, check targeting
+        if section_type == 'groups':
+            if not self._matches_user_groups(section_text):
+                print(f"[Backbone] GROUPS section: no matching groups, skipping")
+                return None
+            print(f"[Backbone] GROUPS section: user group matched")
+
+        elif section_type == 'callsign':
+            if not self._matches_user_callsign(section_text):
+                print(f"[Backbone] CALLSIGN section: no matching callsign, skipping")
+                return None
+            print(f"[Backbone] CALLSIGN section: user callsign matched")
+
+        # Look for message block
+        message = self._extract_section_message(section_text)
+        if message:
+            print(f"[Backbone] {section_type.upper()} section: showing message")
+            return ('message', message)
+
+        # Look for image URLs
+        urls = self._extract_section_urls(section_text)
+        if urls:
+            print(f"[Backbone] {section_type.upper()} section: loaded {len(urls)} images")
+            return ('playlist', urls)
+
+        return None
+
+    def _fetch_backbone_reply(self) -> List[Tuple[str, Optional[str]]]:
+        """Fetch and process backbone reply with hierarchical sections.
+
+        Backbone reply format supports three sections processed in order:
+        - ::GLOBAL:: - Applies to all users
+        - ::GROUPS:: - Applies to users with matching active groups
+        - ::CALLSIGN:: - Applies to users with matching callsign
+
+        Each section has:
+        - Date: YYYY-MM-DD [HH:MM] (if in past, skip section)
+        - Group List: or Callsign List: (for targeting)
+        - MESSAGE START/END block OR image URLs
+
+        Returns empty list if showing a message or no content matched.
+        """
+        import re
+        from datetime import datetime
         self.ping_message = None  # Reset message
 
         try:
             with urllib.request.urlopen(_PING, timeout=10) as response:
                 content = response.read().decode('utf-8')
 
-                # Extract content between <pre> tags if present
-                pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
-                if pre_match:
-                    content = pre_match.group(1)
+            # Extract content between <pre> tags if present
+            pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
+            if pre_match:
+                content = pre_match.group(1)
 
-                content = content.strip()
+            content = content.strip()
+            if not content:
+                return []
+
+            # Parse into sections
+            sections = self._parse_backbone_sections(content)
+
+            # Check if we have any sections (new format)
+            has_sections = any(sections.values())
+
+            if has_sections:
+                # Process in priority order: GLOBAL → GROUPS → CALLSIGN
+                for section_type in ['global', 'groups', 'callsign']:
+                    section_text = sections.get(section_type)
+                    if not section_text:
+                        continue
+
+                    result = self._process_backbone_section(section_text, section_type)
+                    if result:
+                        action, data = result
+                        if action == 'message':
+                            self.ping_message = data
+                            return []  # No images when showing message
+                        elif action == 'playlist':
+                            return data  # List of (image_path, click_url) tuples
+
+                # No sections matched
+                print("[Backbone] No sections matched user criteria")
+                return []
+
+            else:
+                # Legacy format - process as before (single date + content)
                 lines = [line.strip() for line in content.split('\n') if line.strip()]
-
                 if not lines:
                     return []
 
-                # Line 1: Check for expiration date (case-insensitive)
+                # Check for expiration date
                 first_line = lines[0]
                 date_match = re.match(r'date:\s*(\d{4}-\d{2}-\d{2})', first_line, re.IGNORECASE)
                 if date_match:
                     expiry_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
-                    today = datetime.now().date()
-                    if expiry_date < today:
-                        # Date has passed - skip all playlist rules
-                        print(f"Action Date = {expiry_date}. No actions to perform")
+                    if expiry_date < datetime.now().date():
+                        print(f"[Backbone] Legacy format: date {expiry_date} expired")
                         return []
-                    # Remove date line
                     lines = lines[1:]
 
-                # Check for Force command - remove it from lines
-                if lines and lines[0].startswith("Force"):
+                # Skip Force command (legacy)
+                if lines and lines[0].lower().startswith("force"):
                     lines = lines[1:]
 
-                # Rebuild content for MESSAGE check
+                # Check for message
                 content = '\n'.join(lines)
-
-                # Check for MESSAGE START/END block
                 msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', content, re.DOTALL)
                 if msg_match:
                     self.ping_message = msg_match.group(1)
-                    return []  # Don't load images when showing message
+                    return []
 
+                # Extract URLs
+                items = []
                 for line in lines:
-                    # Skip MESSAGE markers
                     if line in ("MESSAGE START", "MESSAGE END"):
                         continue
-
-                    # Find all URLs in the line
                     urls = re.findall(r'https?://[^\s]+', line)
-                    if not urls:
-                        continue
+                    if urls:
+                        image_url = urls[0]
+                        click_url = urls[1] if len(urls) > 1 else None
+                        try:
+                            temp_path = self._download_image(image_url)
+                            if temp_path:
+                                items.append((temp_path, click_url))
+                        except Exception as e:
+                            print(f"Failed to download {image_url}: {e}")
 
-                    image_url = urls[0]
-                    click_url = urls[1] if len(urls) > 1 else None
-
-                    # Download image to temp file
-                    try:
-                        temp_path = self._download_image(image_url)
-                        if temp_path:
-                            items.append((temp_path, click_url))
-                    except Exception as e:
-                        print(f"Failed to download {image_url}: {e}")
+                return items
 
         except Exception as e:
-            print(f"Failed to fetch playlist: {e}")
+            print(f"Failed to fetch backbone reply: {e}")
 
-        return items
+        return []
 
     def _download_image(self, url: str) -> Optional[str]:
         """Download an image from URL to a temp file, return the path."""
@@ -1702,11 +1936,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.slideshow_index = 0
         valid_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
 
-        # Priority 1: Fetch remote playlist
-        remote_items = self._fetch_remote_ping()
+        # Priority 1: Fetch backbone reply
+        remote_items = self._fetch_backbone_reply()
 
         if remote_items:
-            # Use remote playlist only
+            # Use backbone images only
             self.slideshow_items.extend(remote_items)
             return
 
@@ -1792,8 +2026,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _show_next_image(self) -> None:
         """Advance to the next image in the slideshow or refresh message."""
-        # Check playlist for updates in background (at each interval)
-        thread = threading.Thread(target=self._check_ping_content_async, daemon=True)
+        # Check backbone for updates in background (at each interval)
+        thread = threading.Thread(target=self._check_backbone_content_async, daemon=True)
         thread.start()
 
         # If showing a message, just keep displaying it (will be updated by async check)
@@ -1807,33 +2041,66 @@ class MainWindow(QtWidgets.QMainWindow):
         self.slideshow_index = (self.slideshow_index + 1) % len(self.slideshow_items)
         self._show_current_image()
 
-    def _check_ping_content_async(self) -> None:
-        """Background thread to check playlist for message changes."""
+    def _check_backbone_content_async(self) -> None:
+        """Background thread to check backbone reply for message changes.
+
+        Handles both new hierarchical format and legacy format.
+        """
         import re
         from datetime import datetime
         try:
             with urllib.request.urlopen(_PING, timeout=10) as response:
                 content = response.read().decode('utf-8')
 
-                # Extract content between <pre> tags if present
-                pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
-                if pre_match:
-                    content = pre_match.group(1)
+            # Extract content between <pre> tags if present
+            pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
+            if pre_match:
+                content = pre_match.group(1)
 
-                content = content.strip()
+            content = content.strip()
+            if not content:
+                return
+
+            # Parse into sections
+            sections = self._parse_backbone_sections(content)
+            has_sections = any(sections.values())
+
+            new_message = None
+
+            if has_sections:
+                # Process hierarchical format
+                for section_type in ['global', 'groups', 'callsign']:
+                    section_text = sections.get(section_type)
+                    if not section_text:
+                        continue
+
+                    # Check date validity
+                    if not self._is_backbone_date_valid(section_text):
+                        continue
+
+                    # Check targeting for groups/callsign sections
+                    if section_type == 'groups' and not self._matches_user_groups(section_text):
+                        continue
+                    if section_type == 'callsign' and not self._matches_user_callsign(section_text):
+                        continue
+
+                    # Extract message from this section
+                    new_message = self._extract_section_message(section_text)
+                    break  # Stop at first matching section
+
+            else:
+                # Legacy format
                 lines = [line.strip() for line in content.split('\n') if line.strip()]
-
                 if not lines:
                     return
 
-                # Line 1: Check for expiration date (case-insensitive)
+                # Check for expiration date
                 first_line = lines[0]
                 date_match = re.match(r'date:\s*(\d{4}-\d{2}-\d{2})', first_line, re.IGNORECASE)
                 if date_match:
                     expiry_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
-                    today = datetime.now().date()
-                    if expiry_date < today:
-                        # Date has passed - skip all playlist rules, clear any message
+                    if expiry_date < datetime.now().date():
+                        # Date has passed - clear any message
                         if self.ping_message:
                             self.ping_message = None
                             QtCore.QMetaObject.invokeMethod(
@@ -1841,37 +2108,34 @@ class MainWindow(QtWidgets.QMainWindow):
                                 QtCore.Qt.QueuedConnection
                             )
                         return
-                    # Remove date line
                     lines = lines[1:]
 
-                # Check for Force command - remove it from lines
-                if lines and lines[0].startswith("Force"):
+                # Skip Force command (legacy)
+                if lines and lines[0].lower().startswith("force"):
                     lines = lines[1:]
 
-                # Rebuild content for MESSAGE check
+                # Check for message
                 content = '\n'.join(lines)
-
-                # Check for MESSAGE START/END block
                 msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', content, re.DOTALL)
                 if msg_match:
                     new_message = msg_match.group(1)
-                    # Only update if message changed
-                    if new_message != self.ping_message:
-                        self.ping_message = new_message
-                        QtCore.QMetaObject.invokeMethod(
-                            self, "_display_ping_message",
-                            QtCore.Qt.QueuedConnection
-                        )
-                elif self.ping_message:
-                    # Message was removed from playlist
-                    self.ping_message = None
+
+            # Update display if message changed
+            if new_message != self.ping_message:
+                self.ping_message = new_message
+                if new_message:
+                    QtCore.QMetaObject.invokeMethod(
+                        self, "_display_ping_message",
+                        QtCore.Qt.QueuedConnection
+                    )
+                else:
                     QtCore.QMetaObject.invokeMethod(
                         self, "_reload_slideshow",
                         QtCore.Qt.QueuedConnection
                     )
 
         except Exception as e:
-            print(f"Failed to check playlist content: {e}")
+            print(f"Failed to check backbone content: {e}")
 
     @QtCore.pyqtSlot()
     def _reload_slideshow(self) -> None:
