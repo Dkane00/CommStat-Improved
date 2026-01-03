@@ -122,6 +122,7 @@ class StatRepDialog(QDialog):
         self.callsign = ""
         self.grid = ""
         self.selected_group = ""
+        self.user_state = self._get_user_state()
         self.statrep_id = ""
         self._pending_frequency = 0  # For storing frequency during transmit
 
@@ -156,6 +157,18 @@ class StatRepDialog(QDialog):
         except sqlite3.Error as e:
             print(f"Error reading active group from database: {e}")
         return ""
+
+    def _get_user_state(self) -> str:
+        """Get user's state from parent config."""
+        if self.parent() and hasattr(self.parent(), 'config'):
+            return self.parent().config.directed_config.get('state', '')
+        return ""
+
+    def _get_default_remarks(self) -> str:
+        """Get default remarks with state prefix."""
+        if self.user_state:
+            return f"{self.user_state} - NTR"
+        return "NTR"
 
     def _get_all_groups_from_db(self) -> list:
         """Get all groups from the database."""
@@ -553,12 +566,12 @@ class StatRepDialog(QDialog):
     def _on_all_green(self) -> None:
         """Set all statuses to Green."""
         self._set_all_status("Green")
-        self.remarks_field.setText("NTR")
+        self.remarks_field.setText(self._get_default_remarks())
 
     def _on_all_gray(self) -> None:
         """Set all statuses to Unknown (Gray)."""
         self._set_all_status("Unknown")
-        self.remarks_field.setText("NTR")
+        self.remarks_field.setText(self._get_default_remarks())
 
     def _build_message(self) -> str:
         """Build the StatRep message string for transmission."""
@@ -566,7 +579,7 @@ class StatRepDialog(QDialog):
         scope_code = self.scope_combo.currentData()
         remarks = self.remarks_field.text().strip().upper()
         if not remarks:
-            remarks = "NTR"
+            remarks = self._get_default_remarks()
 
         # Clean remarks - only alphanumeric, spaces, hyphens, asterisks
         remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
@@ -608,7 +621,7 @@ class StatRepDialog(QDialog):
         """
         values = self._get_status_values()
         scope_text = self.scope_combo.currentText()
-        remarks = self.remarks_field.text().strip().upper() or "NTR"
+        remarks = self.remarks_field.text().strip().upper() or self._get_default_remarks()
         remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
 
         now = QDateTime.currentDateTimeUtc()
