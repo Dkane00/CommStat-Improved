@@ -183,53 +183,63 @@ class Ui_FormMessage:
         self.pushButton_3.setText(_translate("FormMessage", "Save Only"))
 
     def _load_config(self) -> None:
-        """Load configuration from database."""
+        """Load configuration from database.
+
+        Auto-selects group only if exactly 1 group exists.
+        If multiple groups exist, user must select one.
+        """
         # Get active group from database
         self.selected_group = self._get_active_group_from_db()
 
         # Populate group dropdown
         all_groups = self._get_all_groups_from_db()
-        for group in all_groups:
-            self.group_combo.addItem(group)
-        # Pre-select active group
-        if self.selected_group:
-            index = self.group_combo.findText(self.selected_group)
-            if index >= 0:
-                self.group_combo.setCurrentIndex(index)
+        if len(all_groups) == 1:
+            # Exactly 1 group - auto-select it
+            self.group_combo.addItem(all_groups[0])
+        else:
+            # Multiple groups or no groups - require user selection
+            self.group_combo.addItem("")  # Empty first item
+            for group in all_groups:
+                self.group_combo.addItem(group)
         # Callsign will be loaded from JS8Call when rig is selected
 
     def _load_rigs(self) -> None:
-        """Load connected rigs into the rig dropdown."""
+        """Load connected rigs into the rig dropdown.
+
+        Auto-selects only if exactly 1 rig is connected.
+        If multiple rigs are connected, user must select one.
+        """
         if not self.tcp_pool:
             return
 
         self.rig_combo.blockSignals(True)
         self.rig_combo.clear()
 
-        # Add all connected rigs
+        # Get connected rigs
         connected_rigs = self.tcp_pool.get_connected_rig_names()
-        for rig_name in connected_rigs:
-            self.rig_combo.addItem(rig_name)
 
-        # If no connected rigs, add all configured rigs (disconnected)
         if not connected_rigs:
+            # No connected rigs - show all configured rigs as disconnected
             all_rigs = self.tcp_pool.get_all_rig_names()
-            for rig_name in all_rigs:
-                self.rig_combo.addItem(f"{rig_name} (disconnected)")
-
-        # Select default rig
-        if self.connector_manager:
-            default = self.connector_manager.get_default_connector()
-            if default:
-                idx = self.rig_combo.findText(default["rig_name"])
-                if idx >= 0:
-                    self.rig_combo.setCurrentIndex(idx)
+            if all_rigs:
+                self.rig_combo.addItem("")  # Empty first item
+                for rig_name in all_rigs:
+                    self.rig_combo.addItem(f"{rig_name} (disconnected)")
+        elif len(connected_rigs) == 1:
+            # Exactly 1 connected rig - auto-select it
+            self.rig_combo.addItem(connected_rigs[0])
+        else:
+            # Multiple connected rigs - require user selection
+            self.rig_combo.addItem("")  # Empty first item
+            for rig_name in connected_rigs:
+                self.rig_combo.addItem(rig_name)
 
         self.rig_combo.blockSignals(False)
 
-        # Trigger rig changed to load callsign
-        if self.rig_combo.count() > 0:
-            self._on_rig_changed(self.rig_combo.currentText())
+        # Trigger rig changed to load callsign (only if a rig is selected)
+        current_text = self.rig_combo.currentText()
+        if current_text and "(disconnected)" not in current_text:
+            self._on_rig_changed(current_text)
 
     def _on_rig_changed(self, rig_name: str) -> None:
         """Handle rig selection change - fetch callsign from JS8Call."""
@@ -306,6 +316,20 @@ class Ui_FormMessage:
 
         Returns (callsign, message) tuple if valid, None otherwise.
         """
+        # Check rig is selected
+        rig_name = self.rig_combo.currentText()
+        if not rig_name or rig_name == "":
+            self._show_error("Please select a Rig")
+            self.rig_combo.setFocus()
+            return None
+
+        # Check group is selected
+        group_name = self.group_combo.currentText()
+        if not group_name or group_name == "":
+            self._show_error("Please select a Group")
+            self.group_combo.setFocus()
+            return None
+
         # Get and clean message
         message_raw = self.lineEdit_2.text()
         message = re.sub(r"[^ -~]+", " ", message_raw)
