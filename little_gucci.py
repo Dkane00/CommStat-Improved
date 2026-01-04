@@ -2280,9 +2280,19 @@ class MainWindow(QtWidgets.QMainWindow):
             tiles='http://localhost:8000/{z}/{x}/{y}.png',
             name='Local Tiles',
             attr='Local Tiles',
-            max_zoom=19,
-            control=True
+            max_zoom=8,
+            control=False
         ).add_to(m)
+
+        # Add online tile layer (OpenStreetMap) for zoom > 8, only if internet available
+        if self._internet_available:
+            folium.raster_layers.TileLayer(
+                tiles='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                name='OpenStreetMap',
+                attr='OpenStreetMap',
+                min_zoom=8,
+                control=False
+            ).add_to(m)
 
         # Get StatRep data for pins
         try:
