@@ -1032,6 +1032,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.slideshow_timer.stop()
         if hasattr(self, 'internet_timer'):
             self.internet_timer.stop()
+        if hasattr(self, 'backbone_timer'):
+            self.backbone_timer.stop()
 
         # Disconnect all TCP connections gracefully
         if hasattr(self, 'tcp_pool'):
@@ -1119,6 +1121,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_live_feed()
         self._load_message_data()
 
+        # Initial backbone check
+        if self._internet_available:
+            self._check_backbone()
+
     def _check_internet_on_startup(self) -> None:
         """Check internet connectivity at startup."""
         self._internet_available = check_internet()
@@ -1136,6 +1142,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Internet just became available
             print("Internet connectivity: Now available")
             self.internet_timer.stop()
+            self.backbone_timer.start(60000)
         elif not self._internet_available:
             print("Internet connectivity: Still not available (will retry in 30 minutes)")
 
@@ -2001,6 +2008,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         import re
         from datetime import datetime
+        if self.debug_mode:
+            print(f"[Backbone] Checking {_PING}")
         try:
             with urllib.request.urlopen(_PING, timeout=10) as response:
                 content = response.read().decode('utf-8')
@@ -2466,6 +2475,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self._internet_available:
             self.internet_timer.start(INTERNET_CHECK_INTERVAL)
 
+        # Backbone check timer - runs every 60 seconds
+        self.backbone_timer = QTimer(self)
+        self.backbone_timer.timeout.connect(self._check_backbone)
+        if self._internet_available:
+            self.backbone_timer.start(60000)
+
         # Marquee animation timeline
         self.marquee_timeline = QtCore.QTimeLine()
         self.marquee_timeline.setCurveShape(QtCore.QTimeLine.LinearCurve)
@@ -2475,6 +2490,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # Marquee state
         self.marquee_text = ""
         self.marquee_chars = 0
+
+    def _check_backbone(self) -> None:
+        """Check backbone server for content updates (runs in background thread)."""
+        if not self._internet_available:
+            return
+        thread = threading.Thread(target=self._check_backbone_content_async, daemon=True)
+        thread.start()
 
     def _refresh_data(self) -> None:
         """Refresh StatRep, message data, and map from database."""
