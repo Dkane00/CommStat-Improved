@@ -2833,12 +2833,7 @@ class MainWindow(QtWidgets.QMainWindow):
             rig_name: Name of the rig.
             is_connected: True if connected, False if disconnected.
         """
-        if is_connected:
-            # Request callsign from JS8Call when connected
-            client = self.tcp_pool.get_client(rig_name)
-            if client:
-                client.get_callsign()
-        else:
+        if not is_connected:
             # For disconnects, add the message here
             from datetime import datetime, timezone
             utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
