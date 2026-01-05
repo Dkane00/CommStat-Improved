@@ -1223,9 +1223,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu.addSeparator()
 
         # Add reset date options
-        reset_1day = QtWidgets.QAction("Reset to 1 day ago", self)
-        reset_1day.triggered.connect(lambda: self._reset_filter_date(1))
-        self.filter_menu.addAction(reset_1day)
+        reset_today = QtWidgets.QAction("Reset Date", self)
+        reset_today.triggered.connect(lambda: self._reset_filter_date(0))
+        self.filter_menu.addAction(reset_today)
 
         reset_1month = QtWidgets.QAction("Reset to 1 month ago", self)
         reset_1month.triggered.connect(lambda: self._reset_filter_date(30))
