@@ -45,7 +45,6 @@ from groups import GroupsDialog
 from debug_features import DebugFeatures
 from js8mail import JS8MailDialog
 from js8sms import JS8SMSDialog
-from marquee import Ui_FormMarquee
 from message import Ui_FormMessage
 from statrep import StatRepDialog
 from connector_manager import ConnectorManager
@@ -120,10 +119,8 @@ DEFAULT_COLORS: Dict[str, str] = {
     'menu_foreground': '#FFFFFF',
     'title_bar_background': '#F07800',
     'title_bar_foreground': '#FFFFFF',
-    'marquee_background': '#242424',
-    'marquee_foreground_green': '#00FF00',
-    'marquee_foreground_yellow': '#FFFF00',
-    'marquee_foreground_red': '#FF00FF',
+    'newsfeed_background': '#242424',
+    'newsfeed_foreground': '#00FF00',
     'time_background': '#282864',
     'time_foreground': '#88CCFF',
     'condition_green': '#108010',
@@ -138,10 +135,10 @@ DEFAULT_COLORS: Dict[str, str] = {
 
 # Default RSS news feeds
 DEFAULT_RSS_FEEDS: Dict[str, str] = {
-    "AP News": "https://rsshub.app/apnews/topics/apf-topnews",
-    "Reuters": "https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best",
     "BBC World": "http://feeds.bbci.co.uk/news/world/rss.xml",
     "NPR News": "https://feeds.npr.org/1001/rss.xml",
+    "CNN Top": "http://rss.cnn.com/rss/cnn_topstories.rss",
+    "Fox News": "https://moxie.foxnews.com/google-publisher/latest.xml",
 }
 
 
@@ -619,33 +616,6 @@ class DatabaseManager:
         except sqlite3.Error as error:
             print(f"Database error: {error}")
             return []
-
-    def get_latest_marquee(self, groups: List[str]) -> Optional[Tuple]:
-        """
-        Fetch the latest marquee message for active groups.
-
-        Args:
-            groups: List of active group names (empty list returns None)
-
-        Returns:
-            Tuple containing marquee data or None
-        """
-        # If no active groups, return None
-        if not groups:
-            return None
-
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                placeholders = ",".join("?" * len(groups))
-                cursor.execute(
-                    f"SELECT idnum, callsign, groupname, date, color, message FROM marquees_data WHERE groupname IN ({placeholders}) ORDER BY date DESC LIMIT 1",
-                    groups
-                )
-                return cursor.fetchone()
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return None
 
     def init_groups_table(self) -> None:
         """Create Groups table if it doesn't exist and seed default groups."""
@@ -1245,7 +1215,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Load initial data
         self._load_statrep_data()
-        self._load_marquee()
         self._load_map()
         self._load_live_feed()
         self._load_message_data()
@@ -1314,7 +1283,6 @@ class MainWindow(QtWidgets.QMainWindow):
         menu_items = [
             ("statrep", "STATREP", self._on_statrep),
             ("send_message", "GROUP MESSAGE", self._on_send_message),
-            ("new_marquee", "NEW MARQUEE", self._on_new_marquee),
             ("js8email", "JS8 EMAIL", self._on_js8email),
             ("js8sms", "JS8 SMS", self._on_js8sms),
             None,  # Separator
@@ -1505,11 +1473,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.header_layout.addStretch()
 
         # News label
-        self.label_marquee = QtWidgets.QLabel(self.header_widget)
-        self.label_marquee.setStyleSheet(f"color: {fg_color};")
-        self.label_marquee.setText("News:")
-        self.label_marquee.setFont(font)
-        self.header_layout.addWidget(self.label_marquee)
+        self.label_newsfeed = QtWidgets.QLabel(self.header_widget)
+        self.label_newsfeed.setStyleSheet(f"color: {fg_color};")
+        self.label_newsfeed.setText("News:")
+        self.label_newsfeed.setFont(font)
+        self.header_layout.addWidget(self.label_newsfeed)
 
         # RSS Feed selector dropdown
         self.feed_combo = QtWidgets.QComboBox(self.header_widget)
@@ -1525,12 +1493,22 @@ class MainWindow(QtWidgets.QMainWindow):
             QComboBox::drop-down {{
                 border: none;
             }}
-            QComboBox QAbstractItemView {{
+        """)
+        # Style the dropdown list view directly
+        combo_view = QtWidgets.QListView()
+        combo_view.setStyleSheet(f"""
+            QListView {{
                 background-color: {menu_bg};
                 color: {menu_fg};
-                selection-background-color: {fg_color};
+                outline: none;
+            }}
+            QListView::item {{
+                background-color: {menu_bg};
+                color: {menu_fg};
+                padding: 4px;
             }}
         """)
+        self.feed_combo.setView(combo_view)
         # Populate with feed names
         for feed_name in DEFAULT_RSS_FEEDS.keys():
             self.feed_combo.addItem(feed_name)
@@ -1544,14 +1522,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.header_layout.addWidget(self.feed_combo)
 
         # News ticker (scrolling text)
-        self.marquee_label = QtWidgets.QLabel(self.header_widget)
-        self.marquee_label.setFixedSize(500, 32)
-        self.marquee_label.setFont(QtGui.QFont("Arial", 12))
-        self.marquee_label.setStyleSheet(
-            f"background-color: {self.config.get_color('marquee_background')};"
-            f"color: {self.config.get_color('marquee_foreground_green')};"
+        self.newsfeed_label = QtWidgets.QLabel(self.header_widget)
+        self.newsfeed_label.setFixedSize(500, 32)
+        self.newsfeed_label.setFont(QtGui.QFont("Arial", 12))
+        self.newsfeed_label.setStyleSheet(
+            f"background-color: {self.config.get_color('newsfeed_background')};"
+            f"color: {self.config.get_color('newsfeed_foreground')};"
         )
-        self.header_layout.addWidget(self.marquee_label)
+        self.header_layout.addWidget(self.newsfeed_label)
 
         # Spacer to push time to right
         self.header_layout.addStretch()
@@ -2654,7 +2632,7 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"StatRep clicked: ID = {sr_id.text()}")
 
     def _setup_timers(self) -> None:
-        """Setup timers for clock, data refresh, and marquee animation."""
+        """Setup timers for clock, data refresh, and news feed animation."""
         # Clock timer - updates every second
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self._update_time)
@@ -2677,14 +2655,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.backbone_timer.start(60000)
 
         # News ticker animation timeline
-        self.marquee_timeline = QtCore.QTimeLine()
-        self.marquee_timeline.setCurveShape(QtCore.QTimeLine.LinearCurve)
-        self.marquee_timeline.frameChanged.connect(self._update_marquee_text)
-        self.marquee_timeline.finished.connect(self._next_headline)
+        self.newsfeed_timeline = QtCore.QTimeLine()
+        self.newsfeed_timeline.setCurveShape(QtCore.QTimeLine.LinearCurve)
+        self.newsfeed_timeline.frameChanged.connect(self._update_newsfeed_text)
+        self.newsfeed_timeline.finished.connect(self._next_headline)
 
         # News ticker state
-        self.marquee_text = ""
-        self.marquee_chars = 0
+        self.newsfeed_text = ""
+        self.newsfeed_chars = 0
         self.rss_fetcher = RSSFetcher()
         self.headline_index = 0
         self.headlines: List[str] = []
@@ -2730,14 +2708,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self._load_message_data()
             self._load_map()
 
-    def _update_marquee_text(self, frame: int) -> None:
-        """Update marquee display for current animation frame."""
-        if frame < self.marquee_chars:
+    def _update_newsfeed_text(self, frame: int) -> None:
+        """Update news feed display for current animation frame."""
+        if frame < self.newsfeed_chars:
             start = 0
         else:
-            start = frame - self.marquee_chars
-        text = self.marquee_text[start:frame]
-        self.marquee_label.setText(text)
+            start = frame - self.newsfeed_chars
+        text = self.newsfeed_text[start:frame]
+        self.newsfeed_label.setText(text)
 
     def _next_headline(self) -> None:
         """Called when news ticker animation completes - show next headline."""
@@ -2749,7 +2727,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Start fetching RSS feed in background."""
         feed_name = self.config.get_selected_rss_feed()
         feed_url = DEFAULT_RSS_FEEDS.get(feed_name, list(DEFAULT_RSS_FEEDS.values())[0])
-        self.marquee_label.setText("  Loading news...")
+        self.newsfeed_label.setText("  Loading news...")
         self.rss_fetcher.fetch_async(feed_url, callback=self._on_rss_fetched)
 
     def _on_rss_fetched(self) -> None:
@@ -2775,37 +2753,37 @@ class MainWindow(QtWidgets.QMainWindow):
     def _display_current_headline(self) -> None:
         """Display the current headline with scrolling animation."""
         if not self.headlines:
-            self.marquee_label.setText("  No news available")
+            self.newsfeed_label.setText("  No news available")
             return
 
         try:
             headline = self.headlines[self.headline_index]
 
             # Set green color for news headlines
-            self.marquee_label.setStyleSheet(
-                f"background-color: {self.config.get_color('marquee_background')};"
-                f"color: {self.config.get_color('marquee_foreground_green')};"
+            self.newsfeed_label.setStyleSheet(
+                f"background-color: {self.config.get_color('newsfeed_background')};"
+                f"color: {self.config.get_color('newsfeed_foreground')};"
             )
 
             # Build ticker text with headline
             ticker_text = f" {headline}"
 
             # Calculate how many characters fit in the ticker width
-            fm = self.marquee_label.fontMetrics()
-            self.marquee_chars = int(self.marquee_label.width() / fm.averageCharWidth())
+            fm = self.newsfeed_label.fontMetrics()
+            self.newsfeed_chars = int(self.newsfeed_label.width() / fm.averageCharWidth())
 
             # Add padding spaces
-            padding = ' ' * self.marquee_chars
-            self.marquee_text = ticker_text + "      +++      " + padding
+            padding = ' ' * self.newsfeed_chars
+            self.newsfeed_text = ticker_text + "      +++      " + padding
 
             # Setup and start animation
-            text_length = len(self.marquee_text)
-            self.marquee_timeline.setDuration(15000)  # 15 seconds per headline
-            self.marquee_timeline.setFrameRange(0, text_length)
-            self.marquee_timeline.start()
+            text_length = len(self.newsfeed_text)
+            self.newsfeed_timeline.setDuration(15000)  # 15 seconds per headline
+            self.newsfeed_timeline.setFrameRange(0, text_length)
+            self.newsfeed_timeline.start()
         except (IndexError, TypeError) as e:
             print(f"Error displaying headline: {e}")
-            self.marquee_label.setText("  News feed error")
+            self.newsfeed_label.setText("  News feed error")
 
     def _on_feed_changed(self, feed_name: str) -> None:
         """Handle feed selection change."""
@@ -2813,11 +2791,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rss_fetcher.clear_cache()
         self.headlines = []
         self.headline_index = 0
-        self.marquee_timeline.stop()
+        self.newsfeed_timeline.stop()
         if self._internet_available:
             self._start_rss_fetch()
         else:
-            self.marquee_label.setText("  No internet connection")
+            self.newsfeed_label.setText("  No internet connection")
 
     # -------------------------------------------------------------------------
     # Menu Action Handlers (placeholders for now)
@@ -2853,13 +2831,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_net_roster(self) -> None:
         """Open Net Manager window."""
         print("NET MANAGER clicked - window not yet implemented")
-
-    def _on_new_marquee(self) -> None:
-        """Open New Marquee window."""
-        dialog = QtWidgets.QDialog()
-        dialog.ui = Ui_FormMarquee(self.tcp_pool, self.connector_manager)
-        dialog.ui.setupUi(dialog)
-        dialog.exec_()
 
     def _on_send_message(self) -> None:
         """Open Send Message window."""
@@ -2924,13 +2895,12 @@ class MainWindow(QtWidgets.QMainWindow):
         # Refresh all data views
         self._load_statrep_data()
         self._load_message_data()
-        self._load_marquee()
         self._save_map_position(callback=self._load_map)
 
     def _on_toggle_show_every_group(self, checked: bool) -> None:
         """Toggle showing every group's data (no filtering at all)."""
         self.config.set_show_every_group(checked)
-        # Refresh data views (not marquee - per user request)
+        # Refresh data views
         self._load_statrep_data()
         self._load_message_data()
         self._save_map_position(callback=self._load_map)
@@ -2944,7 +2914,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # Refresh all data
         self._load_statrep_data()
         self._load_message_data()
-        self._load_marquee()
         self._save_map_position(callback=self._load_map)
 
     def _on_show_groups(self) -> None:
@@ -3049,7 +3018,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # Refresh all data to show/hide based on new active groups
         self._load_statrep_data()
         self._load_message_data()
-        self._load_marquee()
         self._save_map_position(callback=self._load_map)
 
     def _on_js8_connectors(self) -> None:
@@ -3171,8 +3139,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._save_map_position(callback=self._load_map)
             elif data_type == "message":
                 self._load_message_data()
-            elif data_type == "marquee":
-                self._load_marquee()
             elif data_type == "checkin":
                 self._save_map_position(callback=self._load_map)
 
@@ -3238,7 +3204,7 @@ class MainWindow(QtWidgets.QMainWindow):
             utc: UTC timestamp string.
 
         Returns:
-            Message type string ("statrep", "message", "marquee", "checkin") or empty string.
+            Message type string ("statrep", "message", "checkin") or empty string.
         """
         import re
         import maidenhead as mh
@@ -3247,7 +3213,6 @@ class MainWindow(QtWidgets.QMainWindow):
         MSG_BULLETIN = "{^%}"
         MSG_STATREP = "{&%}"
         MSG_FORWARDED_STATREP = "{F%}"
-        MSG_MARQUEE = "{*%}"
         MSG_CHECKIN = "{~%}"
 
         # Precedence mapping
@@ -3367,27 +3332,6 @@ class MainWindow(QtWidgets.QMainWindow):
                             print(f"\033[92m[{rig_name}] Added StatRep from: {callsign} ID: {srid}\033[0m")
                             conn.close()
                             return "statrep"
-
-            elif MSG_MARQUEE in value:
-                # Parse marquee: ,ID,COLOR,MESSAGE,{*%}
-                match = re.search(r',(.+?)\{\*\%\}', value)
-                if match:
-                    fields = match.group(1).split(",")
-                    if len(fields) >= 3:
-                        id_num = fields[0].strip()
-                        color = fields[1].strip()
-                        marquee = ",".join(fields[2:]).strip()
-
-                        cursor.execute(
-                            "INSERT OR REPLACE INTO marquees_Data "
-                            "(idnum, callsign, groupname, date, color, message, frequency) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?)",
-                            (id_num, callsign, group, utc, color, marquee, freq)
-                        )
-                        conn.commit()
-                        print(f"\033[92m[{rig_name}] Added Marquee from: {callsign} ID: {id_num}\033[0m")
-                        conn.close()
-                        return "marquee"
 
             elif MSG_CHECKIN in value:
                 # Parse checkin: ,TRAFFIC,STATE,GRID,{~%}
