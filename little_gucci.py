@@ -1223,9 +1223,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu.addSeparator()
 
         # Add reset date options
-        reset_today = QtWidgets.QAction("Reset Date", self)
-        reset_today.triggered.connect(lambda: self._reset_filter_date(0))
-        self.filter_menu.addAction(reset_today)
+        reset_midnight = QtWidgets.QAction("Reset to Midnight", self)
+        reset_midnight.triggered.connect(lambda: self._reset_filter_date(0))
+        self.filter_menu.addAction(reset_midnight)
 
         reset_1month = QtWidgets.QAction("Reset to 1 month ago", self)
         reset_1month.triggered.connect(lambda: self._reset_filter_date(30))
@@ -2474,7 +2474,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self._update_time)
         self.clock_timer.start(1000)
-        self._current_date = datetime.now().strftime("%Y-%m-%d")  # Track date for midnight rollover
         self._update_time()  # Initial display
 
         # Internet check timer - retries every 30 minutes if offline
@@ -2518,20 +2517,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._save_map_position(callback=self._load_map)
 
     def _update_time(self) -> None:
-        """Update the time display with current UTC time and check for midnight rollover."""
+        """Update the time display with current UTC time."""
         current_time = QDateTime.currentDateTimeUtc()
         self.time_label.setText(current_time.toString("yyyy-MM-dd hh:mm:ss") + " UTC")
-
-        # Check for midnight rollover - reset start date filter to today
-        today = datetime.now().strftime("%Y-%m-%d")
-        if today != self._current_date:
-            self._current_date = today
-            self.config.filter_settings['start'] = today
-            print(f"[Midnight] Date changed to {today}, resetting start filter")
-            # Refresh data displays with new filter
-            self._load_statrep_data()
-            self._load_message_data()
-            self._load_map()
 
     def _update_marquee_text(self, frame: int) -> None:
         """Update marquee display for current animation frame."""
