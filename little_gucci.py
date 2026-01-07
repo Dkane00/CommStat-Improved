@@ -1461,6 +1461,19 @@ class MainWindow(QtWidgets.QMainWindow):
         menu_fg = self.config.get_color('menu_foreground')
         font = QtGui.QFont("Arial", 12, QtGui.QFont.Bold)
 
+        # Connected rigs label
+        self.label_connected_prefix = QtWidgets.QLabel(self.header_widget)
+        self.label_connected_prefix.setStyleSheet(f"color: {fg_color};")
+        self.label_connected_prefix.setText("Connected:")
+        self.label_connected_prefix.setFont(font)
+        self.header_layout.addWidget(self.label_connected_prefix)
+
+        # Connected rigs display
+        self.connected_rigs_label = QtWidgets.QLabel(self.header_widget)
+        self.connected_rigs_label.setStyleSheet(f"color: {fg_color};")
+        self.connected_rigs_label.setFont(QtGui.QFont("Arial", 12, QtGui.QFont.Bold))
+        self.header_layout.addWidget(self.connected_rigs_label)
+
         # Spacer to push news feed to center
         self.header_layout.addStretch()
 
@@ -1535,7 +1548,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Time display
         self.time_label = QtWidgets.QLabel(self.header_widget)
-        self.time_label.setFixedSize(240, 32)
+        self.time_label.setFixedSize(120, 32)
         self.time_label.setFont(QtGui.QFont("Arial", 12))
         self.time_label.setStyleSheet(
             f"background-color: {self.config.get_color('time_background')};"
@@ -2630,6 +2643,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clock_timer.timeout.connect(self._update_time)
         self.clock_timer.start(1000)
         self._update_time()  # Initial display
+        self._update_connected_rigs_display()  # Initial connected rigs display
 
         # Internet check timer - retries every 30 minutes if offline
         self.internet_timer = QTimer(self)
@@ -2686,7 +2700,16 @@ class MainWindow(QtWidgets.QMainWindow):
     def _update_time(self) -> None:
         """Update the time display with current UTC time."""
         current_time = QDateTime.currentDateTimeUtc()
-        self.time_label.setText(current_time.toString("yyyy-MM-dd hh:mm:ss") + " UTC")
+        self.time_label.setText(current_time.toString("hh:mm:ss"))
+
+    def _update_connected_rigs_display(self) -> None:
+        """Update the connected rigs display with currently connected rig names."""
+        connected = self.tcp_pool.get_connected_rig_names()
+        if connected:
+            text = "  ".join(f"[{name}]" for name in connected)
+        else:
+            text = ""
+        self.connected_rigs_label.setText(text)
 
     def _update_newsfeed_text(self, frame: int) -> None:
         """Update news feed display for current animation frame."""
@@ -3020,6 +3043,7 @@ class MainWindow(QtWidgets.QMainWindow):
             status_line = f"{utc_str}\t[{rig_name}] Disconnected"
             self.feed_messages.insert(0, status_line)
             self._update_feed_display()
+        self._update_connected_rigs_display()
 
     def _handle_callsign_received(self, rig_name: str, callsign: str) -> None:
         """

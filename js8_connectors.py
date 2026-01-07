@@ -13,7 +13,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
-    QMessageBox, QGroupBox, QSpinBox, QTextEdit
+    QMessageBox, QGroupBox, QTextEdit
 )
 
 from connector_manager import ConnectorManager, MAX_CONNECTORS
@@ -126,18 +126,17 @@ class JS8ConnectorsDialog(QDialog):
         edit_layout.addWidget(QLabel("Rig Name:"), 0, 0)
         self.rig_name_edit = QLineEdit()
         self.rig_name_edit.setMaxLength(8)
-        self.rig_name_edit.setPlaceholderText("e.g., IC-7300, HF, VHF")
+        self.rig_name_edit.setPlaceholderText("e.g., IC-7300, FTDX10")
         self.rig_name_edit.setMinimumHeight(28)
         self.rig_name_edit.textChanged.connect(self._on_input_changed)
         edit_layout.addWidget(self.rig_name_edit, 0, 1)
 
         # TCP Port
         edit_layout.addWidget(QLabel("TCP Port:"), 1, 0)
-        self.port_spin = QSpinBox()
-        self.port_spin.setRange(1024, 65535)
-        self.port_spin.setValue(2442)
-        self.port_spin.setMinimumHeight(28)
-        edit_layout.addWidget(self.port_spin, 1, 1)
+        self.port_edit = QLineEdit()
+        self.port_edit.setPlaceholderText("e.g., 2442")
+        self.port_edit.setMinimumHeight(28)
+        edit_layout.addWidget(self.port_edit, 1, 1)
 
         # Comment
         edit_layout.addWidget(QLabel("Comment:"), 2, 0)
@@ -157,16 +156,19 @@ class JS8ConnectorsDialog(QDialog):
 
         # Info section
         info_group = QGroupBox("Information")
+        info_group.setStyleSheet("QGroupBox::title { color: #AA0000; }")
         info_layout = QVBoxLayout(info_group)
 
         info_text = QLabel(
             f"<b>Server:</b> 127.0.0.1 (localhost only)<br>"
             f"<b>Maximum:</b> {MAX_CONNECTORS} connectors<br>"
             f"<b>Default Port:</b> 2442 (JS8Call TCP API)<br><br>"
-            f"<i>Tip: Enable TCP in JS8Call under File > Settings > Reporting</i>"
+            f"<i><span style='color: #AA0000;'>Tip:</span> Enable both TCP settings in JS8Call under File > Settings > Reporting</i><br>"
+            f"<i><span style='color: #AA0000;'>Note:</span> Each connector requires a unique port</i>"
         )
         info_text.setWordWrap(True)
-        info_text.setStyleSheet("color: #555;")
+        info_text.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        info_text.setStyleSheet("color: #000000;")
         info_layout.addWidget(info_text)
 
         layout.addWidget(info_group)
@@ -252,7 +254,7 @@ class JS8ConnectorsDialog(QDialog):
         """Handle double-click to populate edit fields."""
         conn = item.data(Qt.UserRole)
         self.rig_name_edit.setText(conn["rig_name"])
-        self.port_spin.setValue(conn["tcp_port"])
+        self.port_edit.setText(str(conn["tcp_port"]))
         self.comment_edit.setText(conn.get("comment", ""))
 
     def _on_input_changed(self) -> None:
@@ -299,7 +301,22 @@ class JS8ConnectorsDialog(QDialog):
             )
             return
 
-        tcp_port = self.port_spin.value()
+        # Validate port
+        port_text = self.port_edit.text().strip()
+        if not port_text:
+            tcp_port = 2442  # Default port
+        else:
+            try:
+                tcp_port = int(port_text)
+                if tcp_port < 1024 or tcp_port > 65535:
+                    raise ValueError("Port out of range")
+            except ValueError:
+                QMessageBox.warning(
+                    self, "Validation Error",
+                    "TCP Port must be a number between 1024 and 65535."
+                )
+                return
+
         comment = self.comment_edit.text().strip()
 
         # Check if first connector (will be default)
@@ -312,7 +329,7 @@ class JS8ConnectorsDialog(QDialog):
             # Clear input fields
             self.rig_name_edit.clear()
             self.comment_edit.clear()
-            self.port_spin.setValue(2442)
+            self.port_edit.clear()
 
             # Reload list
             self._load_connectors()
