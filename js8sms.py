@@ -74,42 +74,51 @@ class JS8SMSDialog(QDialog):
         self._load_rigs()
 
     def _load_rigs(self) -> None:
-        """Load connected rigs into the rig dropdown."""
+        """Load connected rigs into the rig dropdown.
+
+        Auto-selects only if exactly 1 rig is connected.
+        If multiple rigs are connected, user must select one.
+        """
         if not self.tcp_pool:
             return
 
         self.rig_combo.blockSignals(True)
         self.rig_combo.clear()
 
-        # Add all connected rigs
+        # Get connected rigs
         connected_rigs = self.tcp_pool.get_connected_rig_names()
-        for rig_name in connected_rigs:
-            self.rig_combo.addItem(rig_name)
 
-        # If no connected rigs, add all configured rigs (disconnected)
         if not connected_rigs:
+            # No connected rigs - show all configured rigs as disconnected
             all_rigs = self.tcp_pool.get_all_rig_names()
-            for rig_name in all_rigs:
-                self.rig_combo.addItem(f"{rig_name} (disconnected)")
-
-        # Select default rig
-        if self.connector_manager:
-            default = self.connector_manager.get_default_connector()
-            if default:
-                idx = self.rig_combo.findText(default["rig_name"])
-                if idx >= 0:
-                    self.rig_combo.setCurrentIndex(idx)
+            if all_rigs:
+                self.rig_combo.addItem("")  # Empty first item
+                for rig_name in all_rigs:
+                    self.rig_combo.addItem(f"{rig_name} (disconnected)")
+        elif len(connected_rigs) == 1:
+            # Exactly 1 connected rig - auto-select it
+            self.rig_combo.addItem(connected_rigs[0])
+        else:
+            # Multiple connected rigs - require user selection
+            self.rig_combo.addItem("")  # Empty first item
+            for rig_name in connected_rigs:
+                self.rig_combo.addItem(rig_name)
 
         self.rig_combo.blockSignals(False)
+
+        # Trigger rig changed to populate mode/frequency (only if a rig is selected)
+        current_text = self.rig_combo.currentText()
+        if current_text and "(disconnected)" not in current_text:
+            self._on_rig_changed(current_text)
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setSpacing(15)
-        layout.setContentsMargins(25, 20, 25, 20)
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
 
         # Title
-        title = QtWidgets.QLabel("JS8Call SMS")
+        title = QtWidgets.QLabel("CommStat JS8 SMS")
         title.setAlignment(Qt.AlignCenter)
         title_font = QtGui.QFont(FONT_FAMILY, 16, QtGui.QFont.Bold)
         title.setFont(title_font)
@@ -123,8 +132,31 @@ class JS8SMSDialog(QDialog):
         self.rig_combo = QtWidgets.QComboBox()
         self.rig_combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.rig_combo.setMinimumWidth(150)
+        self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
         rig_layout.addWidget(rig_label)
         rig_layout.addWidget(self.rig_combo)
+        # Mode dropdown
+        mode_label = QtWidgets.QLabel("Mode:")
+        mode_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.mode_combo = QtWidgets.QComboBox()
+        self.mode_combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.mode_combo.addItem("Slow", 3)
+        self.mode_combo.addItem("Normal", 0)
+        self.mode_combo.addItem("Fast", 1)
+        self.mode_combo.addItem("Turbo", 2)
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        rig_layout.addWidget(mode_label)
+        rig_layout.addWidget(self.mode_combo)
+        # Frequency field
+        freq_label = QtWidgets.QLabel("Freq:")
+        freq_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.freq_field = QtWidgets.QLineEdit()
+        self.freq_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.freq_field.setMaximumWidth(80)
+        self.freq_field.setReadOnly(True)
+        self.freq_field.setStyleSheet("background-color: #f0f0f0;")
+        rig_layout.addWidget(freq_label)
+        rig_layout.addWidget(self.freq_field)
         rig_layout.addStretch()
         layout.addLayout(rig_layout)
 
@@ -198,7 +230,7 @@ class JS8SMSDialog(QDialog):
 
         btn_cancel = QtWidgets.QPushButton("Cancel")
         btn_cancel.clicked.connect(self.close)
-        btn_cancel.setStyleSheet(self._button_style("#6c757d"))
+        btn_cancel.setStyleSheet(self._button_style("#dc3545"))
         btn_cancel.setMinimumWidth(100)
         button_layout.addWidget(btn_cancel)
 
@@ -211,7 +243,7 @@ class JS8SMSDialog(QDialog):
                 background-color: {color};
                 color: white;
                 border: none;
-                padding: 12px 24px;
+                padding: 8px 12px;
                 border-radius: 4px;
                 font-weight: bold;
                 font-size: 12px;
@@ -220,6 +252,49 @@ class JS8SMSDialog(QDialog):
                 opacity: 0.9;
             }}
         """
+
+    def _on_rig_changed(self, rig_name: str) -> None:
+        """Handle rig selection change - update mode/frequency display."""
+        if not rig_name or "(disconnected)" in rig_name:
+            self.freq_field.setText("")
+            return
+
+        if not self.tcp_pool:
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if client and client.is_connected():
+            # Populate mode dropdown with current mode preselected
+            speed_name = (client.speed_name or "").upper()
+            mode_map = {"SLOW": 0, "NORMAL": 1, "FAST": 2, "TURBO": 3}
+            idx = mode_map.get(speed_name, 1)  # Default to Normal
+            self.mode_combo.blockSignals(True)
+            self.mode_combo.setCurrentIndex(idx)
+            self.mode_combo.blockSignals(False)
+
+            # Populate frequency field
+            frequency = client.frequency
+            if frequency:
+                self.freq_field.setText(f"{frequency:.3f}")
+            else:
+                self.freq_field.setText("")
+        else:
+            self.freq_field.setText("")
+
+    def _on_mode_changed(self, index: int) -> None:
+        """Handle mode dropdown change - send MODE.SET_SPEED to JS8Call."""
+        rig_name = self.rig_combo.currentText()
+        if not rig_name or "(disconnected)" in rig_name:
+            return
+
+        if not self.tcp_pool:
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if client and client.is_connected():
+            speed_value = self.mode_combo.currentData()
+            client.send_message("MODE.SET_SPEED", "", {"SPEED": speed_value})
+            print(f"[JS8SMS] Set mode to {self.mode_combo.currentText()} (speed={speed_value})")
 
     def _show_error(self, message: str) -> None:
         """Display an error message box."""

@@ -92,12 +92,35 @@ class Ui_FormMessage:
         self.rig_combo.setFont(font)
         self.rig_combo.setObjectName("rig_combo")
 
-        # Mode and frequency display (populated when rig is selected)
-        self.rig_info_label = QtWidgets.QLabel(FormMessage)
-        self.rig_info_label.setGeometry(QtCore.QRect(350, 50, 300, 26))
-        self.rig_info_label.setFont(font)
-        self.rig_info_label.setStyleSheet("color: #666;")
-        self.rig_info_label.setObjectName("rig_info_label")
+        # Mode dropdown
+        self.mode_label = QtWidgets.QLabel(FormMessage)
+        self.mode_label.setGeometry(QtCore.QRect(350, 50, 45, 26))
+        self.mode_label.setFont(font)
+        self.mode_label.setText("Mode:")
+        self.mode_label.setObjectName("mode_label")
+
+        self.mode_combo = QtWidgets.QComboBox(FormMessage)
+        self.mode_combo.setGeometry(QtCore.QRect(400, 50, 100, 26))
+        self.mode_combo.setFont(font)
+        self.mode_combo.addItem("Slow", 3)
+        self.mode_combo.addItem("Normal", 0)
+        self.mode_combo.addItem("Fast", 1)
+        self.mode_combo.addItem("Turbo", 2)
+        self.mode_combo.setObjectName("mode_combo")
+
+        # Frequency field
+        self.freq_label = QtWidgets.QLabel(FormMessage)
+        self.freq_label.setGeometry(QtCore.QRect(510, 50, 40, 26))
+        self.freq_label.setFont(font)
+        self.freq_label.setText("Freq:")
+        self.freq_label.setObjectName("freq_label")
+
+        self.freq_field = QtWidgets.QLineEdit(FormMessage)
+        self.freq_field.setGeometry(QtCore.QRect(555, 50, 80, 26))
+        self.freq_field.setFont(font)
+        self.freq_field.setReadOnly(True)
+        self.freq_field.setStyleSheet("background-color: #f0f0f0;")
+        self.freq_field.setObjectName("freq_field")
 
         # Group dropdown
         self.group_label = QtWidgets.QLabel(FormMessage)
@@ -177,6 +200,9 @@ class Ui_FormMessage:
 
         # Connect rig combo signal
         self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
+
+        # Connect mode combo signal
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
         # Load rigs into dropdown
         self._load_rigs()
@@ -263,24 +289,28 @@ class Ui_FormMessage:
         if not rig_name or "(disconnected)" in rig_name or not self.tcp_pool:
             self.callsign = ""
             self.lineEdit_3.setText("")
-            if hasattr(self, 'rig_info_label'):
-                self.rig_info_label.setText("")
+            if hasattr(self, 'freq_field'):
+                self.freq_field.setText("")
             return
 
         client = self.tcp_pool.get_client(rig_name)
         if client and client.is_connected():
-            # Display mode and frequency from cached values
-            if hasattr(self, 'rig_info_label'):
-                speed_name = client.speed_name or ""
+            # Populate mode dropdown with current mode preselected
+            if hasattr(self, 'mode_combo'):
+                speed_name = (client.speed_name or "").upper()
+                mode_map = {"SLOW": 0, "NORMAL": 1, "FAST": 2, "TURBO": 3}
+                idx = mode_map.get(speed_name, 1)  # Default to Normal
+                self.mode_combo.blockSignals(True)
+                self.mode_combo.setCurrentIndex(idx)
+                self.mode_combo.blockSignals(False)
+
+            # Populate frequency field
+            if hasattr(self, 'freq_field'):
                 frequency = client.frequency
-                if speed_name and frequency:
-                    self.rig_info_label.setText(f"{speed_name} on {frequency:.3f} MHz")
-                elif speed_name:
-                    self.rig_info_label.setText(speed_name)
-                elif frequency:
-                    self.rig_info_label.setText(f"{frequency:.3f} MHz")
+                if frequency:
+                    self.freq_field.setText(f"{frequency:.3f}")
                 else:
-                    self.rig_info_label.setText("")
+                    self.freq_field.setText("")
 
             # Connect signal for this client (disconnect any existing first)
             try:
@@ -293,8 +323,8 @@ class Ui_FormMessage:
             # Request callsign from JS8Call
             client.get_callsign()
         else:
-            if hasattr(self, 'rig_info_label'):
-                self.rig_info_label.setText("")
+            if hasattr(self, 'freq_field'):
+                self.freq_field.setText("")
 
     def _on_callsign_received(self, rig_name: str, callsign: str) -> None:
         """Handle callsign received from JS8Call."""
@@ -302,6 +332,21 @@ class Ui_FormMessage:
         if self.rig_combo.currentText() == rig_name:
             self.callsign = callsign
             self.lineEdit_3.setText(callsign)
+
+    def _on_mode_changed(self, index: int) -> None:
+        """Handle mode dropdown change - send MODE.SET_SPEED to JS8Call."""
+        rig_name = self.rig_combo.currentText()
+        if not rig_name or "(disconnected)" in rig_name:
+            return
+
+        if not self.tcp_pool:
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if client and client.is_connected():
+            speed_value = self.mode_combo.currentData()
+            client.send_message("MODE.SET_SPEED", "", {"SPEED": speed_value})
+            print(f"[Message] Set mode to {self.mode_combo.currentText()} (speed={speed_value})")
 
     def _get_active_group_from_db(self) -> str:
         """Get the active group from the database."""
