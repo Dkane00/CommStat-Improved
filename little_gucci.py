@@ -1590,6 +1590,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         return sections
 
+    def _debug(self, message: str) -> None:
+        """Print debug message if debug mode is enabled."""
+        if self.debug_mode:
+            print(f"[Backbone] {message}")
+
     def _is_backbone_date_valid(self, section_text: str) -> bool:
         """Check if backbone section's date is in the future.
 
@@ -1609,15 +1614,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # Look for Date: line (should be first line)
         # Supports: YYYY-MM-DD, YYYY-MM-DD HH:MM, YYYY-MM-DD HH:MM:SS
         date_line = lines[0].strip()
-        if self.debug_mode:
-            print(f"[Backbone] First line of section: '{date_line}'")
+        self._debug(f"First line of section: '{date_line}'")
         match = re.match(
             r'Date:\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2})(?::(\d{2}))?)?',
             date_line, re.IGNORECASE
         )
         if not match:
-            if self.debug_mode:
-                print(f"[Backbone] Date regex did not match")
+            self._debug("Date regex did not match")
             return False
 
         date_str = match.group(1)
@@ -1631,12 +1634,10 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             now = datetime.now()
             is_valid = expiry > now
-            if self.debug_mode:
-                print(f"[Backbone] Date check: {expiry} > {now} = {is_valid}")
+            self._debug(f"Date check: {expiry} > {now} = {is_valid}")
             return is_valid
         except ValueError as e:
-            if self.debug_mode:
-                print(f"[Backbone] Date parse error: {e}")
+            self._debug(f"Date parse error: {e}")
             return False
 
     def _matches_user_groups(self, section_text: str) -> bool:
@@ -1730,8 +1731,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 if temp_path:
                     items.append((temp_path, click_url))
             except Exception as e:
-                if self.debug_mode:
-                    print(f"[Backbone] Failed to download {image_url}: {e}")
+                self._debug(f"Failed to download {image_url}: {e}")
 
         return items
 
@@ -1757,39 +1757,32 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Check date validity
         if not self._is_backbone_date_valid(section_text):
-            if self.debug_mode:
-                print(f"[Backbone] {section_type.upper()} section: date expired, skipping")
+            self._debug(f"{section_type.upper()} section: date expired, skipping")
             return None
 
         # For group/callsign sections, check targeting
         if section_type == 'group':
             if not self._matches_user_groups(section_text):
-                if self.debug_mode:
-                    print(f"[Backbone] GROUP section: no matching groups, skipping")
+                self._debug("GROUP section: no matching groups, skipping")
                 return None
-            if self.debug_mode:
-                print(f"[Backbone] GROUP section: user group matched")
+            self._debug("GROUP section: user group matched")
 
         elif section_type == 'callsign':
             if not self._matches_user_callsign(section_text):
-                if self.debug_mode:
-                    print(f"[Backbone] CALLSIGN section: no matching callsign, skipping")
+                self._debug("CALLSIGN section: no matching callsign, skipping")
                 return None
-            if self.debug_mode:
-                print(f"[Backbone] CALLSIGN section: user callsign matched")
+            self._debug("CALLSIGN section: user callsign matched")
 
         # Look for message block
         message = self._extract_section_message(section_text)
         if message:
-            if self.debug_mode:
-                print(f"[Backbone] {section_type.upper()} section: showing message")
+            self._debug(f"{section_type.upper()} section: showing message")
             return ('message', message)
 
         # Look for image URLs
         urls = self._extract_section_urls(section_text)
         if urls:
-            if self.debug_mode:
-                print(f"[Backbone] {section_type.upper()} section: loaded {len(urls)} images")
+            self._debug(f"{section_type.upper()} section: loaded {len(urls)} images")
             return ('heartbeat', urls)
 
         return None
@@ -1849,8 +1842,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             return data  # List of (image_path, click_url) tuples
 
                 # No sections matched
-                if self.debug_mode:
-                    print("[Backbone] No sections matched user criteria")
+                self._debug("No sections matched user criteria")
                 return []
 
             else:
@@ -1865,8 +1857,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 if date_match:
                     expiry_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
                     if expiry_date < datetime.now().date():
-                        if self.debug_mode:
-                            print(f"[Backbone] Legacy format: date {expiry_date} expired")
+                        self._debug(f"Legacy format: date {expiry_date} expired")
                         return []
                     lines = lines[1:]
 
@@ -1895,14 +1886,12 @@ class MainWindow(QtWidgets.QMainWindow):
                             if temp_path:
                                 items.append((temp_path, click_url))
                         except Exception as e:
-                            if self.debug_mode:
-                                print(f"[Backbone] Failed to download {image_url}: {e}")
+                            self._debug(f"Failed to download {image_url}: {e}")
 
                 return items
 
         except Exception as e:
-            if self.debug_mode:
-                print(f"[Backbone] Failed to fetch backbone reply: {e}")
+            self._debug(f"Failed to fetch backbone reply: {e}")
 
         return []
 
@@ -1918,8 +1907,7 @@ class MainWindow(QtWidgets.QMainWindow):
             temp_file.close()
             return temp_file.name
         except Exception as e:
-            if self.debug_mode:
-                print(f"[Backbone] Failed to download image {url}: {e}")
+            self._debug(f"Failed to download image {url}: {e}")
             return None
 
     def _load_slideshow_images(self) -> None:
@@ -2132,12 +2120,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         except Exception as e:
             self._backbone_fail_count += 1
-            if self.debug_mode:
-                print(f"[Backbone] Failed ({self._backbone_fail_count}/{self._backbone_max_failures}): {e}")
+            self._debug(f"Failed ({self._backbone_fail_count}/{self._backbone_max_failures}): {e}")
             if self._backbone_fail_count >= self._backbone_max_failures:
                 self.backbone_timer.stop()
-                if self.debug_mode:
-                    print(f"[Backbone] Stopped after {self._backbone_max_failures} consecutive failures")
+                self._debug(f"Stopped after {self._backbone_max_failures} consecutive failures")
 
     @QtCore.pyqtSlot()
     def _reload_slideshow(self) -> None:
