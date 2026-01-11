@@ -36,6 +36,18 @@ WINDOW_WIDTH = 550
 WINDOW_HEIGHT = 380
 
 
+def make_uppercase(field):
+    """Force uppercase input on a QLineEdit."""
+    def to_upper(text):
+        if text != text.upper():
+            pos = field.cursorPosition()
+            field.blockSignals(True)
+            field.setText(text.upper())
+            field.blockSignals(False)
+            field.setCursorPosition(pos)
+    field.textChanged.connect(to_upper)
+
+
 # =============================================================================
 # JS8SMS Dialog
 # =============================================================================
@@ -168,7 +180,7 @@ class JS8SMSDialog(QDialog):
         layout.addWidget(warning)
 
         # Input field style
-        input_style = "padding: 8px; font-size: 13px;"
+        input_style = "padding: 8px;"
 
         # Phone field
         phone_layout = QtWidgets.QVBoxLayout()
@@ -178,6 +190,7 @@ class JS8SMSDialog(QDialog):
         self.phone_field = QtWidgets.QLineEdit()
         self.phone_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.phone_field.setMinimumHeight(36)
+        self.phone_field.setMinimumWidth(300)
         self.phone_field.setStyleSheet(input_style)
         self.phone_field.setInputMask("999-999-9999")
         self.phone_field.setPlaceholderText("xxx-xxx-xxxx")
@@ -193,9 +206,11 @@ class JS8SMSDialog(QDialog):
         self.message_field = QtWidgets.QLineEdit()
         self.message_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.message_field.setMinimumHeight(36)
+        self.message_field.setMinimumWidth(500)
         self.message_field.setStyleSheet(input_style)
         self.message_field.setMaxLength(MAX_MESSAGE_LENGTH)
         self.message_field.setPlaceholderText("Your message here (max 67 characters)")
+        make_uppercase(self.message_field)
         message_layout.addWidget(message_label)
         message_layout.addWidget(self.message_field)
         layout.addLayout(message_layout)
@@ -344,11 +359,43 @@ class JS8SMSDialog(QDialog):
         phone = self.phone_field.text().strip()
         message_text = self.message_field.text().strip()
 
-        # Build message
-        message = f"@APRSIS CMD :SMSGTE   :@{phone}  {message_text} {{04}}"
+        # Build and store message for transmission after check
+        self._pending_message = f"@APRSIS CMD :SMSGTE   :@{phone}  {message_text} {{04}}"
+        self._pending_phone = phone
+        self._pending_text = message_text
 
+        # First check if a call is selected in JS8Call
         try:
-            client.send_tx_message(message)
+            client.call_selected_received.disconnect(self._on_call_selected_for_transmit)
+        except TypeError:
+            pass
+        client.call_selected_received.connect(self._on_call_selected_for_transmit)
+        client.get_call_selected()
+
+    def _on_call_selected_for_transmit(self, rig_name: str, selected_call: str) -> None:
+        """Handle call selected response - check if clear to transmit."""
+        if self.rig_combo.currentText() != rig_name:
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if client:
+            try:
+                client.call_selected_received.disconnect(self._on_call_selected_for_transmit)
+            except TypeError:
+                pass
+
+        # If a call is selected, show error and abort
+        if selected_call:
+            QMessageBox.critical(
+                self, "ERROR",
+                f"JS8Call has {selected_call} selected.\n\n"
+                "Go to JS8Call and click the \"Deselect\" button."
+            )
+            return
+
+        # No call selected - proceed with transmission
+        try:
+            client.send_tx_message(self._pending_message)
 
             # Print to terminal
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
@@ -356,9 +403,9 @@ class JS8SMSDialog(QDialog):
             print(f"JS8SMS TRANSMITTED - {now} UTC")
             print(f"{'='*60}")
             print(f"  Rig:      {rig_name}")
-            print(f"  To:       {phone}")
-            print(f"  Message:  {message_text}")
-            print(f"  Full TX:  {message}")
+            print(f"  To:       {self._pending_phone}")
+            print(f"  Message:  {self._pending_text}")
+            print(f"  Full TX:  {self._pending_message}")
             print(f"{'='*60}\n")
 
             self.accept()

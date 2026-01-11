@@ -285,85 +285,46 @@ class ConfigManager:
         """Get a color value by key."""
         return self.colors.get(key, '#FFFFFF')
 
+    def _save_setting(self, key: str, value) -> None:
+        """Save a setting to both memory and config file."""
+        self.directed_config[key] = value
+        config = ConfigParser()
+        config.read(self.config_path)
+        if not config.has_section("DIRECTEDCONFIG"):
+            config.add_section("DIRECTEDCONFIG")
+        config.set("DIRECTEDCONFIG", key, str(value))
+        with open(self.config_path, 'w') as f:
+            config.write(f)
+
     def get_hide_heartbeat(self) -> bool:
-        """Get the hide heartbeat setting."""
         return self.directed_config.get('hide_heartbeat', False)
 
     def set_hide_heartbeat(self, value: bool) -> None:
-        """Set and save the hide heartbeat setting."""
-        self.directed_config['hide_heartbeat'] = value
-        # Save to config file
-        config = ConfigParser()
-        config.read(self.config_path)
-        if not config.has_section("DIRECTEDCONFIG"):
-            config.add_section("DIRECTEDCONFIG")
-        config.set("DIRECTEDCONFIG", "hide_heartbeat", str(value))
-        with open(self.config_path, 'w') as f:
-            config.write(f)
+        self._save_setting('hide_heartbeat', value)
 
     def get_show_all_groups(self) -> bool:
-        """Get the show all groups setting."""
         return self.directed_config.get('show_all_groups', False)
 
     def set_show_all_groups(self, value: bool) -> None:
-        """Set and save the show all groups setting."""
-        self.directed_config['show_all_groups'] = value
-        # Save to config file
-        config = ConfigParser()
-        config.read(self.config_path)
-        if not config.has_section("DIRECTEDCONFIG"):
-            config.add_section("DIRECTEDCONFIG")
-        config.set("DIRECTEDCONFIG", "show_all_groups", str(value))
-        with open(self.config_path, 'w') as f:
-            config.write(f)
+        self._save_setting('show_all_groups', value)
 
     def get_hide_map(self) -> bool:
-        """Get the hide map setting."""
         return self.directed_config.get('hide_map', False)
 
     def set_hide_map(self, value: bool) -> None:
-        """Set and save the hide map setting."""
-        self.directed_config['hide_map'] = value
-        # Save to config file
-        config = ConfigParser()
-        config.read(self.config_path)
-        if not config.has_section("DIRECTEDCONFIG"):
-            config.add_section("DIRECTEDCONFIG")
-        config.set("DIRECTEDCONFIG", "hide_map", str(value))
-        with open(self.config_path, 'w') as f:
-            config.write(f)
+        self._save_setting('hide_map', value)
 
     def get_show_every_group(self) -> bool:
-        """Get the show every group setting."""
         return self.directed_config.get('show_every_group', False)
 
     def set_show_every_group(self, value: bool) -> None:
-        """Set and save the show every group setting."""
-        self.directed_config['show_every_group'] = value
-        # Save to config file
-        config = ConfigParser()
-        config.read(self.config_path)
-        if not config.has_section("DIRECTEDCONFIG"):
-            config.add_section("DIRECTEDCONFIG")
-        config.set("DIRECTEDCONFIG", "show_every_group", str(value))
-        with open(self.config_path, 'w') as f:
-            config.write(f)
+        self._save_setting('show_every_group', value)
 
     def get_selected_rss_feed(self) -> str:
-        """Get the selected RSS feed name."""
         return self.directed_config.get('selected_rss_feed', list(DEFAULT_RSS_FEEDS.keys())[0])
 
     def set_selected_rss_feed(self, feed_name: str) -> None:
-        """Set and save the selected RSS feed."""
-        self.directed_config['selected_rss_feed'] = feed_name
-        # Save to config file
-        config = ConfigParser()
-        config.read(self.config_path)
-        if not config.has_section("DIRECTEDCONFIG"):
-            config.add_section("DIRECTEDCONFIG")
-        config.set("DIRECTEDCONFIG", "selected_rss_feed", feed_name)
-        with open(self.config_path, 'w') as f:
-            config.write(f)
+        self._save_setting('selected_rss_feed', feed_name)
 
 
 # =============================================================================
@@ -505,6 +466,24 @@ class DatabaseManager:
             db_path: Path to the SQLite database file
         """
         self.db_path = db_path
+
+    def _execute(self, operation, default=None):
+        """Execute a database operation with error handling.
+
+        Args:
+            operation: Callable that takes (cursor, connection) and returns result
+            default: Value to return on error
+
+        Returns:
+            Result of operation, or default on error
+        """
+        try:
+            with sqlite3.connect(self.db_path, timeout=10) as connection:
+                cursor = connection.cursor()
+                return operation(cursor, connection)
+        except sqlite3.Error as error:
+            print(f"Database error: {error}")
+            return default
 
     def get_statrep_data(
         self,
@@ -667,36 +646,24 @@ class DatabaseManager:
 
     def get_all_groups(self) -> List[str]:
         """Get all group names."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute("SELECT name FROM Groups ORDER BY name")
-                return [row[0] for row in cursor.fetchall()]
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return []
+        def op(cursor, conn):
+            cursor.execute("SELECT name FROM Groups ORDER BY name")
+            return [row[0] for row in cursor.fetchall()]
+        return self._execute(op, [])
 
     def get_all_groups_with_status(self) -> List[Tuple[str, bool]]:
         """Get all groups with their active status."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute("SELECT name, is_active FROM Groups ORDER BY name")
-                return [(row[0], bool(row[1])) for row in cursor.fetchall()]
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return []
+        def op(cursor, conn):
+            cursor.execute("SELECT name, is_active FROM Groups ORDER BY name")
+            return [(row[0], bool(row[1])) for row in cursor.fetchall()]
+        return self._execute(op, [])
 
     def get_active_groups(self) -> List[str]:
         """Get list of all active group names."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute("SELECT name FROM Groups WHERE is_active = 1 ORDER BY name")
-                return [row[0] for row in cursor.fetchall()]
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return []
+        def op(cursor, conn):
+            cursor.execute("SELECT name FROM Groups WHERE is_active = 1 ORDER BY name")
+            return [row[0] for row in cursor.fetchall()]
+        return self._execute(op, [])
 
     def get_active_group(self) -> str:
         """Get the first active group name (for backwards compatibility)."""
@@ -705,36 +672,26 @@ class DatabaseManager:
 
     def set_group_active(self, group_name: str, active: bool) -> bool:
         """Set a group's active status (doesn't affect other groups)."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute(
-                    "UPDATE Groups SET is_active = ? WHERE name = ?",
-                    (1 if active else 0, group_name.upper())
-                )
-                connection.commit()
-                return cursor.rowcount > 0
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return False
+        def op(cursor, conn):
+            cursor.execute(
+                "UPDATE Groups SET is_active = ? WHERE name = ?",
+                (1 if active else 0, group_name.upper())
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
 
     def set_active_group(self, group_name: str) -> bool:
         """Set a group as the only active group (deactivates others)."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                # Deactivate all groups
-                cursor.execute("UPDATE Groups SET is_active = 0")
-                # Activate the selected group
-                cursor.execute(
-                    "UPDATE Groups SET is_active = 1 WHERE name = ?",
-                    (group_name.upper(),)
-                )
-                connection.commit()
-                return cursor.rowcount > 0
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return False
+        def op(cursor, conn):
+            cursor.execute("UPDATE Groups SET is_active = 0")
+            cursor.execute(
+                "UPDATE Groups SET is_active = 1 WHERE name = ?",
+                (group_name.upper(),)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
 
     def add_group(self, group_name: str, comment: str = "", url1: str = "", url2: str = "") -> bool:
         """Add a new group with optional fields. Returns True if successful."""
@@ -760,92 +717,67 @@ class DatabaseManager:
 
     def update_group(self, group_name: str, comment: str = "", url1: str = "", url2: str = "") -> bool:
         """Update an existing group's fields. Returns True if successful."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute(
-                    "UPDATE Groups SET comment = ?, url1 = ?, url2 = ? WHERE name = ?",
-                    (comment.strip(), url1.strip(), url2.strip(), group_name.upper())
-                )
-                connection.commit()
-                return cursor.rowcount > 0
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return False
+        def op(cursor, conn):
+            cursor.execute(
+                "UPDATE Groups SET comment = ?, url1 = ?, url2 = ? WHERE name = ?",
+                (comment.strip(), url1.strip(), url2.strip(), group_name.upper())
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
 
     def get_group_details(self, group_name: str) -> Optional[Dict]:
         """Get full details of a group."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute(
-                    "SELECT name, comment, url1, url2, date_added, is_active FROM Groups WHERE name = ?",
-                    (group_name.upper(),)
-                )
-                row = cursor.fetchone()
-                if row:
-                    return {
-                        "name": row[0],
-                        "comment": row[1] or "",
-                        "url1": row[2] or "",
-                        "url2": row[3] or "",
-                        "date_added": row[4] or "",
-                        "is_active": bool(row[5])
-                    }
-                return None
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
+        def op(cursor, conn):
+            cursor.execute(
+                "SELECT name, comment, url1, url2, date_added, is_active FROM Groups WHERE name = ?",
+                (group_name.upper(),)
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "name": row[0],
+                    "comment": row[1] or "",
+                    "url1": row[2] or "",
+                    "url2": row[3] or "",
+                    "date_added": row[4] or "",
+                    "is_active": bool(row[5])
+                }
             return None
+        return self._execute(op, None)
 
     def get_all_groups_details(self) -> List[Dict]:
         """Get full details of all groups, sorted by name."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute(
-                    "SELECT name, comment, url1, url2, date_added FROM Groups ORDER BY name"
-                )
-                rows = cursor.fetchall()
-                return [
-                    {
-                        "name": row[0],
-                        "comment": row[1] or "",
-                        "url1": row[2] or "",
-                        "url2": row[3] or "",
-                        "date_added": row[4] or ""
-                    }
-                    for row in rows
-                ]
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return []
+        def op(cursor, conn):
+            cursor.execute(
+                "SELECT name, comment, url1, url2, date_added FROM Groups ORDER BY name"
+            )
+            return [
+                {
+                    "name": row[0],
+                    "comment": row[1] or "",
+                    "url1": row[2] or "",
+                    "url2": row[3] or "",
+                    "date_added": row[4] or ""
+                }
+                for row in cursor.fetchall()
+            ]
+        return self._execute(op, [])
 
     def remove_group(self, group_name: str) -> bool:
         """Remove a group. Returns True if successful."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                # Delete the group (no longer require at least one group)
-                cursor.execute(
-                    "DELETE FROM Groups WHERE name = ?",
-                    (group_name.upper(),)
-                )
-                connection.commit()
-                return cursor.rowcount > 0
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return False
+        def op(cursor, conn):
+            cursor.execute("DELETE FROM Groups WHERE name = ?", (group_name.upper(),))
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
 
     def get_group_count(self) -> int:
         """Get the number of groups."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute("SELECT COUNT(*) FROM Groups")
-                return cursor.fetchone()[0]
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return 0
+        def op(cursor, conn):
+            cursor.execute("SELECT COUNT(*) FROM Groups")
+            return cursor.fetchone()[0]
+        return self._execute(op, 0)
 
     def init_db_version_table(self) -> None:
         """Create db_version table if it doesn't exist and seed initial version."""
@@ -876,43 +808,31 @@ class DatabaseManager:
 
     def get_db_version(self) -> int:
         """Get the current database version."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute("SELECT version FROM db_version WHERE id = 1")
-                result = cursor.fetchone()
-                return result[0] if result else 1
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return 1
+        def op(cursor, conn):
+            cursor.execute("SELECT version FROM db_version WHERE id = 1")
+            result = cursor.fetchone()
+            return result[0] if result else 1
+        return self._execute(op, 1)
 
     def set_db_version(self, version: int) -> bool:
         """Update the database version."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                from datetime import datetime
-                cursor.execute(
-                    "UPDATE db_version SET version = ?, updated_at = ? WHERE id = 1",
-                    (version, datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
-                )
-                connection.commit()
-                return cursor.rowcount > 0
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return False
+        def op(cursor, conn):
+            from datetime import datetime
+            cursor.execute(
+                "UPDATE db_version SET version = ?, updated_at = ? WHERE id = 1",
+                (version, datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
 
     def execute_migration(self, sql: str) -> bool:
         """Execute a SQL migration statement."""
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.executescript(sql)
-                connection.commit()
-                return True
-        except sqlite3.Error as error:
-            print(f"Migration error: {error}")
-            return False
+        def op(cursor, conn):
+            cursor.executescript(sql)
+            conn.commit()
+            return True
+        return self._execute(op, False)
 
     def init_qrz_table(self) -> None:
         """Create QRZ settings table if it doesn't exist (single record only)."""
@@ -940,77 +860,41 @@ class DatabaseManager:
             print(f"Database error initializing qrz_settings table: {error}")
 
     def get_qrz_settings(self) -> Tuple[str, str, bool]:
-        """
-        Get QRZ settings from database.
-
-        Returns:
-            Tuple of (username, password, is_active)
-        """
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute("SELECT username, password, is_active FROM qrz_settings WHERE id = 1")
-                result = cursor.fetchone()
-                if result:
-                    return (result[0] or "", result[1] or "", bool(result[2]))
-                return ("", "", False)
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
+        """Get QRZ settings from database. Returns (username, password, is_active)."""
+        def op(cursor, conn):
+            cursor.execute("SELECT username, password, is_active FROM qrz_settings WHERE id = 1")
+            result = cursor.fetchone()
+            if result:
+                return (result[0] or "", result[1] or "", bool(result[2]))
             return ("", "", False)
+        return self._execute(op, ("", "", False))
 
     def set_qrz_settings(self, username: str, password: str, is_active: bool) -> bool:
-        """
-        Save QRZ settings to database.
-
-        Args:
-            username: QRZ.com username
-            password: QRZ.com password
-            is_active: Whether QRZ lookups are enabled
-
-        Returns:
-            True if successful
-        """
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
+        """Save QRZ settings to database."""
+        def op(cursor, conn):
+            cursor.execute(
+                "UPDATE qrz_settings SET username = ?, password = ?, is_active = ? WHERE id = 1",
+                (username, password, 1 if is_active else 0)
+            )
+            if cursor.rowcount == 0:
                 cursor.execute(
-                    "UPDATE qrz_settings SET username = ?, password = ?, is_active = ? WHERE id = 1",
+                    "INSERT INTO qrz_settings (id, username, password, is_active) VALUES (1, ?, ?, ?)",
                     (username, password, 1 if is_active else 0)
                 )
-                if cursor.rowcount == 0:
-                    # No row exists, insert one
-                    cursor.execute(
-                        "INSERT INTO qrz_settings (id, username, password, is_active) VALUES (1, ?, ?, ?)",
-                        (username, password, 1 if is_active else 0)
-                    )
-                connection.commit()
-                return True
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return False
+            conn.commit()
+            return True
+        return self._execute(op, False)
 
     def set_qrz_active(self, is_active: bool) -> bool:
-        """
-        Toggle QRZ active status.
-
-        Args:
-            is_active: Whether QRZ lookups are enabled
-
-        Returns:
-            True if successful
-        """
-        try:
-            with sqlite3.connect(self.db_path, timeout=10) as connection:
-                cursor = connection.cursor()
-                cursor.execute(
-                    "UPDATE qrz_settings SET is_active = ? WHERE id = 1",
-                    (1 if is_active else 0,)
-                )
-                connection.commit()
-                return cursor.rowcount > 0
-        except sqlite3.Error as error:
-            print(f"Database error: {error}")
-            return False
+        """Toggle QRZ active status."""
+        def op(cursor, conn):
+            cursor.execute(
+                "UPDATE qrz_settings SET is_active = ? WHERE id = 1",
+                (1 if is_active else 0,)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
 
 
 # =============================================================================
@@ -1339,33 +1223,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu.addSeparator()
 
         # Add reset date options
-        reset_midnight = QtWidgets.QAction("Reset to Midnight", self)
-        reset_midnight.triggered.connect(lambda: self._reset_filter_date(0))
-        self.filter_menu.addAction(reset_midnight)
-
-        reset_1day = QtWidgets.QAction("Reset to 1 day ago", self)
-        reset_1day.triggered.connect(lambda: self._reset_filter_date(1))
-        self.filter_menu.addAction(reset_1day)
-
-        reset_1week = QtWidgets.QAction("Reset to 1 week ago", self)
-        reset_1week.triggered.connect(lambda: self._reset_filter_date(7))
-        self.filter_menu.addAction(reset_1week)
-
-        reset_1month = QtWidgets.QAction("Reset to 1 month ago", self)
-        reset_1month.triggered.connect(lambda: self._reset_filter_date(30))
-        self.filter_menu.addAction(reset_1month)
-
-        reset_3months = QtWidgets.QAction("Reset to 3 months ago", self)
-        reset_3months.triggered.connect(lambda: self._reset_filter_date(90))
-        self.filter_menu.addAction(reset_3months)
-
-        reset_6months = QtWidgets.QAction("Reset to 6 months ago", self)
-        reset_6months.triggered.connect(lambda: self._reset_filter_date(180))
-        self.filter_menu.addAction(reset_6months)
-
-        reset_1year = QtWidgets.QAction("Reset to 1 year ago", self)
-        reset_1year.triggered.connect(lambda: self._reset_filter_date(365))
-        self.filter_menu.addAction(reset_1year)
+        date_filters = [
+            ("Reset to Midnight", 0),
+            ("Reset to 1 day ago", 1),
+            ("Reset to 1 week ago", 7),
+            ("Reset to 1 month ago", 30),
+            ("Reset to 3 months ago", 90),
+            ("Reset to 6 months ago", 180),
+            ("Reset to 1 year ago", 365),
+        ]
+        for label, days in date_filters:
+            action = QtWidgets.QAction(label, self)
+            action.triggered.connect(lambda checked, d=days: self._reset_filter_date(d))
+            self.filter_menu.addAction(action)
 
         # Add Data Filters section
         self.filter_menu.addSeparator()
@@ -1373,82 +1243,52 @@ class MainWindow(QtWidgets.QMainWindow):
         data_filter_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(data_filter_label)
 
-        # Add checkable toggle for hiding heartbeat messages (menu stays open)
-        menu_bg = self.config.get_color('menu_background')
-        menu_fg = self.config.get_color('menu_foreground')
-        checkbox_style = f"QCheckBox {{ padding: 4px 8px; background-color: {menu_bg}; color: {menu_fg}; }}"
-        self.hide_heartbeat_checkbox = QtWidgets.QCheckBox("HIDE CQ & HEARTBEAT")
-        self.hide_heartbeat_checkbox.setChecked(self.config.get_hide_heartbeat())
-        self.hide_heartbeat_checkbox.setStyleSheet(checkbox_style)
-        self.hide_heartbeat_checkbox.stateChanged.connect(
-            lambda state: self._on_toggle_heartbeat(state == Qt.Checked))
-        hide_heartbeat_action = QtWidgets.QWidgetAction(self)
-        hide_heartbeat_action.setDefaultWidget(self.hide_heartbeat_checkbox)
-        self.filter_menu.addAction(hide_heartbeat_action)
+        # Helper to create styled menu checkboxes
+        def create_menu_checkbox(menu, label, is_checked, handler):
+            menu_bg = self.config.get_color('menu_background')
+            menu_fg = self.config.get_color('menu_foreground')
+            checkbox = QtWidgets.QCheckBox(label)
+            checkbox.setChecked(is_checked)
+            checkbox.setStyleSheet(f"QCheckBox {{ padding: 4px 8px; background-color: {menu_bg}; color: {menu_fg}; }}")
+            checkbox.stateChanged.connect(lambda state: handler(state == Qt.Checked))
+            action = QtWidgets.QWidgetAction(self)
+            action.setDefaultWidget(checkbox)
+            menu.addAction(action)
+            return checkbox
 
-        # Add checkable toggle for hiding map (menu stays open)
-        self.hide_map_checkbox = QtWidgets.QCheckBox("HIDE MAP")
-        self.hide_map_checkbox.setChecked(self.config.get_hide_map())
-        self.hide_map_checkbox.setStyleSheet(checkbox_style)
-        self.hide_map_checkbox.stateChanged.connect(
-            lambda state: self._on_toggle_hide_map(state == Qt.Checked))
-        hide_map_action = QtWidgets.QWidgetAction(self)
-        hide_map_action.setDefaultWidget(self.hide_map_checkbox)
-        self.filter_menu.addAction(hide_map_action)
-
-        # Add checkable toggle for showing all registered groups (menu stays open)
-        self.show_all_groups_checkbox = QtWidgets.QCheckBox("SHOW ALL MY GROUPS")
-        self.show_all_groups_checkbox.setChecked(self.config.get_show_all_groups())
-        self.show_all_groups_checkbox.setStyleSheet(checkbox_style)
-        self.show_all_groups_checkbox.stateChanged.connect(
-            lambda state: self._on_toggle_show_all_groups(state == Qt.Checked))
-        show_all_groups_action = QtWidgets.QWidgetAction(self)
-        show_all_groups_action.setDefaultWidget(self.show_all_groups_checkbox)
-        self.filter_menu.addAction(show_all_groups_action)
-
-        # Add checkable toggle for showing every group (no filtering) (menu stays open)
-        self.show_every_group_checkbox = QtWidgets.QCheckBox("SHOW EVERY GROUP")
-        self.show_every_group_checkbox.setChecked(self.config.get_show_every_group())
-        self.show_every_group_checkbox.setStyleSheet(checkbox_style)
-        self.show_every_group_checkbox.stateChanged.connect(
-            lambda state: self._on_toggle_show_every_group(state == Qt.Checked))
-        show_every_group_action = QtWidgets.QWidgetAction(self)
-        show_every_group_action.setDefaultWidget(self.show_every_group_checkbox)
-        self.filter_menu.addAction(show_every_group_action)
+        # Filter menu checkboxes
+        self.hide_heartbeat_checkbox = create_menu_checkbox(
+            self.filter_menu, "HIDE CQ & HEARTBEAT",
+            self.config.get_hide_heartbeat(), self._on_toggle_heartbeat)
+        self.hide_map_checkbox = create_menu_checkbox(
+            self.filter_menu, "HIDE MAP",
+            self.config.get_hide_map(), self._on_toggle_hide_map)
+        self.show_all_groups_checkbox = create_menu_checkbox(
+            self.filter_menu, "SHOW ALL MY GROUPS",
+            self.config.get_show_all_groups(), self._on_toggle_show_all_groups)
+        self.show_every_group_checkbox = create_menu_checkbox(
+            self.filter_menu, "SHOW EVERY GROUP",
+            self.config.get_show_every_group(), self._on_toggle_show_every_group)
 
         # Create Tools dropdown menu
         self.tools_menu = QtWidgets.QMenu("Tools", self.menubar)
         self.menubar.addMenu(self.tools_menu)
 
-        # Band Conditions option
-        band_conditions_action = QtWidgets.QAction("Band Conditions", self)
-        band_conditions_action.triggered.connect(self._on_band_conditions)
-        self.tools_menu.addAction(band_conditions_action)
-        self.actions["band_conditions"] = band_conditions_action
+        # Helper to create menu actions
+        def create_action(menu, label, key, handler):
+            action = QtWidgets.QAction(label, self)
+            action.triggered.connect(handler)
+            menu.addAction(action)
+            self.actions[key] = action
 
-        # Solar Flux option
-        solar_flux_action = QtWidgets.QAction("Solar Flux", self)
-        solar_flux_action.triggered.connect(self._on_solar_flux)
-        self.tools_menu.addAction(solar_flux_action)
-        self.actions["solar_flux"] = solar_flux_action
+        # Tools menu items
+        create_action(self.tools_menu, "Band Conditions", "band_conditions", self._on_band_conditions)
+        create_action(self.tools_menu, "Solar Flux", "solar_flux", self._on_solar_flux)
+        create_action(self.tools_menu, "World Map", "world_map", self._on_world_map)
 
-        # World Map option (current solar conditions)
-        world_map_action = QtWidgets.QAction("World Map", self)
-        world_map_action.triggered.connect(self._on_world_map)
-        self.tools_menu.addAction(world_map_action)
-        self.actions["world_map"] = world_map_action
-
-        # About (left of Exit)
-        about_action = QtWidgets.QAction("About", self)
-        about_action.triggered.connect(self._on_about)
-        self.menubar.addAction(about_action)
-        self.actions["about"] = about_action
-
-        # Exit
-        exit_action = QtWidgets.QAction("Exit", self)
-        exit_action.triggered.connect(qApp.quit)
-        self.menubar.addAction(exit_action)
-        self.actions["exit"] = exit_action
+        # Menubar items
+        create_action(self.menubar, "About", "about", self._on_about)
+        create_action(self.menubar, "Exit", "exit", qApp.quit)
 
         # Debug menu (right of Exit, only visible in debug mode)
         if self.debug_mode:
@@ -3022,27 +2862,18 @@ class MainWindow(QtWidgets.QMainWindow):
             comment_item = QtWidgets.QTableWidgetItem(group["comment"])
             table.setItem(row, 1, comment_item)
 
-            # URL #1 - show shortened text, full URL in tooltip
-            url1 = group["url1"]
-            if url1:
-                url1_display = "Link" if len(url1) > 30 else url1
-                url1_item = QtWidgets.QTableWidgetItem(url1_display)
-                url1_item.setToolTip(url1)
-                url1_item.setForeground(QtGui.QColor("#0066CC"))
-            else:
-                url1_item = QtWidgets.QTableWidgetItem("")
-            table.setItem(row, 2, url1_item)
+            # Helper to create URL table item
+            def create_url_item(url):
+                if url:
+                    item = QtWidgets.QTableWidgetItem("Link" if len(url) > 30 else url)
+                    item.setToolTip(url)
+                    item.setForeground(QtGui.QColor("#0066CC"))
+                else:
+                    item = QtWidgets.QTableWidgetItem("")
+                return item
 
-            # URL #2 - show shortened text, full URL in tooltip
-            url2 = group["url2"]
-            if url2:
-                url2_display = "Link" if len(url2) > 30 else url2
-                url2_item = QtWidgets.QTableWidgetItem(url2_display)
-                url2_item.setToolTip(url2)
-                url2_item.setForeground(QtGui.QColor("#0066CC"))
-            else:
-                url2_item = QtWidgets.QTableWidgetItem("")
-            table.setItem(row, 3, url2_item)
+            table.setItem(row, 2, create_url_item(group["url1"]))
+            table.setItem(row, 3, create_url_item(group["url2"]))
 
             # Date Added
             date_item = QtWidgets.QTableWidgetItem(group["date_added"])

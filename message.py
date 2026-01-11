@@ -36,6 +36,18 @@ CONFIG_FILE = "config.ini"
 CALLSIGN_PATTERN = re.compile(r'[AKNW][A-Z]{0,2}[0-9][A-Z]{1,3}')
 
 
+def make_uppercase(field):
+    """Force uppercase input on a QLineEdit."""
+    def to_upper(text):
+        if text != text.upper():
+            pos = field.cursorPosition()
+            field.blockSignals(True)
+            field.setText(text.upper())
+            field.blockSignals(False)
+            field.setCursorPosition(pos)
+    field.textChanged.connect(to_upper)
+
+
 class Ui_FormMessage:
     """Message form for creating and transmitting messages."""
 
@@ -159,6 +171,7 @@ class Ui_FormMessage:
         self.lineEdit_2.setFont(font)
         self.lineEdit_2.setMaxLength(MAX_MESSAGE_LENGTH)
         self.lineEdit_2.setObjectName("lineEdit_2")
+        make_uppercase(self.lineEdit_2)
 
         # Character limit note
         self.note_label = QtWidgets.QLabel(FormMessage)
@@ -554,7 +567,7 @@ class Ui_FormMessage:
         # If a call is selected, show error and abort
         if selected_call:
             QtWidgets.QMessageBox.critical(
-                self, "ERROR",
+                self.MainWindow, "ERROR",
                 f"JS8Call has {selected_call} selected.\n\n"
                 "Go to JS8Call and click the \"Deselect\" button."
             )

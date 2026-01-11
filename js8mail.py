@@ -38,6 +38,18 @@ WINDOW_WIDTH = 550
 WINDOW_HEIGHT = 340
 
 
+def make_uppercase(field):
+    """Force uppercase input on a QLineEdit."""
+    def to_upper(text):
+        if text != text.upper():
+            pos = field.cursorPosition()
+            field.blockSignals(True)
+            field.setText(text.upper())
+            field.blockSignals(False)
+            field.setCursorPosition(pos)
+    field.textChanged.connect(to_upper)
+
+
 # =============================================================================
 # JS8Mail Dialog
 # =============================================================================
@@ -170,7 +182,7 @@ class JS8MailDialog(QDialog):
         layout.addWidget(warning)
 
         # Input field style
-        input_style = "padding: 8px; font-size: 13px;"
+        input_style = "padding: 8px;"
 
         # Email field
         email_layout = QtWidgets.QVBoxLayout()
@@ -180,9 +192,11 @@ class JS8MailDialog(QDialog):
         self.email_field = QtWidgets.QLineEdit()
         self.email_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.email_field.setMinimumHeight(36)
+        self.email_field.setMinimumWidth(300)
         self.email_field.setStyleSheet(input_style)
         self.email_field.setMaxLength(40)
         self.email_field.setPlaceholderText("recipient@example.com")
+        make_uppercase(self.email_field)
         email_layout.addWidget(email_label)
         email_layout.addWidget(self.email_field)
         layout.addLayout(email_layout)
@@ -195,9 +209,11 @@ class JS8MailDialog(QDialog):
         self.subject_field = QtWidgets.QLineEdit()
         self.subject_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.subject_field.setMinimumHeight(36)
+        self.subject_field.setMinimumWidth(500)
         self.subject_field.setStyleSheet(input_style)
         self.subject_field.setMaxLength(MAX_SUBJECT_LENGTH)
         self.subject_field.setPlaceholderText("Your message here (max 67 characters)")
+        make_uppercase(self.subject_field)
         subject_layout.addWidget(subject_label)
         subject_layout.addWidget(self.subject_field)
         layout.addLayout(subject_layout)
@@ -345,11 +361,43 @@ class JS8MailDialog(QDialog):
         email = self.email_field.text().strip()
         subject = self.subject_field.text().strip()
 
-        # Build message
-        message = f"@APRSIS CMD :EMAIL-2  :{email} {subject}{{03}}"
+        # Build and store message for transmission after check
+        self._pending_message = f"@APRSIS CMD :EMAIL-2  :{email} {subject}{{03}}"
+        self._pending_email = email
+        self._pending_subject = subject
 
+        # First check if a call is selected in JS8Call
         try:
-            client.send_tx_message(message)
+            client.call_selected_received.disconnect(self._on_call_selected_for_transmit)
+        except TypeError:
+            pass
+        client.call_selected_received.connect(self._on_call_selected_for_transmit)
+        client.get_call_selected()
+
+    def _on_call_selected_for_transmit(self, rig_name: str, selected_call: str) -> None:
+        """Handle call selected response - check if clear to transmit."""
+        if self.rig_combo.currentText() != rig_name:
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if client:
+            try:
+                client.call_selected_received.disconnect(self._on_call_selected_for_transmit)
+            except TypeError:
+                pass
+
+        # If a call is selected, show error and abort
+        if selected_call:
+            QMessageBox.critical(
+                self, "ERROR",
+                f"JS8Call has {selected_call} selected.\n\n"
+                "Go to JS8Call and click the \"Deselect\" button."
+            )
+            return
+
+        # No call selected - proceed with transmission
+        try:
+            client.send_tx_message(self._pending_message)
 
             # Print to terminal
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
@@ -357,9 +405,9 @@ class JS8MailDialog(QDialog):
             print(f"JS8MAIL TRANSMITTED - {now} UTC")
             print(f"{'='*60}")
             print(f"  Rig:      {rig_name}")
-            print(f"  To:       {email}")
-            print(f"  Message:  {subject}")
-            print(f"  Full TX:  {message}")
+            print(f"  To:       {self._pending_email}")
+            print(f"  Message:  {self._pending_subject}")
+            print(f"  Full TX:  {self._pending_message}")
             print(f"{'='*60}\n")
 
             self.accept()

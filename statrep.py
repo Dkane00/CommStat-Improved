@@ -31,62 +31,6 @@ if TYPE_CHECKING:
 
 DATABASE_FILE = "traffic.db3"
 CONFIG_FILE = "config.ini"
-GRID_CSV_FILE = "GridSearchData1_preprocessed.csv"
-
-# Cache for grid-to-state mapping (loaded on first use)
-_grid_to_state_cache: dict = {}
-
-
-def _load_grid_to_state_mapping() -> dict:
-    """Load grid-to-state mapping from CSV file.
-
-    Returns a dict mapping 4-character grid prefixes to state abbreviations.
-    """
-    global _grid_to_state_cache
-    if _grid_to_state_cache:
-        return _grid_to_state_cache
-
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(script_dir, GRID_CSV_FILE)
-
-    if not os.path.exists(csv_path):
-        print(f"[StatRep] Grid CSV not found: {csv_path}")
-        return {}
-
-    try:
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            next(f)  # Skip header
-            for line in f:
-                parts = line.strip().split(',')
-                if len(parts) >= 3:
-                    state = parts[1].strip().strip('"')
-                    grid = parts[2].strip().strip('"')
-                    if len(grid) >= 4 and len(state) == 2:
-                        grid_prefix = grid[:4].upper()
-                        if grid_prefix not in _grid_to_state_cache:
-                            _grid_to_state_cache[grid_prefix] = state.upper()
-        print(f"[StatRep] Loaded {len(_grid_to_state_cache)} grid-to-state mappings")
-    except Exception as e:
-        print(f"[StatRep] Error loading grid CSV: {e}")
-
-    return _grid_to_state_cache
-
-
-def get_state_from_grid(grid: str) -> str:
-    """Get US state abbreviation from a Maidenhead grid square.
-
-    Args:
-        grid: 4 or 6 character Maidenhead grid (e.g., "EM79" or "EM79qk")
-
-    Returns:
-        2-letter state abbreviation (e.g., "MI") or empty string if not found.
-    """
-    if not grid or len(grid) < 4:
-        return ""
-
-    mapping = _load_grid_to_state_mapping()
-    grid_prefix = grid[:4].upper()
-    return mapping.get(grid_prefix, "")
 
 # Status codes
 STATUS_GREEN = "1"
@@ -141,6 +85,44 @@ FONT_FAMILY = "Arial"
 FONT_SIZE = 12
 WINDOW_WIDTH = 700
 WINDOW_HEIGHT = 580
+
+
+# =============================================================================
+# Utility Functions
+# =============================================================================
+
+def make_uppercase(field):
+    """Force uppercase input on a QLineEdit."""
+    def to_upper(text):
+        if text != text.upper():
+            pos = field.cursorPosition()
+            field.blockSignals(True)
+            field.setText(text.upper())
+            field.blockSignals(False)
+            field.setCursorPosition(pos)
+    field.textChanged.connect(to_upper)
+
+
+def get_state_from_grid(grid: str) -> str:
+    """Get the state abbreviation from config.ini.
+
+    The grid parameter is accepted for API compatibility but not used.
+    State is read from config.ini [STATION] section.
+
+    Args:
+        grid: Maidenhead grid square (unused, kept for API compatibility).
+
+    Returns:
+        State abbreviation from config.ini, or empty string if not configured.
+    """
+    try:
+        config = ConfigParser()
+        config.read(CONFIG_FILE)
+        if config.has_option("STATION", "state"):
+            return config.get("STATION", "state").strip().upper()
+    except Exception:
+        pass
+    return ""
 
 
 # =============================================================================
@@ -214,9 +196,20 @@ class StatRepDialog(QDialog):
         return ""
 
     def _get_default_remarks(self) -> str:
-        """Get default remarks with state derived from grid."""
-        state = get_state_from_grid(self.grid)
-        return state if state else ""
+        """Get default remarks with state from config.ini.
+
+        Returns the state from config.ini [STATION] section, or empty if not set.
+        """
+        try:
+            config = ConfigParser()
+            config.read(CONFIG_FILE)
+            if config.has_option("STATION", "state"):
+                config_state = config.get("STATION", "state").strip().upper()
+                if config_state:
+                    return config_state
+        except Exception:
+            pass
+        return ""
 
     def _get_all_groups_from_db(self) -> list:
         """Get all groups from the database."""
@@ -449,6 +442,7 @@ class StatRepDialog(QDialog):
         self.from_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.from_field.setMinimumHeight(28)
         self.from_field.textChanged.connect(self._on_from_field_changed)
+        make_uppercase(self.from_field)
         from_layout.addWidget(from_label)
         from_layout.addWidget(self.from_field)
         header_layout.addLayout(from_layout)
@@ -484,6 +478,7 @@ class StatRepDialog(QDialog):
         self.grid_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.grid_field.setMinimumHeight(28)
         self.grid_field.textChanged.connect(self._on_grid_field_changed)
+        make_uppercase(self.grid_field)
         grid_layout.addWidget(grid_label)
         grid_layout.addWidget(self.grid_field)
         header_layout.addLayout(grid_layout)
@@ -547,6 +542,7 @@ class StatRepDialog(QDialog):
         self.remarks_field.setMinimumHeight(36)
         self.remarks_field.setMaxLength(60)
         self.remarks_field.setPlaceholderText("Optional - max 60 characters")
+        make_uppercase(self.remarks_field)
         self.remarks_field.setText(self._get_default_remarks())
         remarks_layout.addWidget(remarks_label)
         remarks_layout.addWidget(self.remarks_field)
