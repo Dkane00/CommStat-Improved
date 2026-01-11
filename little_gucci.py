@@ -2563,15 +2563,6 @@ class MainWindow(QtWidgets.QMainWindow):
         thread = threading.Thread(target=self._check_backbone_content_async, daemon=True)
         thread.start()
 
-    def _refresh_data(self) -> None:
-        """Refresh StatRep, message data, and map from database."""
-        # Reload data from database (TCP handler inserts data directly)
-        self._load_statrep_data()
-        self._load_message_data()
-
-        # Save map position before refresh, then reload map
-        self._save_map_position(callback=self._load_map)
-
     def _update_time(self) -> None:
         """Update the time display with current UTC time."""
         current_time = QDateTime.currentDateTimeUtc()
@@ -2755,10 +2746,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Update filter settings directly
             self.config.filter_settings = dialog.get_filters()
             # Refresh data with new filters
-            self._load_statrep_data()
-            self._load_message_data()
-            # Save map position before refresh, then reload map
-            self._save_map_position(callback=self._load_map)
+            self._refresh_all_data()
 
     def _reset_filter_date(self, days_ago: int) -> None:
         """Reset filter start date to specified days ago and apply."""
@@ -2774,9 +2762,7 @@ class MainWindow(QtWidgets.QMainWindow):
         }
 
         # Refresh data with new filters
-        self._load_statrep_data()
-        self._load_message_data()
-        self._save_map_position(callback=self._load_map)
+        self._refresh_all_data()
 
         print(f"Filter reset: start={new_start}")
 
@@ -2798,32 +2784,28 @@ class MainWindow(QtWidgets.QMainWindow):
             self.map_disabled_label.hide()
             self.map_widget.show()
 
-    def _on_toggle_show_all_groups(self, checked: bool) -> None:
-        """Toggle showing all groups data regardless of active groups."""
-        self.config.set_show_all_groups(checked)
-        # Refresh all data views
+    def _refresh_all_data(self) -> None:
+        """Refresh all data views (statrep, messages, and map)."""
         self._load_statrep_data()
         self._load_message_data()
         self._save_map_position(callback=self._load_map)
 
+    def _on_toggle_show_all_groups(self, checked: bool) -> None:
+        """Toggle showing all groups data regardless of active groups."""
+        self.config.set_show_all_groups(checked)
+        self._refresh_all_data()
+
     def _on_toggle_show_every_group(self, checked: bool) -> None:
         """Toggle showing every group's data (no filtering at all)."""
         self.config.set_show_every_group(checked)
-        # Refresh data views
-        self._load_statrep_data()
-        self._load_message_data()
-        self._save_map_position(callback=self._load_map)
+        self._refresh_all_data()
 
     def _on_manage_groups(self) -> None:
         """Open Manage Groups window."""
         dialog = GroupsDialog(self.db, self)
         dialog.exec_()
-        # Refresh the groups menu after dialog closes
         self._populate_groups_menu()
-        # Refresh all data
-        self._load_statrep_data()
-        self._load_message_data()
-        self._save_map_position(callback=self._load_map)
+        self._refresh_all_data()
 
     def _on_show_groups(self) -> None:
         """Show Groups dialog displaying all groups in a table."""
@@ -2915,10 +2897,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _toggle_group(self, group_name: str, active: bool) -> None:
         """Toggle a group's active status."""
         self.db.set_group_active(group_name, active)
-        # Refresh all data to show/hide based on new active groups
-        self._load_statrep_data()
-        self._load_message_data()
-        self._save_map_position(callback=self._load_map)
+        self._refresh_all_data()
 
     def _on_js8_connectors(self) -> None:
         """Open JS8 Connectors management window."""
