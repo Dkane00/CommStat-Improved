@@ -2305,17 +2305,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _load_message_data(self) -> None:
         """Load message data from database into the table."""
         filters = self.config.filter_settings
-        # Determine group filtering mode
-        show_every = self.config.get_show_every_group()
-        if show_every:
-            groups = []
-            show_all = True
-        elif self.config.get_show_all_groups():
-            groups = self.db.get_all_groups()
-            show_all = False
-        else:
-            groups = self.db.get_active_groups()
-            show_all = False
+        groups, show_all = self._get_filtered_groups()
         data = self.db.get_message_data(
             groups=groups,
             start=filters.get('start', DEFAULT_FILTER_START),
@@ -2337,17 +2327,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _load_map(self) -> None:
         """Generate and display the folium map with StatRep pins."""
         filters = self.config.filter_settings
-        # Determine group filtering mode
-        show_every = self.config.get_show_every_group()
-        if show_every:
-            groups = []
-            show_all = True
-        elif self.config.get_show_all_groups():
-            groups = self.db.get_all_groups()
-            show_all = False
-        else:
-            groups = self.db.get_active_groups()
-            show_all = False
+        groups, show_all = self._get_filtered_groups()
 
         # Use saved map position or default to US center
         if not hasattr(self, 'map_center'):
@@ -2495,19 +2475,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _load_statrep_data(self) -> None:
         """Load StatRep data from database into the table."""
-        # Get filter settings
         filters = self.config.filter_settings
-        # Determine group filtering mode
-        show_every = self.config.get_show_every_group()
-        if show_every:
-            groups = []
-            show_all = True
-        elif self.config.get_show_all_groups():
-            groups = self.db.get_all_groups()
-            show_all = False
-        else:
-            groups = self.db.get_active_groups()
-            show_all = False
+        groups, show_all = self._get_filtered_groups()
 
         # Fetch data from database
         data = self.db.get_statrep_data(
@@ -2821,6 +2790,21 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ping_message = None  # Clear any message
             self.map_disabled_label.hide()
             self.map_widget.show()
+
+    def _get_filtered_groups(self) -> tuple:
+        """Get groups list and show_all flag based on current filter settings.
+
+        Returns:
+            Tuple of (groups, show_all) where:
+            - groups: List of group names to filter by
+            - show_all: True if all data should be shown regardless of groups
+        """
+        if self.config.get_show_every_group():
+            return [], True
+        elif self.config.get_show_all_groups():
+            return self.db.get_all_groups(), False
+        else:
+            return self.db.get_active_groups(), False
 
     def _refresh_all_data(self) -> None:
         """Refresh all data views (statrep, messages, and map)."""
