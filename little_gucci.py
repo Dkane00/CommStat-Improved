@@ -45,6 +45,7 @@ from groups import GroupsDialog
 from debug_features import DebugFeatures
 from js8mail import JS8MailDialog
 from js8sms import JS8SMSDialog
+from net_checkin import NetCheckInDialog
 from message import Ui_FormMessage
 from statrep import StatRepDialog
 from connector_manager import ConnectorManager
@@ -2712,7 +2713,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_net_check_in(self) -> None:
         """Open Net Check In window."""
-        print("NET CHECK IN clicked - window not yet implemented")
+        dialog = NetCheckInDialog(self.tcp_pool, self.connector_manager, self)
+        dialog.exec_()
 
     def _on_member_list(self) -> None:
         """Open Member List window."""
