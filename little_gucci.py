@@ -1312,12 +1312,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu = QtWidgets.QMenu("Filter", self.menubar)
         self.menubar.addMenu(self.filter_menu)
 
-        # Add Live Feed Filter option
-        filter_action = QtWidgets.QAction("LIVE FEED FILTER", self)
-        filter_action.triggered.connect(self._on_filter)
-        self.filter_menu.addAction(filter_action)
-        self.actions["filter"] = filter_action
-
         # Helper to create styled menu checkboxes
         def create_menu_checkbox(menu, label, is_checked, handler):
             menu_bg = self.config.get_color('menu_background')
@@ -1331,7 +1325,50 @@ class MainWindow(QtWidgets.QMainWindow):
             menu.addAction(action)
             return checkbox
 
-        # Live Feed Filter checkbox
+        # DATE FILTERING section
+        date_filter_label = QtWidgets.QAction("DATE FILTERING", self)
+        date_filter_label.setEnabled(False)  # Disabled as a section title
+        self.filter_menu.addAction(date_filter_label)
+
+        reset_midnight = QtWidgets.QAction("Reset to Midnight", self)
+        reset_midnight.triggered.connect(lambda: self._reset_filter_date(0))
+        self.filter_menu.addAction(reset_midnight)
+
+        reset_1day = QtWidgets.QAction("Reset to 1 day ago", self)
+        reset_1day.triggered.connect(lambda: self._reset_filter_date(1))
+        self.filter_menu.addAction(reset_1day)
+
+        reset_1week = QtWidgets.QAction("Reset to 1 week ago", self)
+        reset_1week.triggered.connect(lambda: self._reset_filter_date(7))
+        self.filter_menu.addAction(reset_1week)
+
+        reset_1month = QtWidgets.QAction("Reset to 1 month ago", self)
+        reset_1month.triggered.connect(lambda: self._reset_filter_date(30))
+        self.filter_menu.addAction(reset_1month)
+
+        reset_3months = QtWidgets.QAction("Reset to 3 months ago", self)
+        reset_3months.triggered.connect(lambda: self._reset_filter_date(90))
+        self.filter_menu.addAction(reset_3months)
+
+        reset_6months = QtWidgets.QAction("Reset to 6 months ago", self)
+        reset_6months.triggered.connect(lambda: self._reset_filter_date(180))
+        self.filter_menu.addAction(reset_6months)
+
+        reset_1year = QtWidgets.QAction("Reset to 1 year ago", self)
+        reset_1year.triggered.connect(lambda: self._reset_filter_date(365))
+        self.filter_menu.addAction(reset_1year)
+
+        custom_date_action = QtWidgets.QAction("Custom Date Range...", self)
+        custom_date_action.triggered.connect(self._on_filter)
+        self.filter_menu.addAction(custom_date_action)
+        self.actions["filter"] = custom_date_action
+
+        # LIVE FEED section
+        self.filter_menu.addSeparator()
+        live_feed_label = QtWidgets.QAction("LIVE FEED", self)
+        live_feed_label.setEnabled(False)  # Disabled as a section title
+        self.filter_menu.addAction(live_feed_label)
+
         self.hide_heartbeat_checkbox = create_menu_checkbox(
             self.filter_menu, "HIDE CQ & HEARTBEAT",
             self.config.get_hide_heartbeat(), self._on_toggle_heartbeat)
@@ -1664,6 +1701,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.alert_display = QtWidgets.QWidget(self.central_widget)
         self.alert_display.setFixedSize(MAP_WIDTH, MAP_HEIGHT)
 
+        # Track current alert index (0 = most recent)
+        self.alert_index = 0
+
         # Use vertical layout for centering
         alert_layout = QtWidgets.QVBoxLayout(self.alert_display)
         alert_layout.setAlignment(Qt.AlignCenter)
@@ -1696,6 +1736,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.alert_date_label.setFont(date_font)
         alert_layout.addWidget(self.alert_date_label)
 
+        # Navigation buttons row
+        nav_layout = QtWidgets.QHBoxLayout()
+        nav_layout.setAlignment(Qt.AlignCenter)
+
+        self.alert_prev_btn = QtWidgets.QPushButton("<")
+        self.alert_prev_btn.setFixedSize(40, 30)
+        self.alert_prev_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; }")
+        self.alert_prev_btn.clicked.connect(self._alert_show_newer)
+        nav_layout.addWidget(self.alert_prev_btn)
+
+        nav_layout.addSpacing(20)
+
+        self.alert_next_btn = QtWidgets.QPushButton(">")
+        self.alert_next_btn.setFixedSize(40, 30)
+        self.alert_next_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; }")
+        self.alert_next_btn.clicked.connect(self._alert_show_older)
+        nav_layout.addWidget(self.alert_next_btn)
+
+        alert_layout.addLayout(nav_layout)
+
         # Default styling (will be updated when alert is displayed)
         self.alert_display.setStyleSheet("background-color: #333333;")
         self.alert_title_label.setStyleSheet("color: #ffffff;")
@@ -1713,20 +1773,33 @@ class MainWindow(QtWidgets.QMainWindow):
             self._show_alert_display()
 
     def _show_alert_display(self) -> None:
-        """Show the alert display with the last alert from database."""
-        # Fetch last alert
-        alert = self._get_last_alert()
+        """Show the alert display with the current alert from database."""
+        # Get total alert count and fetch alert at current index
+        alert_count = self._get_alert_count()
+        alert = self._get_alert_at_offset(self.alert_index)
+
+        # Update navigation button states
+        self.alert_prev_btn.setEnabled(self.alert_index > 0)
+        self.alert_next_btn.setEnabled(self.alert_index < alert_count - 1)
 
         if alert:
-            title, message, color, date_received = alert
+            title, message, color, date_received, from_callsign = alert
             # Set colors based on alert color
             color_map = {
                 1: ("#e8e800", "#000000"),  # Yellow
-                2: ("#ff8c00", "#ffffff"),  # Orange
+                2: ("#E07000", "#ffffff"),  # Orange
                 3: ("#dc3545", "#ffffff"),  # Red
                 4: ("#000000", "#ffffff"),  # Black
             }
             bg_color, text_color = color_map.get(color, ("#333333", "#ffffff"))
+
+            # Format date to remove seconds (e.g., "2026-01-15 11:00:00" -> "2026-01-15 11:00")
+            date_formatted = date_received[:16] if len(date_received) > 16 else date_received
+
+            # Build date/callsign line
+            date_line = f"Date Received: {date_formatted}"
+            if from_callsign:
+                date_line += f"   By: {from_callsign}"
 
             self.alert_display.setStyleSheet(f"background-color: {bg_color};")
             self.alert_title_label.setStyleSheet(f"color: {text_color};")
@@ -1734,7 +1807,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.alert_date_label.setStyleSheet(f"color: {text_color};")
             self.alert_title_label.setText(title)
             self.alert_message_label.setText(message)
-            self.alert_date_label.setText(f"Date Received: {date_received}")
+            self.alert_date_label.setText(date_line)
         else:
             # No alerts - show placeholder
             self.alert_display.setStyleSheet("background-color: #333333;")
@@ -1747,23 +1820,52 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.alert_display.show()
 
-    def _get_last_alert(self) -> Optional[Tuple[str, str, int, str]]:
-        """Get the most recent alert from the database.
+    def _alert_show_newer(self) -> None:
+        """Show the next newer alert."""
+        if self.alert_index > 0:
+            self.alert_index -= 1
+            self._show_alert_display()
+
+    def _alert_show_older(self) -> None:
+        """Show the next older alert."""
+        alert_count = self._get_alert_count()
+        if self.alert_index < alert_count - 1:
+            self.alert_index += 1
+            self._show_alert_display()
+
+    def _get_alert_count(self) -> int:
+        """Get the total number of alerts in the database."""
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM alerts")
+                result = cursor.fetchone()
+                return result[0] if result else 0
+        except sqlite3.Error as e:
+            print(f"Error getting alert count: {e}")
+        return 0
+
+    def _get_alert_at_offset(self, offset: int) -> Optional[Tuple[str, str, int, str, str]]:
+        """Get an alert at the specified offset from most recent.
+
+        Args:
+            offset: 0 for most recent, 1 for second most recent, etc.
 
         Returns:
-            Tuple of (title, message, color, datetime) or None if no alerts.
+            Tuple of (title, message, color, datetime, from_callsign) or None if not found.
         """
         try:
             with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT title, message, color, datetime FROM alerts ORDER BY datetime DESC LIMIT 1"
+                    "SELECT title, message, color, datetime, from_callsign FROM alerts ORDER BY datetime DESC LIMIT 1 OFFSET ?",
+                    (offset,)
                 )
                 result = cursor.fetchone()
                 if result:
-                    return (result[0], result[1], result[2], result[3])
+                    return (result[0], result[1], result[2], result[3], result[4] or "")
         except sqlite3.Error as e:
-            print(f"Error fetching last alert: {e}")
+            print(f"Error fetching alert at offset {offset}: {e}")
         return None
 
     def _fetch_backbone_content(self) -> Optional[str]:
@@ -2946,6 +3048,9 @@ class MainWindow(QtWidgets.QMainWindow):
         """Toggle alert display mode."""
         self.config.set_show_alerts(checked)
         if checked:
+            # Reset to show most recent alert
+            self.alert_index = 0
+
             # Also check hide_map if not already checked
             if not self.config.get_hide_map():
                 self.config.set_hide_map(True)
@@ -2970,6 +3075,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _trigger_show_alerts(self) -> None:
         """Trigger Show Alerts mode when a new alert is received."""
+        # Reset to show most recent alert
+        self.alert_index = 0
         # Check the Show Alerts checkbox (this will trigger the handler)
         if not self.show_alerts_checkbox.isChecked():
             self.show_alerts_checkbox.setChecked(True)
