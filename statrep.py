@@ -16,6 +16,7 @@ from typing import Optional, Dict, List, TYPE_CHECKING
 from dataclasses import dataclass
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from text_utils import normalize_text
 from PyQt5.QtCore import QDateTime, Qt
 from PyQt5.QtWidgets import QMessageBox, QDialog, QComboBox
 
@@ -764,8 +765,9 @@ class StatRepDialog(QDialog):
         """
         values = self._get_status_values()
         scope_text = self.scope_combo.currentText()
-        remarks = self.remarks_field.text().strip().upper()
+        remarks = self.remarks_field.text().strip()
         remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
+        remarks = normalize_text(remarks)
 
         now = QDateTime.currentDateTimeUtc()
         date = now.toString("yyyy-MM-dd HH:mm:ss")
