@@ -1503,7 +1503,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu.addAction(live_feed_label)
 
         self.hide_heartbeat_checkbox = create_menu_checkbox(
-            self.filter_menu, "HIDE CQ & HEARTBEAT",
+            self.filter_menu, "Hide CQ & Heartbeat",
             self.config.get_hide_heartbeat(), self._on_toggle_heartbeat)
 
         # STATREP & MESSAGES section
@@ -1513,10 +1513,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu.addAction(statrep_messages_label)
 
         self.show_all_groups_checkbox = create_menu_checkbox(
-            self.filter_menu, "SHOW ALL MY GROUPS",
+            self.filter_menu, "Show All My Groups",
             self.config.get_show_all_groups(), self._on_toggle_show_all_groups)
         self.show_every_group_checkbox = create_menu_checkbox(
-            self.filter_menu, "SHOW EVERY GROUP",
+            self.filter_menu, "Show Every Group",
             self.config.get_show_every_group(), self._on_toggle_show_every_group)
 
         # MAP OPTION section
@@ -1526,10 +1526,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu.addAction(map_option_label)
 
         self.hide_map_checkbox = create_menu_checkbox(
-            self.filter_menu, "HIDE MAP",
+            self.filter_menu, "Hide Map",
             self.config.get_hide_map(), self._on_toggle_hide_map)
         self.show_alerts_checkbox = create_menu_checkbox(
-            self.filter_menu, "SHOW ALERTS",
+            self.filter_menu, "Show Alerts",
             self.config.get_show_alerts(), self._on_toggle_show_alerts)
 
         # Create Tools dropdown menu
