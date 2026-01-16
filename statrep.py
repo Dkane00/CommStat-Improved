@@ -787,7 +787,7 @@ class StatRepDialog(QDialog):
                     1,  # source: 1=Radio, 2=Internet
                     self.statrep_id,
                     self.callsign.upper(),
-                    self.to_combo.currentText().upper(),
+                    '@' + self.to_combo.currentText().upper(),
                     self.grid.upper(),
                     scope_text,
                     values["status"],
