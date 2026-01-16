@@ -2440,11 +2440,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _show_next_image(self) -> None:
         """Advance to the next image in the slideshow or refresh message."""
-        # Check backbone for updates in background (at each interval)
-        thread = threading.Thread(target=self._check_backbone_content_async, daemon=True)
-        thread.start()
-
-        # If showing a message, just keep displaying it (will be updated by async check)
+        # If showing a message, just keep displaying it (backbone_timer handles updates)
         if self.ping_message:
             return
 
