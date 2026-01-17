@@ -229,7 +229,7 @@ DEFAULT_COLORS: Dict[str, str] = {
     'condition_red': '#BB0000',         # Critical/emergency status
     'condition_gray': '#808080',        # Unknown/no data
     # Data table colors
-    'data_background': '#EEEEEE',
+    'data_background': '#FFF5EB',
     'data_foreground': '#000000',
     # Live feed display colors
     'feed_background': '#000000',
@@ -3636,6 +3636,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 if match:
                     fields = match.group(1).split(",")
                     if len(fields) >= 3:
+                        # Only save alerts for active groups
+                        active_groups = self.db.get_active_groups()
+                        group_name = group.lstrip('@').upper() if group else ""
+                        if group_name not in [g.upper() for g in active_groups]:
+                            conn.close()
+                            return ""
+
                         try:
                             color = int(fields[0].strip())
                         except ValueError:
