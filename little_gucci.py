@@ -242,7 +242,7 @@ def smart_title_case(text: str, abbreviations: Dict[str, str] = None, apply_norm
 
 # StatRep table column headers
 STATREP_HEADERS = [
-    "", "Date Time", "Freq", "From", "To", "Grid", "Scope", "Map Pin",
+    "", "Date Time", "Freq", "From", "To", "Grid", "Scope", "Map",
     "Powr", "H2O", "Med", "Comm", "Trvl", "Inet", "Fuel", "Food",
     "Crime", "Civil", "Pol", "Remarks"
 ]
