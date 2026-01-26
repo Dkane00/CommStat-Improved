@@ -750,9 +750,9 @@ class StatRepDialog(QDialog):
         # if status_str == "111111111111":
         #     status_str = "+"
 
-        # Format: CALLSIGN: @GROUP,GRID,SCOPE,ID,STATUSES,REMARKS,{&%}
+        # Format: CALLSIGN: @GROUP ,GRID,SCOPE,ID,STATUSES,REMARKS,{&%}
         group = f"@{self.to_combo.currentText()}"
-        message = f"{self.callsign.upper()}: {group},{self.grid},{scope_code},{self.statrep_id},{status_str},{remarks},{{&%}}"
+        message = f"{self.callsign.upper()}: {group} ,{self.grid},{scope_code},{self.statrep_id},{status_str},{remarks},{{&%}}"
 
         return message
 
