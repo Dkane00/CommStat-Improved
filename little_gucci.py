@@ -1768,7 +1768,7 @@ class MainWindow(QtWidgets.QMainWindow):
         fg_color = self.config.get_color('program_foreground')
         menu_bg = self.config.get_color('menu_background')
         menu_fg = self.config.get_color('menu_foreground')
-        font = QtGui.QFont("Arial", 12, QtGui.QFont.Bold)
+        font = QtGui.QFont("Arial", 13, QtGui.QFont.Bold)
 
         # Connected rigs label
         self.label_connected_prefix = QtWidgets.QLabel(self.header_widget)
@@ -1780,7 +1780,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Connected rigs display
         self.connected_rigs_label = QtWidgets.QLabel(self.header_widget)
         self.connected_rigs_label.setStyleSheet(f"color: {fg_color};")
-        self.connected_rigs_label.setFont(QtGui.QFont("Arial", 12, QtGui.QFont.Bold))
+        self.connected_rigs_label.setFont(QtGui.QFont("Arial", 13, QtGui.QFont.Bold))
         self.header_layout.addWidget(self.connected_rigs_label)
 
         # Spacer to push news feed to center
@@ -1796,7 +1796,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # RSS Feed selector dropdown
         self.feed_combo = QtWidgets.QComboBox(self.header_widget)
         self.feed_combo.setFixedSize(120, 28)
-        self.feed_combo.setFont(QtGui.QFont("Arial", 10))
+        self.feed_combo.setFont(QtGui.QFont("Arial", 13))
         self.feed_combo.setStyleSheet(f"""
             QComboBox {{
                 background-color: {menu_bg};
@@ -1838,7 +1838,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # News ticker (scrolling text)
         self.newsfeed_label = QtWidgets.QLabel(self.header_widget)
         self.newsfeed_label.setFixedSize(550, 32)
-        self.newsfeed_label.setFont(QtGui.QFont("Arial", 12))
+        self.newsfeed_label.setFont(QtGui.QFont("Arial", 13))
         self.newsfeed_label.setStyleSheet(
             f"background-color: {self.config.get_color('newsfeed_background')};"
             f"color: {self.config.get_color('newsfeed_foreground')};"
@@ -1848,7 +1848,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Last 20 button - shows last 20 news headlines
         self.last20_button = QtWidgets.QPushButton("Last 20", self.header_widget)
         self.last20_button.setFixedSize(60, 28)
-        self.last20_button.setFont(QtGui.QFont("Arial", 10))
+        self.last20_button.setFont(QtGui.QFont("Arial", 13))
         self.last20_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {menu_bg};
@@ -1877,7 +1877,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Time display
         self.time_label = QtWidgets.QLabel(self.header_widget)
         self.time_label.setFixedSize(120, 32)
-        self.time_label.setFont(QtGui.QFont("Arial", 12))
+        self.time_label.setFont(QtGui.QFont("Arial", 13))
         self.time_label.setStyleSheet(
             f"background-color: {self.config.get_color('time_background')};"
             f"color: {self.config.get_color('time_foreground')};"
