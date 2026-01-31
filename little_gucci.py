@@ -2200,21 +2200,23 @@ class MainWindow(QtWidgets.QMainWindow):
             # Get callsign (first available from rig_callsigns)
             callsign = next((cs for cs in self.rig_callsigns.values() if cs), "UNKNOWN")
 
-            # Get db_version from controls table
+            # Get db_version and build_number from controls table
             db_version = 0
+            build_number = 500  # Default fallback
             try:
                 conn = sqlite3.connect(DATABASE_FILE, timeout=10)
                 cursor = conn.cursor()
-                cursor.execute("SELECT db_version FROM controls WHERE id = 1")
+                cursor.execute("SELECT db_version, build_number FROM controls WHERE id = 1")
                 result = cursor.fetchone()
                 if result:
                     db_version = result[0]
+                    build_number = result[1] if len(result) > 1 else 500
                 conn.close()
             except sqlite3.Error:
-                pass  # Use default db_version = 0 if query fails
+                pass  # Use default values if query fails
 
-            # Build heartbeat URL with callsign and db_version parameters
-            heartbeat_url = f"{_PING}?cs={callsign}&db={db_version}"
+            # Build heartbeat URL with callsign, db_version, and build_number parameters
+            heartbeat_url = f"{_PING}?cs={callsign}&db={db_version}&build={build_number}"
 
             with urllib.request.urlopen(heartbeat_url, timeout=10) as response:
                 content = response.read().decode('utf-8')
@@ -2227,6 +2229,189 @@ class MainWindow(QtWidgets.QMainWindow):
             return content.strip() or None
         except Exception:
             return None
+
+    def _handle_db_update(self, content: str) -> bool:
+        """Handle database update from backbone server.
+
+        Expected format:
+        db_update
+        db: 3
+        sql: "INSERT INTO ..."
+        sql: "ALTER TABLE ..."
+
+        Args:
+            content: The db_update response content
+
+        Returns:
+            True if update was successful, False otherwise
+        """
+        try:
+            lines = [line.strip() for line in content.split('\n') if line.strip()]
+            if not lines or lines[0] != 'db_update':
+                return False
+
+            new_db_version = None
+            sql_statements = []
+
+            # Parse the update content
+            for line in lines[1:]:
+                if line.startswith('db:'):
+                    try:
+                        new_db_version = int(line.split(':', 1)[1].strip())
+                    except (ValueError, IndexError):
+                        print(f"Invalid db version format: {line}")
+                        return False
+                elif line.startswith('sql:'):
+                    # Extract SQL statement (handle quoted strings)
+                    sql_part = line.split(':', 1)[1].strip()
+                    # Remove quotes if present
+                    if sql_part.startswith('"') and sql_part.endswith('"'):
+                        sql_part = sql_part[1:-1]
+                    elif sql_part.startswith("'") and sql_part.endswith("'"):
+                        sql_part = sql_part[1:-1]
+                    sql_statements.append(sql_part)
+
+            if new_db_version is None:
+                print("No db version specified in update")
+                return False
+
+            if not sql_statements:
+                print("No SQL statements in update")
+                return False
+
+            # Execute SQL statements
+            conn = sqlite3.connect(DATABASE_FILE, timeout=10)
+            cursor = conn.cursor()
+
+            try:
+                for sql in sql_statements:
+                    print(f"Executing: {sql}")
+                    cursor.execute(sql)
+
+                # Update db_version in controls table
+                cursor.execute("UPDATE controls SET db_version = ?, updated_at = datetime('now') WHERE id = 1", (new_db_version,))
+                conn.commit()
+                print(f"Database updated successfully to version {new_db_version}")
+
+                return True
+
+            except sqlite3.Error as e:
+                conn.rollback()
+                print(f"Database update failed: {e}")
+                return False
+            finally:
+                conn.close()
+
+        except Exception as e:
+            print(f"Error handling db_update: {e}")
+            return False
+
+    def _handle_program_update(self, content: str) -> bool:
+        """Handle program update from backbone server.
+
+        Expected format:
+        program_update
+        build: 501
+        url: https://commstat.com/downloads/update.zip
+
+        Args:
+            content: The program_update response content
+
+        Returns:
+            True if download was successful, False otherwise
+        """
+        try:
+            lines = [line.strip() for line in content.split('\n') if line.strip()]
+            if not lines or lines[0] != 'program_update':
+                return False
+
+            new_build = None
+            download_url = None
+
+            # Parse the update content
+            for line in lines[1:]:
+                if line.startswith('build:'):
+                    try:
+                        new_build = int(line.split(':', 1)[1].strip())
+                    except (ValueError, IndexError):
+                        print(f"Invalid build number format: {line}")
+                        return False
+                elif line.startswith('url:') or line.startswith('URL:'):
+                    download_url = line.split(':', 1)[1].strip()
+                    # Handle URLs that might have multiple colons (https://)
+                    if '://' in line:
+                        download_url = line.split(None, 1)[1].strip()
+
+            if new_build is None or not download_url:
+                print("Missing build number or URL in program_update")
+                return False
+
+            # Create updates directory if it doesn't exist
+            import os
+            updates_dir = os.path.join(os.path.dirname(__file__), 'updates')
+            os.makedirs(updates_dir, exist_ok=True)
+
+            update_file = os.path.join(updates_dir, 'update.zip')
+
+            # Download the update
+            print(f"Downloading update build {new_build} from {download_url}")
+
+            try:
+                with urllib.request.urlopen(download_url, timeout=30) as response:
+                    with open(update_file, 'wb') as f:
+                        f.write(response.read())
+
+                print(f"Update downloaded successfully to {update_file}")
+
+                # Update build_number in database
+                try:
+                    conn = sqlite3.connect(DATABASE_FILE, timeout=10)
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE controls SET build_number = ?, updated_at = datetime('now') WHERE id = 1", (new_build,))
+                    conn.commit()
+                    conn.close()
+                    print(f"Build number updated to {new_build} in database")
+                except sqlite3.Error as e:
+                    print(f"Warning: Failed to update build number in database: {e}")
+                    # Continue anyway - the update file is downloaded
+
+                # Show restart prompt to user
+                QtCore.QMetaObject.invokeMethod(
+                    self, "_show_program_update_notification",
+                    QtCore.Qt.QueuedConnection,
+                    QtCore.Q_ARG(int, new_build)
+                )
+
+                return True
+
+            except Exception as e:
+                print(f"Failed to download update: {e}")
+                # Clean up partial download
+                if os.path.exists(update_file):
+                    os.remove(update_file)
+                return False
+
+        except Exception as e:
+            print(f"Error handling program_update: {e}")
+            return False
+
+    @QtCore.pyqtSlot(int)
+    @QtCore.pyqtSlot(int)
+    def _show_program_update_notification(self, new_build: int) -> None:
+        """Show notification prompting user to restart (called from main thread)."""
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Update Available",
+            f"CommStat build {new_build} has been downloaded.\n\n"
+            f"Please restart the application to install the update.\n\n"
+            f"Restart now?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.Yes
+        )
+
+        if reply == QtWidgets.QMessageBox.Yes:
+            # Close the application - startup.py will apply the update on next launch
+            QtWidgets.QApplication.quit()
 
     def _parse_backbone_sections(self, content: str) -> dict:
         """Parse backbone reply content into hierarchical sections.
@@ -2691,6 +2876,14 @@ class MainWindow(QtWidgets.QMainWindow):
             # Reset fail counter on success
             self._backbone_fail_count = 0
 
+            # Check for update commands first
+            if content.startswith('db_update'):
+                self._handle_db_update(content)
+                return
+            elif content.startswith('program_update'):
+                self._handle_program_update(content)
+                return
+
             # Parse into sections
             sections = self._parse_backbone_sections(content)
             has_sections = any(sections.values())
@@ -3114,13 +3307,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self._internet_available:
             self.internet_timer.start(INTERNET_CHECK_INTERVAL)
 
-        # Backbone check timer - runs every 60 seconds
+        # Backbone check timer - runs every 3 minutes
         self._backbone_fail_count = 0
         self._backbone_max_failures = 20
         self.backbone_timer = QTimer(self)
         self.backbone_timer.timeout.connect(self._check_backbone)
         if self._internet_available:
-            self.backbone_timer.start(60000)
+            self.backbone_timer.start(180000)
 
         # News ticker animation timeline
         self.newsfeed_timeline = QtCore.QTimeLine()
