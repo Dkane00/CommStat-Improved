@@ -210,6 +210,11 @@ def smart_title_case(text: str, abbreviations: Dict[str, str] = None, apply_norm
         # Strip punctuation for checking, preserve for output
         clean_word = ''.join(c for c in word if c.isalnum())
 
+        # Skip empty words (punctuation only)
+        if not clean_word:
+            result.append(word)
+            continue
+
         # Check if this word should be preserved as all-caps
         if clean_word.upper() in preserved_caps:
             # Reconstruct word with original punctuation but uppercase letters
@@ -1847,7 +1852,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Last 20 button - shows last 20 news headlines
         self.last20_button = QtWidgets.QPushButton("Last 20", self.header_widget)
-        self.last20_button.setFixedSize(60, 28)
+        self.last20_button.setFixedSize(80, 28)
         self.last20_button.setFont(QtGui.QFont("Arial", 13))
         self.last20_button.setStyleSheet(f"""
             QPushButton {{
@@ -1921,6 +1926,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {title_bg};
                 color: {title_fg};
                 font-weight: bold;
+                font-size: 10pt;
                 padding: 4px;
             }}
         """)
@@ -2878,6 +2884,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {title_bg};
                 color: {title_fg};
                 font-weight: bold;
+                font-size: 10pt;
                 padding: 4px;
             }}
         """)
@@ -3976,101 +3983,13 @@ class MainWindow(QtWidgets.QMainWindow):
             # Determine message type and process
             # Old CommStat format has marker at END: ,DATA,FIELDS,{MARKER}
             # Extract content BEFORE the marker, strip leading comma
+            # Processing order: StatReps first (highest priority), then Alerts, then Bulletins, then Messages
 
-            if MSG_ALERT in value:
-                # Parse alert: LRT ,COLOR,TITLE,MESSAGE,{%%}
-                match = re.search(r'LRT\s*,(.+?)\{\%\%\}', value)
-                if match:
-                    fields = match.group(1).split(",")
-                    if len(fields) >= 3:
-                        # Only save alerts for active groups
-                        active_groups = self.db.get_active_groups()
-                        group_name = group.lstrip('@').upper() if group else ""
-                        if group_name not in [g.upper() for g in active_groups]:
-                            conn.close()
-                            return ""
+            # =================================================================
+            # StatRep Processing (HIGHEST PRIORITY)
+            # =================================================================
 
-                        try:
-                            color = int(fields[0].strip())
-                        except ValueError:
-                            color = 1  # Default to yellow
-                        title = fields[1].strip()
-                        # Apply smart title case to message (acronym detection)
-                        message_text = smart_title_case(",".join(fields[2:]).strip(), abbreviations, self.config.get_apply_text_normalization())
-
-                        cursor.execute(
-                            "INSERT INTO alerts "
-                            "(datetime, freq, db, source, from_callsign, groupname, color, title, message) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            (utc, freq, snr, 1, callsign, group, color, title, message_text)
-                        )
-                        conn.commit()
-                        print(f"\033[91m[{rig_name}] Added Alert from: {callsign} - {title}\033[0m")
-                        conn.close()
-                        return "alert"
-
-            elif MSG_BULLETIN in value:
-                # Parse message: ,ID,MESSAGE,{^%}
-                match = re.search(r',(.+?)\{\^\%\}', value)
-                if match:
-                    fields = match.group(1).split(",")
-                    if len(fields) >= 2:
-                        id_num = fields[0].strip()
-                        # Apply smart title case to message (acronym detection)
-                        message_text = smart_title_case(",".join(fields[1:]).strip(), abbreviations, self.config.get_apply_text_normalization())
-
-                        cursor.execute(
-                            "INSERT OR REPLACE INTO messages "
-                            "(datetime, freq, db, source, SRid, from_callsign, target, message) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                            (utc, freq, snr, 1, id_num, callsign, group, message_text)
-                        )
-                        conn.commit()
-                        print(f"\033[92m[{rig_name}] Added Message from: {callsign} ID: {id_num}\033[0m")
-                        conn.close()
-                        return "message"
-
-            elif MSG_FORWARDED_STATREP in value:
-                # Parse forwarded statrep: ,GRID,PREC,SRID,SRCODE,COMMENTS,ORIG_CALL,{F%}
-                match = re.search(r',(.+?)\{F\%\}', value)
-                if match:
-                    fields = match.group(1).split(",")
-                    if len(fields) >= 6:
-                        curgrid = fields[0].strip()
-                        prec1 = fields[1].strip()
-                        srid = fields[2].strip()
-                        srcode = fields[3].strip()
-                        # Apply smart title case to comments (acronym detection)
-                        comments = smart_title_case(fields[4].strip(), abbreviations, self.config.get_apply_text_normalization()) if len(fields) > 4 else ""
-                        orig_call = fields[5].strip() if len(fields) > 5 else callsign
-
-                        # Expand compressed "+" to all green (111111111111)
-                        if srcode == "+":
-                            srcode = "111111111111"
-
-                        prec = PRECEDENCE_MAP.get(prec1, "Unknown")
-
-                        if len(srcode) >= 12:
-                            sr_fields = list(srcode)
-                            # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
-                            date_only = utc.split()[0] if utc else ""
-                            cursor.execute(
-                                "INSERT OR IGNORE INTO statrep "
-                                "(datetime, date, freq, db, source, SRid, from_callsign, groupname, grid, prec, status, commpwr, pubwtr, "
-                                "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
-                                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                (utc, date_only, freq, snr, 1, srid, orig_call, group, curgrid, prec,
-                                 sr_fields[0], sr_fields[1], sr_fields[2], sr_fields[3],
-                                 sr_fields[4], sr_fields[5], sr_fields[6], sr_fields[7],
-                                 sr_fields[8], sr_fields[9], sr_fields[10], sr_fields[11],
-                                 comments)
-                            )
-                            conn.commit()
-                            print(f"\033[92m[{rig_name}] Added Forwarded StatRep from: {orig_call} ID: {srid}\033[0m")
-                            conn.close()
-                            return "statrep"
-
-            elif MSG_STATREP in value:
+            if MSG_STATREP in value:
                 # Parse statrep: ,GRID,PREC,SRID,SRCODE,COMMENTS,{&%}
                 # GRID: 4-6 char Maidenhead locator (e.g., EM15 or EM15ab)
                 # PREC: Precedence 1-5 (scope of report)
@@ -4115,6 +4034,46 @@ class MainWindow(QtWidgets.QMainWindow):
                             )
                             conn.commit()
                             print(f"\033[92m[{rig_name}] Added StatRep from: {callsign} ID: {srid}\033[0m")
+                            conn.close()
+                            return "statrep"
+
+            elif MSG_FORWARDED_STATREP in value:
+                # Parse forwarded statrep: ,GRID,PREC,SRID,SRCODE,COMMENTS,ORIG_CALL,{F%}
+                match = re.search(r',(.+?)\{F\%\}', value)
+                if match:
+                    fields = match.group(1).split(",")
+                    if len(fields) >= 6:
+                        curgrid = fields[0].strip()
+                        prec1 = fields[1].strip()
+                        srid = fields[2].strip()
+                        srcode = fields[3].strip()
+                        # Apply smart title case to comments (acronym detection)
+                        comments = smart_title_case(fields[4].strip(), abbreviations, self.config.get_apply_text_normalization()) if len(fields) > 4 else ""
+                        orig_call = fields[5].strip() if len(fields) > 5 else callsign
+
+                        # Expand compressed "+" to all green (111111111111)
+                        if srcode == "+":
+                            srcode = "111111111111"
+
+                        prec = PRECEDENCE_MAP.get(prec1, "Unknown")
+
+                        if len(srcode) >= 12:
+                            sr_fields = list(srcode)
+                            # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
+                            date_only = utc.split()[0] if utc else ""
+                            cursor.execute(
+                                "INSERT OR IGNORE INTO statrep "
+                                "(datetime, date, freq, db, source, SRid, from_callsign, groupname, grid, prec, status, commpwr, pubwtr, "
+                                "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
+                                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                (utc, date_only, freq, snr, 1, srid, orig_call, group, curgrid, prec,
+                                 sr_fields[0], sr_fields[1], sr_fields[2], sr_fields[3],
+                                 sr_fields[4], sr_fields[5], sr_fields[6], sr_fields[7],
+                                 sr_fields[8], sr_fields[9], sr_fields[10], sr_fields[11],
+                                 comments)
+                            )
+                            conn.commit()
+                            print(f"\033[92m[{rig_name}] Added Forwarded StatRep from: {orig_call} ID: {srid}\033[0m")
                             conn.close()
                             return "statrep"
 
@@ -4484,34 +4443,152 @@ class MainWindow(QtWidgets.QMainWindow):
                     conn.close()
                     return "statrep"
 
-            # Check for standard JS8Call MSG format (no special marker)
-            # Format: " MSG " with spaces on both sides
-            # Save if: to group OR to one of user's callsigns
-            if " MSG " in value:
-                # Check if this message should be saved
-                is_to_group = to_call.startswith("@")
-                is_to_user = to_call in self.rig_callsigns.values()
+            # =================================================================
+            # Alert and Bulletin Processing (AFTER StatReps)
+            # =================================================================
 
-                if is_to_group or is_to_user:
-                    # Extract message text after "MSG "
-                    msg_match = re.search(r'\bMSG\s+(.+)', value)
-                    if msg_match:
+            if MSG_ALERT in value:
+                # Parse alert: LRT ,COLOR,TITLE,MESSAGE,{%%}
+                match = re.search(r'LRT\s*,(.+?)\{\%\%\}', value)
+                if match:
+                    fields = match.group(1).split(",")
+                    if len(fields) >= 3:
+                        # Only save alerts for active groups
+                        active_groups = self.db.get_active_groups()
+                        group_name = group.lstrip('@').upper() if group else ""
+                        if group_name not in [g.upper() for g in active_groups]:
+                            conn.close()
+                            return ""
+
+                        try:
+                            color = int(fields[0].strip())
+                        except ValueError:
+                            color = 1  # Default to yellow
+                        title = fields[1].strip()
                         # Apply smart title case to message (acronym detection)
-                        message_text = smart_title_case(msg_match.group(1).strip(), abbreviations, self.config.get_apply_text_normalization())
-
-                        # Use to_call for target (includes @ for groups, callsign for direct)
-                        target = to_call
+                        message_text = smart_title_case(",".join(fields[2:]).strip(), abbreviations, self.config.get_apply_text_normalization())
 
                         cursor.execute(
-                            "INSERT INTO messages "
-                            "(datetime, freq, db, source, SRid, from_callsign, target, message) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                            (utc, freq, snr, 1, "", callsign, target, message_text)
+                            "INSERT INTO alerts "
+                            "(datetime, freq, db, source, from_callsign, groupname, color, title, message) "
+                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (utc, freq, snr, 1, callsign, group, color, title, message_text)
                         )
                         conn.commit()
-                        print(f"\033[92m[{rig_name}] Added MSG from: {callsign} to: {to_call}\033[0m")
+                        print(f"\033[91m[{rig_name}] Added Alert from: {callsign} - {title}\033[0m")
+                        conn.close()
+                        return "alert"
+
+            elif MSG_BULLETIN in value:
+                # Parse message: ,ID,MESSAGE,{^%}
+                match = re.search(r',(.+?)\{\^\%\}', value)
+                if match:
+                    fields = match.group(1).split(",")
+                    if len(fields) >= 2:
+                        id_num = fields[0].strip()
+                        # Apply smart title case to message (acronym detection)
+                        message_text = smart_title_case(",".join(fields[1:]).strip(), abbreviations, self.config.get_apply_text_normalization())
+
+                        cursor.execute(
+                            "INSERT OR REPLACE INTO messages "
+                            "(datetime, freq, db, source, SRid, from_callsign, target, message) "
+                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                            (utc, freq, snr, 1, id_num, callsign, group, message_text)
+                        )
+                        conn.commit()
+                        print(f"\033[92m[{rig_name}] Added Message from: {callsign} ID: {id_num}\033[0m")
                         conn.close()
                         return "message"
+
+            # =================================================================
+            # Standard Message Processing (LOWEST PRIORITY)
+            # =================================================================
+
+            # Check for standard JS8Call MSG format (no special marker)
+            # Save if: to group OR to one of user's callsigns
+            # Filter out common query patterns (GRID?, SNR?, etc.)
+
+            # Check if this message should be saved based on recipient
+            is_to_group = to_call.startswith("@")
+            is_to_user = to_call in self.rig_callsigns.values()
+
+            if is_to_group or is_to_user:
+                # Extract message text
+                # If contains "MSG ", remove prefix; otherwise use entire value
+                msg_match = re.search(r'\bMSG\s+(.+)', value, re.IGNORECASE)
+                if msg_match:
+                    message_text = msg_match.group(1).strip()
+                else:
+                    message_text = value.strip()
+
+                # Skip if message is empty
+                if not message_text:
+                    conn.close()
+                    return ""
+
+                # Skip if message contains CommStat special markers
+                # These are processed by their specific handlers earlier in the function
+                commstat_markers = ['{&%}', '{F%}', '{*%}', '{~%}', '{^%}', '{%%}']
+                if any(marker in message_text for marker in commstat_markers):
+                    conn.close()
+                    return ""
+
+                # Define JS8Call query patterns to filter out
+                # Format: "@group KEYWORD" or "CALLSIGN KEYWORD" (automated JS8Call responses)
+                # Example: "@HB HEARTBEAT" should be filtered
+                # Example: "N0DDK SNR -12" should be filtered
+                # Example: "@GHOSTNET QUERY MSGS" should be filtered
+                query_patterns = [
+                    r'^@?\w+\s+CQ\b',
+                    r'^@?\w+\s+GRID\b',
+                    r'^@?\w+\s+SNR\b',
+                    r'^@?\w+\s+INFO\b',
+                    r'^@?\w+\s+STATUS\b',
+                    r'^@?\w+\s+HEARING\b',
+                    r'^@?\w+\s+AGN\b',
+                    r'^@?\w+\s+QSL\b',
+                    r'^@?\w+\s+YES\b',
+                    r'^@?\w+\s+NO\b',
+                    r'^@?\w+\s+HW\s+CPY\b',
+                    r'^@?\w+\s+RR\b',
+                    r'^@?\w+\s+FB\b',
+                    r'^@?\w+\s+73\b',
+                    r'^@?\w+\s+SK\b',
+                    r'^@?\w+\s+DIT\s+DIT\b',
+                    r'^@?\w+\s+HEARTBEAT\b',
+                    r'^@?\w+\s+QUERY\b',
+                    r'^@?\w+\s+STATREP\s+RECEIVED\b',
+                ]
+
+                # Check if message matches any query pattern
+                if any(re.match(pattern, message_text, re.IGNORECASE) for pattern in query_patterns):
+                    conn.close()
+                    return ""
+
+                # Remove target prefix from message text if present (AFTER query filtering)
+                # Example: "@MAGNET MS: ..." becomes "MS: ..."
+                if message_text.startswith(to_call):
+                    message_text = message_text[len(to_call):].strip()
+
+                # Skip if message is empty after removing target
+                if not message_text:
+                    conn.close()
+                    return ""
+
+                # Use to_call for target (includes @ for groups, callsign for direct)
+                target = to_call
+
+                # Save message to database (raw text, no normalization)
+                cursor.execute(
+                    "INSERT INTO messages "
+                    "(datetime, freq, db, source, SRid, from_callsign, target, message) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                    (utc, freq, snr, 1, "", callsign, target, message_text)
+                )
+                conn.commit()
+                print(f"\033[92m[{rig_name}] Added MSG from: {callsign} to: {to_call}\033[0m")
+                conn.close()
+                return "message"
 
             conn.close()
 
