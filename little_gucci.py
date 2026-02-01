@@ -4791,6 +4791,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     conn.close()
                     return ""
 
+                # Skip if message is less than 12 characters
+                if len(message_text) < 12:
+                    conn.close()
+                    return ""
+
                 # Use to_call for target (includes @ for groups, callsign for direct)
                 target = to_call
 
