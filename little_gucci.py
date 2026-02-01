@@ -13,6 +13,7 @@ displaying status reports, messages, and live data feeds.
 import sys
 import os
 import io
+import re
 import base64
 import socket
 import sqlite3
@@ -84,7 +85,7 @@ SLIDESHOW_INTERVAL = 5  # Minutes between image changes
 
 # Backbone server for remote announcements and slideshow images
 # This allows the developer to push messages/images to all CommStat users
-_BACKBONE = base64.b64decode("aHR0cHM6Ly9qczhjYWxsLWltcHJvdmVkLmNvbQ==").decode()
+_BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
 _PING = _BACKBONE + "/heartbeat.php"
 
 # Internet connectivity check interval (30 minutes in ms)
@@ -1520,9 +1521,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_live_feed()
         self._load_message_data()
 
-        # Initial backbone check
-        if self._internet_available:
-            self._check_backbone()
+        # Backbone check will start automatically after 30 seconds via timer
 
     def _check_internet_on_startup(self) -> None:
         """Check internet connectivity at startup."""
@@ -1541,7 +1540,13 @@ class MainWindow(QtWidgets.QMainWindow):
             # Internet just became available
             print("Internet connectivity: Now available")
             self.internet_timer.stop()
-            self.backbone_timer.start(60000)
+            print("[DEBUG] Scheduling first heartbeat in 30 seconds (from internet reconnect)")
+            # Send first heartbeat after 30 second delay, then start timer
+            def start_backbone_heartbeat():
+                print("[DEBUG] Sending first heartbeat and starting 3 minute timer")
+                self._check_backbone()  # Send first heartbeat immediately
+                self.backbone_timer.start(180000)  # Then start 3 minute interval timer
+            QTimer.singleShot(30000, start_backbone_heartbeat)
         elif not self._internet_available:
             print("Internet connectivity: Still not available (will retry in 30 minutes)")
 
@@ -2212,22 +2217,31 @@ class MainWindow(QtWidgets.QMainWindow):
                     db_version = result[0]
                     build_number = result[1] if len(result) > 1 else 500
                 conn.close()
-            except sqlite3.Error:
+            except sqlite3.Error as e:
+                print(f"[DEBUG] Error reading controls table: {e}")
                 pass  # Use default values if query fails
 
             # Build heartbeat URL with callsign, db_version, and build_number parameters
             heartbeat_url = f"{_PING}?cs={callsign}&db={db_version}&build={build_number}"
+            print(f"[DEBUG] Heartbeat URL: {heartbeat_url}")
 
             with urllib.request.urlopen(heartbeat_url, timeout=10) as response:
                 content = response.read().decode('utf-8')
+
+            print(f"[DEBUG] Response length: {len(content)} bytes")
+            print(f"[DEBUG] Response preview: {content[:200]}")
 
             # Extract content between <pre> tags if present
             pre_match = re.search(r'<pre>(.*?)</pre>', content, re.DOTALL)
             if pre_match:
                 content = pre_match.group(1)
+                print(f"[DEBUG] Extracted from <pre> tags")
+            else:
+                print(f"[DEBUG] No <pre> tags found")
 
             return content.strip() or None
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG] Error fetching backbone content: {e}")
             return None
 
     def _handle_db_update(self, content: str) -> bool:
@@ -2236,8 +2250,11 @@ class MainWindow(QtWidgets.QMainWindow):
         Expected format:
         db_update
         db: 3
-        sql: "INSERT INTO ..."
-        sql: "ALTER TABLE ..."
+        sql:
+        CREATE TABLE ... );
+        INSERT INTO ... );
+
+        Each SQL statement ends with };
 
         Args:
             content: The db_update response content
@@ -2245,48 +2262,78 @@ class MainWindow(QtWidgets.QMainWindow):
         Returns:
             True if update was successful, False otherwise
         """
+        print("[DEBUG] _handle_db_update called")
+        print(f"[DEBUG] Content length: {len(content)}")
+        print(f"[DEBUG] First 200 chars: {repr(content[:200])}")
+
         try:
-            lines = [line.strip() for line in content.split('\n') if line.strip()]
-            if not lines or lines[0] != 'db_update':
+            lines = content.split('\n')
+            print(f"[DEBUG] Split into {len(lines)} lines")
+            print(f"[DEBUG] First line: {repr(lines[0])}")
+
+            if not lines or lines[0].strip() != 'db_update':
+                print(f"[DEBUG] First line check failed: {repr(lines[0].strip() if lines else 'NO LINES')}")
                 return False
 
             new_db_version = None
-            sql_statements = []
+            sql_section = None
 
-            # Parse the update content
-            for line in lines[1:]:
-                if line.startswith('db:'):
+            # Find db version and sql section
+            for i, line in enumerate(lines):
+                if line.strip().startswith('db:'):
                     try:
                         new_db_version = int(line.split(':', 1)[1].strip())
-                    except (ValueError, IndexError):
-                        print(f"Invalid db version format: {line}")
+                        print(f"[DEBUG] Found db version: {new_db_version}")
+                    except (ValueError, IndexError) as e:
+                        print(f"[DEBUG] Invalid db version format: {line}, error: {e}")
                         return False
-                elif line.startswith('sql:'):
-                    # Extract SQL statement (handle quoted strings)
-                    sql_part = line.split(':', 1)[1].strip()
-                    # Remove quotes if present
-                    if sql_part.startswith('"') and sql_part.endswith('"'):
-                        sql_part = sql_part[1:-1]
-                    elif sql_part.startswith("'") and sql_part.endswith("'"):
-                        sql_part = sql_part[1:-1]
-                    sql_statements.append(sql_part)
+                elif line.strip().startswith('sql:'):
+                    # SQL may start on this line or the next
+                    sql_start = line.split(':', 1)[1].strip()
+                    if sql_start:
+                        # SQL starts on same line
+                        sql_section = sql_start + '\n' + '\n'.join(lines[i+1:])
+                    else:
+                        # SQL starts on next line
+                        sql_section = '\n'.join(lines[i+1:])
+                    print(f"[DEBUG] Found SQL section at line {i}")
+                    break
 
             if new_db_version is None:
-                print("No db version specified in update")
+                print("[DEBUG] No db version specified in update")
                 return False
 
+            if sql_section is None:
+                print("[DEBUG] No SQL section found in update")
+                return False
+
+            # Split SQL statements by semicolon
+            sql_statements = []
+            raw_statements = sql_section.split(';')
+            print(f"[DEBUG] Split SQL into {len(raw_statements)} parts")
+
+            for stmt in raw_statements:
+                stmt = stmt.strip()
+                if stmt:  # Skip empty statements
+                    sql_statements.append(stmt)
+
+            print(f"[DEBUG] Found {len(sql_statements)} SQL statements")
+
             if not sql_statements:
-                print("No SQL statements in update")
+                print("[DEBUG] No SQL statements in update")
                 return False
 
             # Execute SQL statements
+            print(f"[DEBUG] Connecting to database: {DATABASE_FILE}")
             conn = sqlite3.connect(DATABASE_FILE, timeout=10)
             cursor = conn.cursor()
 
             try:
-                for sql in sql_statements:
-                    print(f"Executing: {sql}")
+                print(f"[DEBUG] About to execute {len(sql_statements)} SQL statements")
+                for i, sql in enumerate(sql_statements, 1):
+                    print(f"[DEBUG] Executing statement {i}/{len(sql_statements)}: {sql[:50]}...")
                     cursor.execute(sql)
+                    print(f"[DEBUG] Statement {i} executed successfully")
 
                 # Update db_version in controls table
                 cursor.execute("UPDATE controls SET db_version = ?, updated_at = datetime('now') WHERE id = 1", (new_db_version,))
@@ -2868,24 +2915,44 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         from datetime import datetime
         # Backbone check runs silently
+        print("[DEBUG] _check_backbone_content_async started")
         try:
             content = self._fetch_backbone_content()
+            print(f"[DEBUG] Fetched content: {content is not None}")
             if not content:
+                print("[DEBUG] No content received, exiting")
                 return
 
             # Reset fail counter on success
             self._backbone_fail_count = 0
 
-            # Check for update commands first
-            if content.startswith('db_update'):
-                self._handle_db_update(content)
-                return
-            elif content.startswith('program_update'):
-                self._handle_program_update(content)
+            # Debug: show what was received
+            print(f"[DEBUG] Backbone response: {repr(content[:100])}")
+
+            # Check if server returns "1" - everything is normal, no updates
+            if content.strip() == '1':
+                print("[DEBUG] Server returned '1' - no updates")
                 return
 
+            # Check for update commands first (strip whitespace for comparison)
+            content_stripped = content.strip()
+            print(f"[DEBUG] Checking for update commands, starts with: {repr(content_stripped[:20])}")
+
+            if content_stripped.startswith('db_update'):
+                print("[DEBUG] *** Detected db_update command ***")
+                result = self._handle_db_update(content_stripped)
+                print(f"[DEBUG] db_update result: {result}")
+                return
+            elif content_stripped.startswith('program_update'):
+                print("[DEBUG] *** Detected program_update command ***")
+                result = self._handle_program_update(content_stripped)
+                print(f"[DEBUG] program_update result: {result}")
+                return
+            else:
+                print("[DEBUG] No update command detected, processing as message")
+
             # Parse into sections
-            sections = self._parse_backbone_sections(content)
+            sections = self._parse_backbone_sections(content_stripped)
             has_sections = any(sections.values())
 
             new_message = None
@@ -2913,7 +2980,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
             else:
                 # Legacy format
-                lines = [line.strip() for line in content.split('\n') if line.strip()]
+                lines = [line.strip() for line in content_stripped.split('\n') if line.strip()]
                 if not lines:
                     return
 
@@ -2938,8 +3005,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     lines = lines[1:]
 
                 # Check for message
-                content = '\n'.join(lines)
-                msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', content, re.DOTALL)
+                legacy_content = '\n'.join(lines)
+                msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', legacy_content, re.DOTALL)
                 if msg_match:
                     new_message = msg_match.group(1)
 
@@ -3307,13 +3374,19 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self._internet_available:
             self.internet_timer.start(INTERNET_CHECK_INTERVAL)
 
-        # Backbone check timer - runs every 3 minutes
+        # Backbone check timer - runs every 3 minutes, starts 30 seconds after launch
         self._backbone_fail_count = 0
         self._backbone_max_failures = 20
         self.backbone_timer = QTimer(self)
         self.backbone_timer.timeout.connect(self._check_backbone)
         if self._internet_available:
-            self.backbone_timer.start(180000)
+            print("[DEBUG] Scheduling first heartbeat in 30 seconds")
+            # Delay first heartbeat by 30 seconds, then start timer for subsequent heartbeats
+            def start_backbone_heartbeat():
+                print("[DEBUG] Sending first heartbeat and starting 3 minute timer")
+                self._check_backbone()  # Send first heartbeat immediately
+                self.backbone_timer.start(180000)  # Then start 3 minute interval timer
+            QTimer.singleShot(30000, start_backbone_heartbeat)
 
         # News ticker animation timeline
         self.newsfeed_timeline = QtCore.QTimeLine()
@@ -3339,8 +3412,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _check_backbone(self) -> None:
         """Check backbone server for content updates (runs in background thread)."""
+        print("[DEBUG] Backbone check triggered")
         if not self._internet_available:
+            print("[DEBUG] Skipping backbone check - no internet")
             return
+        print("[DEBUG] Starting backbone check thread")
         thread = threading.Thread(target=self._check_backbone_content_async, daemon=True)
         thread.start()
 
