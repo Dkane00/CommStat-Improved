@@ -65,7 +65,7 @@ from js8_connectors import JS8ConnectorsDialog
 # Constants
 # =============================================================================
 
-VERSION = "2.5.1"
+VERSION = "3.0.0"
 WINDOW_TITLE = f"CommStat (v{VERSION}) by N0DDK"
 WINDOW_SIZE = (1440, 832)
 CONFIG_FILE = "config.ini"
