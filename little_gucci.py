@@ -4283,13 +4283,31 @@ class MainWindow(QtWidgets.QMainWindow):
                         srid = fields[2].strip()
                         srcode = fields[3].strip()
                         # Extract orig_call from last field (before {F%})
-                        orig_call = fields[-1].strip() if len(fields) > 5 else callsign
+                        # Handle trailing comma by checking if last field is empty
+                        if len(fields) > 5:
+                            orig_call = fields[-1].strip()
+                            if not orig_call and len(fields) > 6:
+                                # Trailing comma creates empty last field, use second-to-last
+                                orig_call = fields[-2].strip()
+                        else:
+                            orig_call = callsign
                         # Apply smart title case to comments (acronym detection)
                         # Join fields between SRCODE and ORIG_CALL to handle commas in comments
-                        comments_raw = ",".join(fields[4:-1]).strip() if len(fields) > 5 else ""
+                        # Exclude last field if it's empty (trailing comma)
+                        end_index = -2 if len(fields) > 6 and not fields[-1].strip() else -1
+                        comments_raw = ",".join(fields[4:end_index]).strip() if len(fields) > 5 else ""
                         comments = smart_title_case(comments_raw, abbreviations, self.config.get_apply_text_normalization()) if comments_raw else ""
                         # Remove non-ASCII characters (keep only space through tilde)
                         comments = re.sub(r'[^ -~]+', '', comments).strip()
+
+                        # Append relay/forwarder information if message was forwarded by different station
+                        if callsign and orig_call and callsign != orig_call:
+                            relay_suffix = f" via: {callsign}"
+                            if comments:
+                                comments = comments + relay_suffix
+                            else:
+                                # If no original comments, use relay info without leading space
+                                comments = relay_suffix.lstrip()
 
                         # Expand compressed "+" to all green (111111111111)
                         if srcode == "+":
