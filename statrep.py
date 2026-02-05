@@ -818,14 +818,6 @@ class StatRepDialog(QDialog):
             if hasattr(parent, '_load_message_data'):
                 parent._load_message_data()
 
-    def _clear_copy_file(self) -> None:
-        """Clear the copy file to trigger refresh."""
-        try:
-            with open("copyDIRECTED.TXT", "w") as f:
-                f.write("blank line \n")
-        except Exception as e:
-            print(f"Error clearing copy file: {e}")
-
     def _on_save_only(self) -> None:
         """Validate and save without transmitting."""
         if not self._validate():
@@ -849,7 +841,6 @@ class StatRepDialog(QDialog):
             print(f"{'='*60}\n")
 
             self._show_info(f"StatRep saved:\n{message}")
-            self._clear_copy_file()
             self._refresh_parent_data()
             self.accept()
         except Exception as e:
@@ -947,7 +938,6 @@ class StatRepDialog(QDialog):
             print(f"  Message:  {self._pending_message}")
             print(f"{'='*60}\n")
 
-            self._clear_copy_file()
             self._refresh_parent_data()
             self.accept()
         except Exception as e:

@@ -620,10 +620,6 @@ class Ui_FormMessage:
             message = re.sub(r"[^ -~]+", " ", message)
             self._save_to_database(self.callsign, message, frequency)
 
-            # Clear the copy file to trigger refresh
-            with open("copyDIRECTED.TXT", "w") as f:
-                f.write("blank line \n")
-
             self.MainWindow.close()
         except Exception as e:
             self._show_error(f"Failed to transmit message: {e}")

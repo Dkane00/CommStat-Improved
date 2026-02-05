@@ -686,10 +686,6 @@ class Ui_FormAlert:
                 frequency
             )
 
-            # Clear the copy file to trigger refresh
-            with open("copyDIRECTED.TXT", "w") as f:
-                f.write("blank line \n")
-
             self.MainWindow.close()
             if self.on_alert_saved:
                 self.on_alert_saved()

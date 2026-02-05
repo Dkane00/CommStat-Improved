@@ -703,7 +703,7 @@ class DatabaseManager:
                     query = f"""
                         SELECT db, datetime, freq, from_callsign, groupname, grid, prec, status,
                                commpwr, pubwtr, med, ota, trav, net,
-                               fuel, food, crime, civil, political, comments
+                               fuel, food, crime, civil, political, comments, source
                         FROM statrep
                         WHERE {date_condition}
                     """
@@ -715,7 +715,7 @@ class DatabaseManager:
                     query = f"""
                         SELECT db, datetime, freq, from_callsign, groupname, grid, prec, status,
                                commpwr, pubwtr, med, ota, trav, net,
-                               fuel, food, crime, civil, political, comments
+                               fuel, food, crime, civil, political, comments, source
                         FROM statrep
                         WHERE groupname IN ({placeholders}) AND {date_condition}
                     """
@@ -760,7 +760,7 @@ class DatabaseManager:
 
                 if show_all:
                     # Show all messages regardless of group
-                    query = f"""SELECT db, datetime, freq, from_callsign, target, message
+                    query = f"""SELECT db, datetime, freq, from_callsign, target, message, source
                                FROM messages
                                WHERE {date_condition}"""
                     params = date_params
@@ -768,7 +768,7 @@ class DatabaseManager:
                     # Filter by active groups (add @ prefix for matching)
                     groups_with_at = ["@" + g for g in groups]
                     placeholders = ",".join("?" * len(groups_with_at))
-                    query = f"""SELECT db, datetime, freq, from_callsign, target, message
+                    query = f"""SELECT db, datetime, freq, from_callsign, target, message, source
                                FROM messages
                                WHERE target IN ({placeholders}) AND {date_condition}"""
                     params = groups_with_at + date_params
@@ -3743,8 +3743,23 @@ class MainWindow(QtWidgets.QMainWindow):
                     display_value = ""
                     item = QTableWidgetItem(display_value)
                     try:
+                        # Check if source = 2 (Internet source)
+                        source_value = None
+                        if is_statrep_table and len(row_data) > 20:
+                            source_value = int(row_data[20]) if row_data[20] is not None else 0
+                        elif is_message_table and len(row_data) > 6:
+                            source_value = int(row_data[6]) if row_data[6] is not None else 0
+
+                        if source_value == 2:
+                            item.setToolTip("   Internet")
+                            color = QColor("#9400ff")
+                            item.setBackground(color)
+                            table.setItem(row_num, col_num, item)
+                            continue
+
+                        # Default SNR-based coloring
                         db_value = int(value) if value is not None else 0
-                        item.setToolTip(f"{db_value} dB")
+                        item.setToolTip(f"   RF SNR {db_value}")
                         if db_value >= -5:
                             color = QColor(self.config.get_color('condition_green'))
                         elif db_value >= -16:
@@ -4220,7 +4235,11 @@ class MainWindow(QtWidgets.QMainWindow):
                         srid = fields[2].strip()
                         srcode = fields[3].strip()
                         # Apply smart title case to comments (acronym detection)
-                        comments = smart_title_case(fields[4].strip(), abbreviations, self.config.get_apply_text_normalization()) if len(fields) > 4 else ""
+                        # Join all remaining fields with commas to handle commas in comments
+                        comments_raw = ",".join(fields[4:]).strip() if len(fields) > 4 else ""
+                        comments = smart_title_case(comments_raw, abbreviations, self.config.get_apply_text_normalization()) if comments_raw else ""
+                        # Remove non-ASCII characters (keep only space through tilde)
+                        comments = re.sub(r'[^ -~]+', '', comments).strip()
 
                         # Expand compressed "+" shorthand to all green status
                         # "+" means all 12 indicators are at level 1 (green/good)
@@ -4263,9 +4282,14 @@ class MainWindow(QtWidgets.QMainWindow):
                         prec1 = fields[1].strip()
                         srid = fields[2].strip()
                         srcode = fields[3].strip()
+                        # Extract orig_call from last field (before {F%})
+                        orig_call = fields[-1].strip() if len(fields) > 5 else callsign
                         # Apply smart title case to comments (acronym detection)
-                        comments = smart_title_case(fields[4].strip(), abbreviations, self.config.get_apply_text_normalization()) if len(fields) > 4 else ""
-                        orig_call = fields[5].strip() if len(fields) > 5 else callsign
+                        # Join fields between SRCODE and ORIG_CALL to handle commas in comments
+                        comments_raw = ",".join(fields[4:-1]).strip() if len(fields) > 5 else ""
+                        comments = smart_title_case(comments_raw, abbreviations, self.config.get_apply_text_normalization()) if comments_raw else ""
+                        # Remove non-ASCII characters (keep only space through tilde)
+                        comments = re.sub(r'[^ -~]+', '', comments).strip()
 
                         # Expand compressed "+" to all green (111111111111)
                         if srcode == "+":
@@ -4292,65 +4316,6 @@ class MainWindow(QtWidgets.QMainWindow):
                             print(f"\033[92m[{rig_name}] Added Forwarded StatRep from: {orig_call} ID: {srid}\033[0m")
                             conn.close()
                             return "statrep"
-
-            # =================================================================
-            # Pattern-based detection (no markers required)
-            # =================================================================
-
-            # StatRep pattern: GRID,PREC,SRID,SRCODE[,COMMENTS]
-            # - GRID: 4-6 char maidenhead (AA00 or AA00aa)
-            # - PREC: 1-5 (precedence)
-            # - SRID: numeric ID
-            # - SRCODE: + or 12 digits [1-4]
-            # - COMMENTS: optional
-            # Only process if sent to a group (@GROUP) or message contains @GROUP
-            if to_call.startswith("@") or "@" in value:
-                # Use re.search to find pattern anywhere in message (handles various formats)
-                statrep_pattern = re.search(
-                    r'([A-Z]{2}\d{2}[a-z]{0,2}),([1-5]),(\d+),(\+|[1-4]{12})(?:,(.*))?',
-                    value.strip(),
-                    re.IGNORECASE
-                )
-                if statrep_pattern:
-                    curgrid = statrep_pattern.group(1).upper()
-                    prec1 = statrep_pattern.group(2)
-                    srid = statrep_pattern.group(3)
-                    srcode = statrep_pattern.group(4)
-                    # Apply smart title case to comments (acronym detection)
-                    comments = smart_title_case(statrep_pattern.group(5).strip(), abbreviations, self.config.get_apply_text_normalization()) if statrep_pattern.group(5) else ""
-
-                    # Expand compressed "+" to all green (111111111111)
-                    if srcode == "+":
-                        srcode = "111111111111"
-
-                    prec = PRECEDENCE_MAP.get(prec1, "Unknown")
-
-                    # Extract group from value if not already set (handles embedded @GROUP)
-                    pattern_group = group
-                    if not pattern_group:
-                        group_match = re.search(r'(@[A-Z0-9]+)', value, re.IGNORECASE)
-                        if group_match:
-                            pattern_group = group_match.group(1).upper()
-
-                    if len(srcode) >= 12:
-                        sr_fields = list(srcode)
-                        # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
-                        date_only = utc.split()[0] if utc else ""
-                        cursor.execute(
-                            "INSERT OR IGNORE INTO statrep "
-                            "(datetime, date, freq, db, source, SRid, from_callsign, groupname, grid, prec, status, commpwr, pubwtr, "
-                            "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            (utc, date_only, freq, snr, 1, srid, callsign, pattern_group, curgrid, prec,
-                             sr_fields[0], sr_fields[1], sr_fields[2], sr_fields[3],
-                             sr_fields[4], sr_fields[5], sr_fields[6], sr_fields[7],
-                             sr_fields[8], sr_fields[9], sr_fields[10], sr_fields[11],
-                             comments)
-                        )
-                        conn.commit()
-                        print(f"\033[92m[{rig_name}] Added StatRep (pattern) from: {callsign} ID: {srid}\033[0m")
-                        conn.close()
-                        return "statrep"
 
             # Check for F!304 statrep format (BEFORE standard MSG check)
             # Format: [CALLSIGN:] [@GROUP|CALLSIGN] [MSG] F!304 {8 digits} {remainder text}
@@ -4438,6 +4403,9 @@ class MainWindow(QtWidgets.QMainWindow):
                         comments = ", ".join(comment_parts) + f" - {formatted_remainder}"
                     else:
                         comments = ", ".join(comment_parts)
+
+                    # Remove non-ASCII characters (keep only space through tilde)
+                    comments = re.sub(r'[^ -~]+', '', comments).strip()
 
                     # Extract group: check for @GROUP in value, otherwise use "@ALL"
                     f304_group = group if group else ""
@@ -4594,6 +4562,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     else:
                         comments = ", ".join(comment_parts)
 
+                    # Remove non-ASCII characters (keep only space through tilde)
+                    comments = re.sub(r'[^ -~]+', '', comments).strip()
+
                     # Extract group: check for @GROUP in value, otherwise use "@ALL"
                     f301_group = group if group else ""
                     if not f301_group and "@" in value:
@@ -4681,8 +4652,10 @@ class MainWindow(QtWidgets.QMainWindow):
                         except ValueError:
                             color = 1  # Default to yellow
                         title = fields[1].strip()
+                        # Join remaining fields and remove trailing comma
+                        raw_message = ",".join(fields[2:]).strip().rstrip(',')
                         # Apply smart title case to message (acronym detection)
-                        message_text = smart_title_case(",".join(fields[2:]).strip(), abbreviations, self.config.get_apply_text_normalization())
+                        message_text = smart_title_case(raw_message, abbreviations, self.config.get_apply_text_normalization())
 
                         cursor.execute(
                             "INSERT INTO alerts "
@@ -4696,25 +4669,28 @@ class MainWindow(QtWidgets.QMainWindow):
                         return "alert"
 
             elif MSG_BULLETIN in value:
-                # Parse message: ,ID,MESSAGE,{^%}
+                # Parse bulletin: ,ID,MESSAGE,{^%}
+                # Write to alerts table with null title
                 match = re.search(r',(.+?)\{\^\%\}', value)
                 if match:
                     fields = match.group(1).split(",")
                     if len(fields) >= 2:
-                        id_num = fields[0].strip()
+                        # Discard SRID (fields[0])
+                        # Join remaining fields and remove trailing comma
+                        raw_message = ",".join(fields[1:]).strip().rstrip(',')
                         # Apply smart title case to message (acronym detection)
-                        message_text = smart_title_case(",".join(fields[1:]).strip(), abbreviations, self.config.get_apply_text_normalization())
+                        message_text = smart_title_case(raw_message, abbreviations, self.config.get_apply_text_normalization())
 
                         cursor.execute(
-                            "INSERT OR REPLACE INTO messages "
-                            "(datetime, freq, db, source, SRid, from_callsign, target, message) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                            (utc, freq, snr, 1, id_num, callsign, group, message_text)
+                            "INSERT INTO alerts "
+                            "(datetime, freq, db, source, from_callsign, groupname, color, title, message) "
+                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (utc, freq, snr, 1, callsign, group, 1, None, message_text)
                         )
                         conn.commit()
-                        print(f"\033[92m[{rig_name}] Added Message from: {callsign} ID: {id_num}\033[0m")
+                        print(f"\033[91m[{rig_name}] Added Bulletin Alert from: {callsign}\033[0m")
                         conn.close()
-                        return "message"
+                        return "alert"
 
             # =================================================================
             # Standard Message Processing (LOWEST PRIORITY)
@@ -4742,12 +4718,16 @@ class MainWindow(QtWidgets.QMainWindow):
                     conn.close()
                     return ""
 
-                # Skip if message contains CommStat special markers
-                # These are processed by their specific handlers earlier in the function
+                # Remove CommStat special markers and their preceding commas from message text
+                # Markers: {&%}, {F%}, {*%}, {~%}, {^%}, {%%}
                 commstat_markers = ['{&%}', '{F%}', '{*%}', '{~%}', '{^%}', '{%%}']
-                if any(marker in message_text for marker in commstat_markers):
-                    conn.close()
-                    return ""
+                for marker in commstat_markers:
+                    # Remove marker and preceding comma if present
+                    message_text = re.sub(r',\s*' + re.escape(marker), '', message_text)
+                    # Also remove marker without comma in case it appears standalone
+                    message_text = message_text.replace(marker, '')
+
+                message_text = message_text.strip()
 
                 # Define JS8Call query patterns to filter out
                 # Format: "@group KEYWORD" or "CALLSIGN KEYWORD" (automated JS8Call responses)
