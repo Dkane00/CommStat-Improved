@@ -4779,6 +4779,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 # Use to_call for target (includes @ for groups, callsign for direct)
                 target = to_call
 
+                # Remove non-ASCII characters (keep only space through tilde)
+                message_text = re.sub(r'[^ -~]+', '', message_text).strip()
+
                 # Save message to database (raw text, no normalization)
                 cursor.execute(
                     "INSERT INTO messages "
