@@ -87,7 +87,7 @@ SLIDESHOW_INTERVAL = 5  # Minutes between image changes
 # Backbone server for remote announcements and slideshow images
 # This allows the developer to push messages/images to all CommStat users
 _BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
-_PING = _BACKBONE + "/heartbeat.php"
+_PING = _BACKBONE + "/heartbeat-808585.php"
 
 # Internet connectivity check interval (30 minutes in ms)
 INTERNET_CHECK_INTERVAL = 30 * 60 * 1000
@@ -1055,7 +1055,7 @@ class DatabaseManager:
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window for CommStat."""
 
-    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False, demo_mode: bool = False, demo_version: int = 1, demo_duration: int = 60):
+    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False, backbone_debug: bool = False, demo_mode: bool = False, demo_version: int = 1, demo_duration: int = 60):
         """
         Initialize the main window.
 
@@ -1063,6 +1063,7 @@ class MainWindow(QtWidgets.QMainWindow):
             config: ConfigManager instance with loaded settings
             db: DatabaseManager instance for database operations
             debug_mode: Enable debug features when True
+            backbone_debug: Enable backbone StatRep submission debug logging
             demo_mode: Enable demo mode with simulated disaster data
             demo_version: Demo scenario version (1, 2, 3, etc.)
             demo_duration: Demo playback duration in seconds (default 60)
@@ -1071,6 +1072,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config = config
         self.db = db
         self.debug_mode = debug_mode
+        self.backbone_debug = backbone_debug
         self.demo_mode = demo_mode
         self.demo_version = demo_version
         self.demo_duration = demo_duration
@@ -1952,23 +1954,25 @@ class MainWindow(QtWidgets.QMainWindow):
             # Get callsign (first available from rig_callsigns)
             callsign = next((cs for cs in self.rig_callsigns.values() if cs), "UNKNOWN")
 
-            # Get db_version and build_number from controls table
+            # Get db_version, build_number, and data_id from controls table
             db_version = 0
             build_number = 500  # Default fallback
+            data_id = 0  # Default fallback
             try:
                 conn = sqlite3.connect(DATABASE_FILE, timeout=10)
                 cursor = conn.cursor()
-                cursor.execute("SELECT db_version, build_number FROM controls WHERE id = 1")
+                cursor.execute("SELECT db_version, build_number, data_id FROM controls WHERE id = 1")
                 result = cursor.fetchone()
                 if result:
                     db_version = result[0]
                     build_number = result[1] if len(result) > 1 else 500
+                    data_id = result[2] if len(result) > 2 else 0
                 conn.close()
             except sqlite3.Error:
                 pass  # Use default values if query fails
 
-            # Build heartbeat URL with callsign, db_version, and build_number parameters
-            heartbeat_url = f"{_PING}?cs={callsign}&db={db_version}&build={build_number}"
+            # Build heartbeat URL with callsign, data_id, db_version, and build_number parameters
+            heartbeat_url = f"{_PING}?cs={callsign}&id={data_id}&db={db_version}&build={build_number}"
 
             with urllib.request.urlopen(heartbeat_url, timeout=10) as response:
                 content = response.read().decode('utf-8')
@@ -2051,7 +2055,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     cursor.execute(sql)
 
                 # Update db_version in controls table
-                cursor.execute("UPDATE controls SET db_version = ?, updated_at = datetime('now') WHERE id = 1", (new_db_version,))
+                cursor.execute("UPDATE controls SET db_version = ? WHERE id = 1", (new_db_version,))
                 conn.commit()
                 print(f"Database updated successfully to version {new_db_version}")
 
@@ -2129,7 +2133,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 try:
                     conn = sqlite3.connect(DATABASE_FILE, timeout=10)
                     cursor = conn.cursor()
-                    cursor.execute("UPDATE controls SET build_number = ?, updated_at = datetime('now') WHERE id = 1", (new_build,))
+                    cursor.execute("UPDATE controls SET build_number = ? WHERE id = 1", (new_build,))
                     conn.commit()
                     conn.close()
                     print(f"Build number updated to {new_build} in database")
@@ -3316,7 +3320,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_statrep(self) -> None:
         """Open StatRep window."""
-        dialog = StatRepDialog(self.tcp_pool, self.connector_manager, self)
+        dialog = StatRepDialog(self.tcp_pool, self.connector_manager, self, backbone_debug=self.backbone_debug)
         dialog.exec_()
 
     def _on_send_message(self) -> None:
@@ -4829,6 +4833,9 @@ def main() -> None:
     # Check for debug mode
     debug_mode = "--debug" in sys.argv
 
+    # Check for backbone debug mode
+    backbone_debug = "--debug-mode" in sys.argv
+
     # Check for demo mode with version number and optional duration
     # Usage: --demo-mode [version] [duration_seconds]
     demo_mode = False
@@ -4895,11 +4902,13 @@ def main() -> None:
     db = DatabaseManager()
 
     # Create and show main window
-    window = MainWindow(config, db, debug_mode=debug_mode, demo_mode=demo_mode, demo_version=demo_version, demo_duration=demo_duration)
+    window = MainWindow(config, db, debug_mode=debug_mode, backbone_debug=backbone_debug, demo_mode=demo_mode, demo_version=demo_version, demo_duration=demo_duration)
     window.show()
 
     if debug_mode:
         print("Debug mode enabled")
+    if backbone_debug:
+        print("Backbone debug mode enabled")
     if demo_mode:
         print(f"Demo mode enabled - Version {demo_version} - {demo_duration} second disaster simulation")
 

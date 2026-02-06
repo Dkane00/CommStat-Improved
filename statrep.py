@@ -11,6 +11,10 @@ Allows creating and transmitting AMRRON Status Reports via JS8Call.
 import os
 import re
 import sqlite3
+import urllib.request
+import urllib.parse
+import threading
+from configparser import ConfigParser
 from typing import Optional, Dict, List, TYPE_CHECKING
 from dataclasses import dataclass
 
@@ -133,11 +137,13 @@ class StatRepDialog(QDialog):
         self,
         tcp_pool: "TCPConnectionPool",
         connector_manager: "ConnectorManager",
-        parent=None
+        parent=None,
+        backbone_debug: bool = False
     ):
         super().__init__(parent)
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
+        self.backbone_debug = backbone_debug  # Command line override for debug mode
 
         self.setWindowTitle("CommStat STATREP")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
@@ -165,6 +171,7 @@ class StatRepDialog(QDialog):
 
         # Load config and generate ID
         self._load_config()
+        self._ensure_backbone_config_exists()
         self._generate_statrep_id()
 
         # Build UI
@@ -216,6 +223,86 @@ class StatRepDialog(QDialog):
         except sqlite3.Error as e:
             print(f"Error reading groups from database: {e}")
         return []
+
+    def _ensure_backbone_config_exists(self) -> None:
+        """Ensure backbone config section exists in config.ini."""
+        config = ConfigParser()
+        config.read("config.ini")
+
+        if not config.has_section("BACKBONE"):
+            config.add_section("BACKBONE")
+            config.set("BACKBONE", "statrep_submit_enabled", "True")
+            config.set("BACKBONE", "datafeed_url",
+                       "https://commstat-improved.com/datafeed-808585.php")
+            config.set("BACKBONE", "debug_mode", "False")
+
+            with open("config.ini", "w") as f:
+                config.write(f)
+
+    def _load_backbone_config(self) -> tuple[bool, str, bool]:
+        """Load backbone statrep submission configuration.
+
+        Command line --debug-mode flag overrides config.ini debug_mode setting.
+        """
+        config = ConfigParser()
+        config.read("config.ini")
+
+        enabled = config.getboolean("BACKBONE", "statrep_submit_enabled", fallback=True)
+        url = config.get("BACKBONE", "datafeed_url",
+                         fallback="https://commstat-improved.com/datafeed-808585.php")
+        debug = config.getboolean("BACKBONE", "debug_mode", fallback=False)
+
+        # Command line flag overrides config.ini setting
+        if self.backbone_debug:
+            debug = True
+
+        return enabled, url, debug
+
+    def _submit_to_backbone_async(self, frequency: int) -> None:
+        """Start background thread to submit statrep to backbone server."""
+        enabled, datafeed_url, debug = self._load_backbone_config()
+
+        if not enabled:
+            return
+
+        # Capture current state for the thread
+        callsign = self.callsign
+        message = self._pending_message
+        now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
+
+        def submit_thread():
+            """Background thread that performs the HTTP POST."""
+            try:
+                # Format data string: datetime\tfreq_mhz\t0\t30\tmessage
+                freq_mhz = f"{frequency / 1000000.0:.6f}"
+                data_string = f"{now}\t{freq_mhz}\t0\t30\t{message}"
+
+                # Build POST data
+                post_data = urllib.parse.urlencode({
+                    'cs': callsign,
+                    'data': data_string
+                }).encode('utf-8')
+
+                # Create and send request with 10-second timeout
+                req = urllib.request.Request(datafeed_url, data=post_data, method='POST')
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    result = response.read().decode('utf-8').strip()
+
+                # Check server response: "1" = success, other = failure (only log in debug mode)
+                if debug:
+                    if result == "1":
+                        print(f"[Backbone] Statrep submitted successfully to {datafeed_url} (response: {result})")
+                    else:
+                        print(f"[Backbone] Statrep submission failed - server returned: {result}")
+
+            except Exception as e:
+                # Silent failure - only log to terminal in debug mode
+                if debug:
+                    print(f"[Backbone] Failed to submit statrep: {e}")
+
+        # Start daemon thread (won't block app shutdown)
+        thread = threading.Thread(target=submit_thread, daemon=True)
+        thread.start()
 
     def _load_rigs(self) -> None:
         """Load connected rigs into the rig dropdown.
@@ -765,7 +852,7 @@ class StatRepDialog(QDialog):
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO statrep(
-                        datetime, date, freq, db, source, sr_id, from_callsign, "group", grid, scope,
+                        datetime, date, freq, db, source, sr_id, from_callsign, target, grid, scope,
                         map, power, water, med, telecom, travel, internet,
                         fuel, food, crime, civil, political, comments
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -914,6 +1001,9 @@ class StatRepDialog(QDialog):
 
             # Save to database with frequency
             self._save_to_database(frequency)
+
+            # Submit to backbone server (asynchronous, non-blocking)
+            self._submit_to_backbone_async(frequency)
 
             # Print to terminal
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")

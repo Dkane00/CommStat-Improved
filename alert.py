@@ -569,7 +569,7 @@ class Ui_FormAlert:
         now = QDateTime.currentDateTime()
         datetime_str = now.toUTC().toString("yyyy-MM-dd HH:mm:ss")
         date_only = now.toUTC().toString("yyyy-MM-dd")
-        group = self.group_combo.currentText()
+        group = "@" + self.group_combo.currentText()
 
         from id_utils import generate_time_based_id
         alert_id = generate_time_based_id()
@@ -579,7 +579,7 @@ class Ui_FormAlert:
             cur = conn.cursor()
             cur.execute(
                 "INSERT INTO alerts "
-                "(datetime, date, freq, db, source, alert_id, from_callsign, \"group\", color, title, message) "
+                "(datetime, date, freq, db, source, alert_id, from_callsign, target, color, title, message) "
                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (datetime_str, date_only, frequency, db, 1, alert_id, callsign, group, color, title, message)
             )

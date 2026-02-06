@@ -140,7 +140,7 @@ class UI(QMainWindow):
         importdata.to_sql('statrep_temp', conn, if_exists='replace', index=False)
 
         crossquery = ("INSERT OR REPLACE INTO statrep SELECT * FROM statrep_temp WHERE sr_id != statrep_temp.sr_id")
-        #query = conn.execute("SELECT datetime, sr_id, callsign, grid, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments FROM statrep WHERE group = ? AND datetime BETWEEN ? AND ?")
+        #query = conn.execute("SELECT datetime, sr_id, callsign, grid, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments FROM statrep WHERE target = ? AND datetime BETWEEN ? AND ?")
         #result = connection.execute(query, (selectedgroup, start, end))
         #print(crossquery)
 
@@ -148,7 +148,7 @@ class UI(QMainWindow):
         # Import from CSV - use INSERT OR IGNORE to avoid overwriting existing records
         # source column: 1=Radio, 2=Internet
         # Note: CSV 'date' column maps to 'db' (SNR) in new schema
-        test = cur.execute("INSERT OR IGNORE INTO statrep SELECT NULL, datetime, freq, date, source, callsign, group, grid, sr_id, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments FROM statrep_temp")
+        test = cur.execute("INSERT OR IGNORE INTO statrep SELECT NULL, datetime, freq, date, source, callsign, target, grid, sr_id, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments FROM statrep_temp")
         conn.commit()
         #cur.execute("INSERT OR REPLACE INTO statrep SELECT * FROM statrep_temp")
         #print(test)
@@ -173,8 +173,8 @@ class UI(QMainWindow):
             print("Saved data file : "+net_data_name)
 
             conn = sqlite3.connect('traffic.db3')
-            #clients = pd.read_sql_query( "SELECT datetime, sr_id, callsign, group, grid, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments FROM statrep WHERE group = ? AND datetime BETWEEN ? AND ?", conn, params=(selectedgroup, start, end))
-            clients = pd.read_sql_query("SELECT * FROM statrep WHERE group = ? AND datetime BETWEEN ? AND ?",
+            #clients = pd.read_sql_query( "SELECT datetime, sr_id, callsign, target, grid, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments FROM statrep WHERE target = ? AND datetime BETWEEN ? AND ?", conn, params=(selectedgroup, start, end))
+            clients = pd.read_sql_query("SELECT * FROM statrep WHERE target = ? AND datetime BETWEEN ? AND ?",
                 conn, params=(selectedgroup, start, end))
             path = os.path.join('reports', net_data_name)
             clients.to_csv(path, index=False)
@@ -351,7 +351,7 @@ class UI(QMainWindow):
         cursor = connection.cursor()
 
         query = ("SELECT datetime, sr_id, callsign, grid, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments "
-                 "FROM statrep WHERE group = ? AND (map  = ? OR map = ? OR map = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(', '.join('?' for _ in statelist)))
+                 "FROM statrep WHERE target = ? AND (map  = ? OR map = ? OR map = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(', '.join('?' for _ in statelist)))
         result = cursor.execute(query, [selectedgroup, green, yellow, red, start, end] +statelist)
 
         self.tableWidget.setRowCount(0)
@@ -461,7 +461,7 @@ class UI(QMainWindow):
         try:
             connection = sqlite3.connect('traffic.db3')
             query = (
-                "SELECT from_callsign, sr_id, map, grid  FROM statrep WHERE group = ? AND (map  = ? OR map = ? OR map = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(
+                "SELECT from_callsign, sr_id, map, grid  FROM statrep WHERE target = ? AND (map  = ? OR map = ? OR map = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(
                     ', '.join('?' for _ in statelist)))
             cursor = connection.execute(query, [selectedgroup, green, yellow, red, start, end] + statelist)
             items = cursor.fetchall()
@@ -594,7 +594,7 @@ class UI(QMainWindow):
 
 
         #conn = sqlite3.connect('traffic.db3')
-        #query = ("SELECT datetime, sr_id, callsign, grid, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments FROM statrep WHERE group = ? AND datetime BETWEEN ? AND ? AND map = ? OR map = ? OR map = ?")
+        #query = ("SELECT datetime, sr_id, callsign, grid, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments FROM statrep WHERE target = ? AND datetime BETWEEN ? AND ? AND map = ? OR map = ? OR map = ?")
         #result = conn.execute(query, (selectedgroup, start, end, red, yellow, green))
 
         #cursor = conn.cursor()
@@ -606,7 +606,7 @@ class UI(QMainWindow):
         cursor = connection.cursor()
 
         query = ("SELECT datetime, sr_id, callsign, grid, scope, map, power, water, med, telecom, travel, internet, fuel, food, crime, civil, political, comments "
-                 "FROM statrep WHERE group = ? AND (map  = ? OR map = ? OR map = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(', '.join('?' for _ in statelist)))
+                 "FROM statrep WHERE target = ? AND (map  = ? OR map = ? OR map = ?) AND datetime BETWEEN ? AND ? AND substr(grid,1,2) IN ({})".format(', '.join('?' for _ in statelist)))
         result = cursor.execute(query, [selectedgroup, green, yellow, red, start, end] +statelist)
 
 
