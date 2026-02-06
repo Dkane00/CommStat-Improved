@@ -1,7 +1,9 @@
 # Backbone Data Messages Implementation
 
 ## Overview
-Added support for processing CommStat messages from other users via the backbone server. When sending heartbeats, the server may now reply with messages from other users in the network.
+Bidirectional backbone server integration for sharing CommStat data across the network:
+- **Sending**: StatReps, Messages, and Alerts are automatically submitted to the backbone server when transmitted
+- **Receiving**: Heartbeat responses include data from other users in the network
 
 ## Message Format
 Messages are received with the following format:
@@ -22,6 +24,41 @@ Example:
 - `30` - SNR (signal-to-noise ratio) in dB
 - `N0DDK:` - Sender callsign
 - `@MAGNET ,EM83CV,3,T31,321311111331,GA,{&%}` - Message data with marker
+
+## Sending Data to Backbone Server
+
+### Automatic Submission
+When users transmit StatReps, Messages, or Alerts via JS8Call, the data is automatically submitted to the backbone server in the background.
+
+**Files Modified:**
+- `statrep.py` - Submits statreps after transmission
+- `message.py` - Submits messages after transmission
+- `alert.py` - Submits alerts after transmission
+
+**Submission Format:**
+```
+POST https://commstat-improved.com/datafeed-808585.php
+cs=CALLSIGN&data=DATETIME\tFREQ_HZ\t0\t30\tMESSAGE_DATA
+```
+
+**Examples:**
+- StatRep: `2026-02-06 18:32:32\t14118000\t0\t30\tN0DDK: @MAGNET ,EM83CV,3,T31,321311111331,GA,{&%}`
+- Message: `2026-02-06 18:35:10\t14118000\t0\t30\tKB2UUL: @AMRRON MSG ,M45,Test message,{^%}`
+- Alert: `2026-02-06 18:40:20\t14118000\t0\t30\tW1ABC: @ALL LRT ,1,Test,Alert message,{%%}`
+
+**Configuration:**
+- Backbone server URL is hardcoded (base64 encoded in source code)
+- Uses `_BACKBONE` constant: `https://commstat-improved.com`
+- Datafeed endpoint: `/datafeed-808585.php`
+- Debug mode enabled via `--debug-mode` command line flag
+- Always enabled by default (no config.ini toggle)
+
+**Behavior:**
+- Runs asynchronously in background thread (non-blocking)
+- Only submits when actually transmitted (not for "save only")
+- Frequency sent in Hz format
+- 10-second timeout per request
+- Silent failures (only logs in debug mode)
 
 ## Implementation Details
 
@@ -69,6 +106,11 @@ Backbone messages (source=2) **do not** apply text normalization or smart title 
 - Receives statrep messages from other users
 - Includes both standard and forwarded statreps
 - Parses grid, precedence, SR ID, status codes, and comments
+- **QRZ Grid Lookup**: If grid square is missing or invalid, automatically looks up callsign in QRZ cache/API
+  - Checks qrz_cache table first (fast)
+  - Falls back to QRZ.com API if not cached
+  - Populates qrz_cache with full callsign data for future use
+  - Skips statrep if grid cannot be determined
 
 ### Alerts Table
 - Receives alert messages (LRT format)
@@ -128,6 +170,12 @@ Messages are logged with color coding:
 - **Green** - StatRep messages: `[BACKBONE] Added StatRep from: N0DDK ID: T31 (data_id: 113)`
 - **Red** - Alert messages: `[BACKBONE] Added Alert from: W1ABC - Test Alert (data_id: 114)`
 - **Green** - Standard messages: `[BACKBONE] Added Message from: K2DEF (data_id: 115)`
+
+QRZ lookup messages:
+- `[BACKBONE] Missing grid for KB2UUL, attempting QRZ lookup`
+- `[BACKBONE] Invalid grid '600' for KB2UUL, attempting QRZ lookup`
+- `[QRZ] Found grid EM83CV for KB2UUL`
+- `[BACKBONE] QRZ lookup failed for KB2UUL, skipping statrep`
 
 ## Testing
 

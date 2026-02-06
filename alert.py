@@ -8,9 +8,14 @@ Group Alert Dialog for CommStat
 Allows creating and transmitting group alerts via JS8Call.
 """
 
+import base64
 import os
 import re
 import sqlite3
+import sys
+import threading
+import urllib.parse
+import urllib.request
 from typing import Optional, TYPE_CHECKING
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -29,6 +34,13 @@ MAX_TITLE_LENGTH = 20
 MAX_MESSAGE_LENGTH = 80
 DATABASE_FILE = "traffic.db3"
 CONFIG_FILE = "config.ini"
+
+# Backbone server (base64 encoded)
+_BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
+_DATAFEED = _BACKBONE + "/datafeed-808585.php"
+
+# Debug mode via --debug-mode command line flag
+_DEBUG_MODE = "--debug-mode" in sys.argv
 
 # Callsign pattern for US amateur radio
 CALLSIGN_PATTERN = re.compile(r'[AKNW][A-Z]{0,2}[0-9][A-Z]{1,3}')
@@ -555,6 +567,47 @@ class Ui_FormAlert:
         group = "@" + self.group_combo.currentText()
         return f"{callsign}: {group} ,{color},{title},{message},{{%%}}"
 
+    def _submit_to_backbone_async(self, frequency: int, callsign: str, alert_data: str, now: str) -> None:
+        """Start background thread to submit alert to backbone server.
+
+        Args:
+            frequency: Frequency in Hz
+            callsign: Sender callsign
+            alert_data: The full alert string to send
+            now: UTC datetime string
+        """
+        def submit_thread():
+            """Background thread that performs the HTTP POST."""
+            try:
+                # Format data string: datetime\tfreq_hz\t0\t30\talert_message
+                data_string = f"{now}\t{frequency}\t0\t30\t{alert_data}"
+
+                # Build POST data
+                post_data = urllib.parse.urlencode({
+                    'cs': callsign,
+                    'data': data_string
+                }).encode('utf-8')
+
+                # Create and send request with 10-second timeout
+                req = urllib.request.Request(_DATAFEED, data=post_data, method='POST')
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    result = response.read().decode('utf-8').strip()
+
+                # Check server response: "1" = success, other = failure (only log in debug mode)
+                if _DEBUG_MODE:
+                    if result == "1":
+                        print(f"[Backbone] Alert submitted successfully (response: {result})")
+                    else:
+                        print(f"[Backbone] Alert submission failed - server returned: {result}")
+
+            except Exception as e:
+                if _DEBUG_MODE:
+                    print(f"[Backbone] Error submitting alert: {e}")
+
+        # Start background thread
+        thread = threading.Thread(target=submit_thread, daemon=True)
+        thread.start()
+
     def _save_to_database(self, callsign: str, color: int, title: str, message: str, frequency: int = 0, db: int = 30) -> None:
         """Save alert to database.
 
@@ -588,6 +641,12 @@ class Ui_FormAlert:
             print(f"[Alert] Saved: {datetime_str}, {group}, {alert_id}, {callsign}, color={color}, title={title}, {freq_mhz:.6f} MHz")
         finally:
             conn.close()
+
+        # Submit to backbone server if transmitted (has frequency)
+        if frequency > 0:
+            # Format: CALLSIGN: @GROUP LRT ,COLOR,TITLE,MESSAGE,{%%}
+            alert_data = f"{callsign}: {group} LRT ,{color},{title},{message},{{%%}}"
+            self._submit_to_backbone_async(frequency, callsign, alert_data, datetime_str)
 
     def _save_only(self) -> None:
         """Validate and save alert to database without transmitting."""

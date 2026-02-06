@@ -8,9 +8,11 @@ StatRep Dialog for CommStat
 Allows creating and transmitting AMRRON Status Reports via JS8Call.
 """
 
+import base64
 import os
 import re
 import sqlite3
+import sys
 import urllib.request
 import urllib.parse
 import threading
@@ -32,6 +34,13 @@ if TYPE_CHECKING:
 # =============================================================================
 
 DATABASE_FILE = "traffic.db3"
+
+# Backbone server (base64 encoded)
+_BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
+_DATAFEED = _BACKBONE + "/datafeed-808585.php"
+
+# Debug mode via --debug-mode command line flag
+_DEBUG_MODE = "--debug-mode" in sys.argv
 
 # Status codes
 STATUS_GREEN = "1"
@@ -224,51 +233,25 @@ class StatRepDialog(QDialog):
             print(f"Error reading groups from database: {e}")
         return []
 
-    def _ensure_backbone_config_exists(self) -> None:
-        """Ensure backbone config section exists in config.ini."""
-        config = ConfigParser()
-        config.read("config.ini")
+    def _is_backbone_enabled(self) -> bool:
+        """Check if backbone submission is enabled.
 
-        if not config.has_section("BACKBONE"):
-            config.add_section("BACKBONE")
-            config.set("BACKBONE", "statrep_submit_enabled", "True")
-            config.set("BACKBONE", "datafeed_url",
-                       "https://commstat-improved.com/datafeed-808585.php")
-            config.set("BACKBONE", "debug_mode", "False")
-
-            with open("config.ini", "w") as f:
-                config.write(f)
-
-    def _load_backbone_config(self) -> tuple[bool, str, bool]:
-        """Load backbone statrep submission configuration.
-
-        Command line --debug-mode flag overrides config.ini debug_mode setting.
+        Returns:
+            True if enabled (always enabled, can be controlled via config.ini if needed)
         """
-        config = ConfigParser()
-        config.read("config.ini")
-
-        enabled = config.getboolean("BACKBONE", "statrep_submit_enabled", fallback=True)
-        url = config.get("BACKBONE", "datafeed_url",
-                         fallback="https://commstat-improved.com/datafeed-808585.php")
-        debug = config.getboolean("BACKBONE", "debug_mode", fallback=False)
-
-        # Command line flag overrides config.ini setting
-        if self.backbone_debug:
-            debug = True
-
-        return enabled, url, debug
+        # Always enabled by default. Could read from config.ini if user wants control.
+        return True
 
     def _submit_to_backbone_async(self, frequency: int) -> None:
         """Start background thread to submit statrep to backbone server."""
-        enabled, datafeed_url, debug = self._load_backbone_config()
-
-        if not enabled:
+        if not self._is_backbone_enabled():
             return
 
         # Capture current state for the thread
         callsign = self.callsign
         message = self._pending_message
         now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
+        debug = _DEBUG_MODE or self.backbone_debug
 
         def submit_thread():
             """Background thread that performs the HTTP POST."""
@@ -283,14 +266,14 @@ class StatRepDialog(QDialog):
                 }).encode('utf-8')
 
                 # Create and send request with 10-second timeout
-                req = urllib.request.Request(datafeed_url, data=post_data, method='POST')
+                req = urllib.request.Request(_DATAFEED, data=post_data, method='POST')
                 with urllib.request.urlopen(req, timeout=10) as response:
                     result = response.read().decode('utf-8').strip()
 
                 # Check server response: "1" = success, other = failure (only log in debug mode)
                 if debug:
                     if result == "1":
-                        print(f"[Backbone] Statrep submitted successfully to {datafeed_url} (response: {result})")
+                        print(f"[Backbone] Statrep submitted successfully (response: {result})")
                     else:
                         print(f"[Backbone] Statrep submission failed - server returned: {result}")
 

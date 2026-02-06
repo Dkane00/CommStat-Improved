@@ -2161,6 +2161,63 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"Error handling program_update: {e}")
             return False
 
+    def _is_valid_grid(self, grid: str) -> bool:
+        """Check if a string looks like a valid Maidenhead grid square.
+
+        Args:
+            grid: String to validate
+
+        Returns:
+            True if it looks like a valid grid square (e.g., EM83CV, FN20, etc.)
+        """
+        if not grid:
+            return False
+        grid = grid.strip().upper()
+        # Grid squares are 2 letters + 2 digits + optional 2 letters/digits
+        # Examples: EM83, EM83CV, FN20XS
+        if len(grid) < 4 or len(grid) > 8:
+            return False
+        # First 2 chars must be letters A-R
+        if not (grid[0].isalpha() and grid[1].isalpha()):
+            return False
+        if not (grid[0] in 'ABCDEFGHIJKLMNOPQR' and grid[1] in 'ABCDEFGHIJKLMNOPQR'):
+            return False
+        # Next 2 must be digits
+        if not (grid[2].isdigit() and grid[3].isdigit()):
+            return False
+        return True
+
+    def _lookup_grid_for_callsign(self, callsign: str) -> Optional[str]:
+        """Look up grid square for a callsign using QRZ cache/API.
+
+        Args:
+            callsign: Callsign to lookup
+
+        Returns:
+            Grid square or None if not found
+        """
+        try:
+            from qrz_client import QRZClient, load_qrz_config
+
+            # Check if QRZ is active
+            active, username, password = load_qrz_config()
+            if not active:
+                return None
+
+            # Create client and do lookup (uses cache first)
+            client = QRZClient(username, password)
+            result = client.lookup(callsign, use_cache=True)
+
+            if result and result.get('grid'):
+                grid = result['grid']
+                print(f"[QRZ] Found grid {grid} for {callsign}")
+                return grid
+
+            return None
+        except Exception as e:
+            print(f"[QRZ] Error looking up {callsign}: {e}")
+            return None
+
     def _handle_backbone_data_messages(self, content: str) -> bool:
         """Handle backbone server data messages with ID prefixes.
 
@@ -2180,6 +2237,7 @@ class MainWindow(QtWidgets.QMainWindow):
         import re
         from datetime import datetime, timezone
         from id_utils import generate_time_based_id
+        from typing import Optional
 
         try:
             lines = content.split('\n')
@@ -2259,25 +2317,70 @@ class MainWindow(QtWidgets.QMainWindow):
 
                             # Standard statrep: GRID,PREC,SRID,SRCODE,COMMENTS
                             # Forwarded: GRID,PREC,SRID,SRCODE,COMMENTS,ORIG_CALL
+                            # Handle missing grid (only 3 fields): PREC,SRID,SRCODE or similar
+
+                            grid = None
+                            prec_num = None
+                            sr_id = None
+                            srcode = None
+
                             if len(fields) >= 4:
+                                # Normal case - has grid field
                                 grid = fields[0].strip()
                                 prec_num = fields[1].strip()
                                 sr_id = fields[2].strip()
                                 srcode = fields[3].strip()
 
-                                # Handle forwarded statrep origin callsign
-                                origin_call = ""
-                                if is_forwarded and len(fields) >= 5:
-                                    # Remove empty trailing fields
-                                    while fields and not fields[-1].strip():
-                                        fields.pop()
-                                    if len(fields) >= 5:
-                                        origin_call = fields[-1].strip()
-                                        comments_raw = ",".join(fields[4:-1]).strip() if len(fields) > 5 else ""
+                                # Validate grid square
+                                if not self._is_valid_grid(grid):
+                                    print(f"[BACKBONE] Invalid grid '{grid}' for {from_callsign}, attempting QRZ lookup")
+                                    qrz_grid = self._lookup_grid_for_callsign(from_callsign)
+                                    if qrz_grid:
+                                        grid = qrz_grid
                                     else:
-                                        comments_raw = ""
+                                        print(f"[BACKBONE] QRZ lookup failed for {from_callsign}, skipping statrep")
+                                        continue
+
+                            elif len(fields) >= 3:
+                                # Missing grid - try QRZ lookup
+                                print(f"[BACKBONE] Missing grid for {from_callsign}, attempting QRZ lookup")
+                                qrz_grid = self._lookup_grid_for_callsign(from_callsign)
+                                if qrz_grid:
+                                    grid = qrz_grid
+                                    # Shift fields: field[0]=PREC, field[1]=SRID, field[2]=SRCODE
+                                    prec_num = fields[0].strip()
+                                    sr_id = fields[1].strip()
+                                    srcode = fields[2].strip()
                                 else:
-                                    comments_raw = ",".join([f for f in fields[4:] if f.strip()]).strip() if len(fields) > 4 else ""
+                                    print(f"[BACKBONE] QRZ lookup failed for {from_callsign}, skipping statrep")
+                                    continue
+                            else:
+                                # Not enough fields
+                                print(f"[BACKBONE] Insufficient fields for statrep (ID {data_id})")
+                                continue
+
+                            # At this point we should have grid, prec_num, sr_id, srcode
+                            if not all([grid, prec_num, sr_id, srcode]):
+                                print(f"[BACKBONE] Missing required statrep fields (ID {data_id})")
+                                continue
+
+                            # Handle forwarded statrep origin callsign and comments
+                            origin_call = ""
+                            comments_raw = ""
+
+                            # Determine comment field index based on whether grid was present
+                            comment_start_idx = 4 if len(fields) >= 4 and self._is_valid_grid(fields[0].strip()) else 3
+
+                            if is_forwarded and len(fields) > comment_start_idx:
+                                # Remove empty trailing fields
+                                while fields and not fields[-1].strip():
+                                    fields.pop()
+                                if len(fields) > comment_start_idx:
+                                    origin_call = fields[-1].strip()
+                                    comments_raw = ",".join(fields[comment_start_idx:-1]).strip() if len(fields) > comment_start_idx + 1 else ""
+                            else:
+                                # Standard statrep comments
+                                comments_raw = ",".join([f for f in fields[comment_start_idx:] if f.strip()]).strip() if len(fields) > comment_start_idx else ""
 
                                 # Clean non-ASCII characters
                                 comments = re.sub(r'[^ -~]+', '', comments_raw).strip() if comments_raw else ""

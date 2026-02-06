@@ -8,10 +8,14 @@ Message Dialog for CommStat
 Allows creating and transmitting messages via JS8Call.
 """
 
+import base64
 import os
 import re
 import sqlite3
-from configparser import ConfigParser
+import sys
+import threading
+import urllib.parse
+import urllib.request
 from typing import Optional, TYPE_CHECKING
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -30,6 +34,13 @@ MIN_MESSAGE_LENGTH = 4
 MAX_MESSAGE_LENGTH = 67
 DATABASE_FILE = "traffic.db3"
 CONFIG_FILE = "config.ini"
+
+# Backbone server (base64 encoded)
+_BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
+_DATAFEED = _BACKBONE + "/datafeed-808585.php"
+
+# Debug mode via --debug-mode command line flag
+_DEBUG_MODE = "--debug-mode" in sys.argv
 
 # Callsign pattern for US amateur radio
 CALLSIGN_PATTERN = re.compile(r'[AKNW][A-Z]{0,2}[0-9][A-Z]{1,3}')
@@ -490,6 +501,47 @@ class Ui_FormMessage:
         group = "@" + self.group_combo.currentText()
         return f"{group} MSG ,{self.msg_id},{message},{{^%}}"
 
+    def _submit_to_backbone_async(self, frequency: int, callsign: str, message_data: str, now: str) -> None:
+        """Start background thread to submit message to backbone server.
+
+        Args:
+            frequency: Frequency in Hz
+            callsign: Sender callsign
+            message_data: The full message string to send
+            now: UTC datetime string
+        """
+        def submit_thread():
+            """Background thread that performs the HTTP POST."""
+            try:
+                # Format data string: datetime\tfreq_hz\t0\t30\tmessage
+                data_string = f"{now}\t{frequency}\t0\t30\t{message_data}"
+
+                # Build POST data
+                post_data = urllib.parse.urlencode({
+                    'cs': callsign,
+                    'data': data_string
+                }).encode('utf-8')
+
+                # Create and send request with 10-second timeout
+                req = urllib.request.Request(_DATAFEED, data=post_data, method='POST')
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    result = response.read().decode('utf-8').strip()
+
+                # Check server response: "1" = success, other = failure (only log in debug mode)
+                if _DEBUG_MODE:
+                    if result == "1":
+                        print(f"[Backbone] Message submitted successfully (response: {result})")
+                    else:
+                        print(f"[Backbone] Message submission failed - server returned: {result}")
+
+            except Exception as e:
+                if _DEBUG_MODE:
+                    print(f"[Backbone] Error submitting message: {e}")
+
+        # Start background thread
+        thread = threading.Thread(target=submit_thread, daemon=True)
+        thread.start()
+
     def _save_to_database(self, callsign: str, message: str, frequency: int = 0) -> None:
         """Save message to database.
 
@@ -516,6 +568,13 @@ class Ui_FormMessage:
             print(f"{datetime_str}, {self.group_combo.currentText()}, {self.msg_id}, {callsign}, {message}, {freq_mhz:.6f} MHz")
         finally:
             conn.close()
+
+        # Submit to backbone server if transmitted (has frequency)
+        if frequency > 0:
+            group = "@" + self.group_combo.currentText()
+            # Format: CALLSIGN: @GROUP MSG ,ID,MESSAGE,{^%}
+            message_data = f"{callsign}: {group} MSG ,{self.msg_id},{message},{{^%}}"
+            self._submit_to_backbone_async(frequency, callsign, message_data, datetime_str)
 
     def _save_only(self) -> None:
         """Validate and save message to database without transmitting."""
