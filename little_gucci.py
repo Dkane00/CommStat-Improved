@@ -4236,7 +4236,8 @@ class MainWindow(QtWidgets.QMainWindow):
                         srcode = fields[3].strip()
                         # Apply smart title case to comments (acronym detection)
                         # Join all remaining fields with commas to handle commas in comments
-                        comments_raw = ",".join(fields[4:]).strip() if len(fields) > 4 else ""
+                        # Filter out empty fields from trailing comma before {&%}
+                        comments_raw = ",".join([f for f in fields[4:] if f.strip()]).strip() if len(fields) > 4 else ""
                         comments = smart_title_case(comments_raw, abbreviations, self.config.get_apply_text_normalization()) if comments_raw else ""
                         # Remove non-ASCII characters (keep only space through tilde)
                         comments = re.sub(r'[^ -~]+', '', comments).strip()
@@ -4282,32 +4283,33 @@ class MainWindow(QtWidgets.QMainWindow):
                         prec1 = fields[1].strip()
                         srid = fields[2].strip()
                         srcode = fields[3].strip()
-                        # Extract orig_call from last field (before {F%})
-                        # Handle trailing comma by checking if last field is empty
-                        if len(fields) > 5:
-                            orig_call = fields[-1].strip()
-                            if not orig_call and len(fields) > 6:
-                                # Trailing comma creates empty last field, use second-to-last
-                                orig_call = fields[-2].strip()
+                        # Extract origin callsign from last non-empty field
+                        # Strip empty fields from end (caused by trailing comma before {F%})
+                        while fields and not fields[-1].strip():
+                            fields.pop()
+
+                        # Now extract origin_call from actual last field
+                        if len(fields) >= 5:
+                            origin_call = fields[-1].strip()
+                            # Comments are everything between SRCODE (index 3) and origin_call (last field)
+                            comments_raw = ",".join(fields[4:-1]).strip() if len(fields) > 5 else ""
                         else:
-                            orig_call = callsign
+                            # Not enough fields, skip this message
+                            origin_call = ""
+                            comments_raw = ""
                         # Apply smart title case to comments (acronym detection)
-                        # Join fields between SRCODE and ORIG_CALL to handle commas in comments
-                        # Exclude last field if it's empty (trailing comma)
-                        end_index = -2 if len(fields) > 6 and not fields[-1].strip() else -1
-                        comments_raw = ",".join(fields[4:end_index]).strip() if len(fields) > 5 else ""
                         comments = smart_title_case(comments_raw, abbreviations, self.config.get_apply_text_normalization()) if comments_raw else ""
                         # Remove non-ASCII characters (keep only space through tilde)
                         comments = re.sub(r'[^ -~]+', '', comments).strip()
 
-                        # Append relay/forwarder information if message was forwarded by different station
-                        if callsign and orig_call and callsign != orig_call:
-                            relay_suffix = f" via: {callsign}"
+                        # Append origin information (who originally sent this statrep)
+                        if origin_call:
+                            origin_suffix = f" (FWD) ORIGIN: {origin_call}"
                             if comments:
-                                comments = comments + relay_suffix
+                                comments = comments + origin_suffix
                             else:
-                                # If no original comments, use relay info without leading space
-                                comments = relay_suffix.lstrip()
+                                # If no original comments, use origin info without leading space
+                                comments = origin_suffix.lstrip()
 
                         # Expand compressed "+" to all green (111111111111)
                         if srcode == "+":
@@ -4324,14 +4326,14 @@ class MainWindow(QtWidgets.QMainWindow):
                                 "(datetime, date, freq, db, source, SRid, from_callsign, groupname, grid, prec, status, commpwr, pubwtr, "
                                 "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
                                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                (utc, date_only, freq, snr, 1, srid, orig_call, group, curgrid, prec,
+                                (utc, date_only, freq, snr, 1, srid, callsign, group, curgrid, prec,
                                  sr_fields[0], sr_fields[1], sr_fields[2], sr_fields[3],
                                  sr_fields[4], sr_fields[5], sr_fields[6], sr_fields[7],
                                  sr_fields[8], sr_fields[9], sr_fields[10], sr_fields[11],
                                  comments)
                             )
                             conn.commit()
-                            print(f"\033[92m[{rig_name}] Added Forwarded StatRep from: {orig_call} ID: {srid}\033[0m")
+                            print(f"\033[92m[{rig_name}] Added Forwarded StatRep from: {callsign} (FWD) ORIGIN: {origin_call} ID: {srid}\033[0m")
                             conn.close()
                             return "statrep"
 
@@ -4798,7 +4800,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 target = to_call
 
                 # Remove non-ASCII characters (keep only space through tilde)
-                message_text = re.sub(r'[^ -~]+', '', message_text).strip()
+                # Strip leading and trailing spaces and commas
+                message_text = re.sub(r'[^ -~]+', '', message_text).strip(' ,')
 
                 # Save message to database (raw text, no normalization)
                 cursor.execute(
