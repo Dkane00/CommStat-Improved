@@ -764,9 +764,9 @@ class DatabaseManager:
                 # Build query based on whether we're showing all or filtering by groups
                 if show_all:
                     query = f"""
-                        SELECT db, datetime, freq, from_callsign, groupname, grid, prec, status,
-                               commpwr, pubwtr, med, ota, trav, net,
-                               fuel, food, crime, civil, political, comments, source
+                        SELECT db, datetime, freq, from_callsign, "group", grid, scope, map,
+                               power, water, med, telecom, travel, internet,
+                               fuel, food, crime, civil, political, comments, source, sr_id
                         FROM statrep
                         WHERE {date_condition}
                     """
@@ -776,11 +776,11 @@ class DatabaseManager:
                     groups_with_at = ["@" + g for g in groups]
                     placeholders = ",".join("?" * len(groups_with_at))
                     query = f"""
-                        SELECT db, datetime, freq, from_callsign, groupname, grid, prec, status,
-                               commpwr, pubwtr, med, ota, trav, net,
-                               fuel, food, crime, civil, political, comments, source
+                        SELECT db, datetime, freq, from_callsign, "group", grid, scope, map,
+                               power, water, med, telecom, travel, internet,
+                               fuel, food, crime, civil, political, comments, source, sr_id
                         FROM statrep
-                        WHERE groupname IN ({placeholders}) AND {date_condition}
+                        WHERE "group" IN ({placeholders}) AND {date_condition}
                     """
                     params = groups_with_at + date_params
 
@@ -1059,8 +1059,9 @@ class DatabaseManager:
                         freq DOUBLE,
                         db TEXT,
                         source INTEGER,
+                        alert_id TEXT,
                         from_callsign TEXT,
-                        groupname TEXT,
+                        "group" TEXT,
                         color INTEGER,
                         title TEXT,
                         message TEXT
@@ -1079,21 +1080,22 @@ class DatabaseManager:
                     CREATE TABLE IF NOT EXISTS statrep (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         datetime TEXT,
+                        date TEXT,
                         freq DOUBLE,
                         db INTEGER,
                         source INTEGER,
-                        SRid INTEGER,
+                        sr_id TEXT,
                         from_callsign TEXT,
-                        groupname TEXT,
+                        group TEXT,
                         grid TEXT,
-                        prec TEXT,
-                        status TEXT,
-                        commpwr TEXT,
-                        pubwtr TEXT,
+                        scope TEXT,
+                        map TEXT,
+                        power TEXT,
+                        water TEXT,
                         med TEXT,
-                        ota TEXT,
-                        trav TEXT,
-                        net TEXT,
+                        telecom TEXT,
+                        travel TEXT,
+                        internet TEXT,
                         fuel TEXT,
                         food TEXT,
                         crime TEXT,
@@ -1120,7 +1122,7 @@ class DatabaseManager:
                         freq DOUBLE,
                         db INTEGER,
                         source INTEGER,
-                        SRid INTEGER,
+                        msg_id TEXT,
                         from_callsign TEXT,
                         target TEXT,
                         message TEXT
@@ -2479,15 +2481,17 @@ class MainWindow(QtWidgets.QMainWindow):
             self,
             "Update Available",
             f"CommStat build {new_build} has been downloaded.\n\n"
-            f"Please restart the application to install the update.\n\n"
-            f"Restart now?",
+            f"Please close the application to install the update.\n\n"
+            f"Close CommStat now?",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             QtWidgets.QMessageBox.Yes
         )
 
         if reply == QtWidgets.QMessageBox.Yes:
-            # Close the application - startup.py will apply the update on next launch
-            QtWidgets.QApplication.quit()
+            # Close the application gracefully - this triggers closeEvent() which
+            # disconnects TCP connections and saves state
+            # startup.py will apply the update on next launch
+            self.close()
 
     def _parse_backbone_sections(self, content: str) -> dict:
         """Parse backbone reply content into hierarchical sections.
@@ -4206,6 +4210,28 @@ class MainWindow(QtWidgets.QMainWindow):
         # Update display
         self._update_feed_display()
 
+    def _generate_time_based_srid(self, utc_datetime: Optional[str] = None) -> str:
+        """
+        Generate a time-based SRid from UTC datetime string.
+
+        Args:
+            utc_datetime: Optional UTC datetime string in format "YYYY-MM-DD   HH:MM:SS"
+                         If None, uses current UTC time.
+
+        Returns:
+            3-character time-based ID (e.g., "A12", "Q47")
+        """
+        from id_utils import generate_time_based_id
+        from datetime import datetime, timezone
+
+        if utc_datetime:
+            # Parse datetime string (format: "YYYY-MM-DD   HH:MM:SS")
+            dt_str = utc_datetime.replace("   ", " ").strip()
+            dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            return generate_time_based_id(dt)
+        else:
+            return generate_time_based_id()
+
     def _process_directed_message(
         self,
         rig_name: str,
@@ -4250,8 +4276,8 @@ class MainWindow(QtWidgets.QMainWindow):
         MSG_FORWARDED_STATREP = "{F%}" # Forwarded status report (relayed)
         MSG_ALERT = "{%%}"             # Group alert
 
-        # Precedence levels indicate the geographic scope of a status report
-        PRECEDENCE_MAP = {
+        # Scope levels indicate the geographic scope of a status report
+        SCOPE_MAP = {
             "1": "My Location",
             "2": "My Community",
             "3": "My County",
@@ -4310,11 +4336,11 @@ class MainWindow(QtWidgets.QMainWindow):
                         if srcode == "+":
                             srcode = "111111111111"
 
-                        prec = PRECEDENCE_MAP.get(prec1, "Unknown")
+                        prec = SCOPE_MAP.get(prec1, "Unknown")
 
                         # StatRep code is 12 digits, each representing a condition:
-                        # [0]=status, [1]=commpwr, [2]=pubwtr, [3]=med, [4]=ota, [5]=trav
-                        # [6]=net, [7]=fuel, [8]=food, [9]=crime, [10]=civil, [11]=political
+                        # [0]=map, [1]=power, [2]=water, [3]=med, [4]=telecom, [5]=travel
+                        # [6]=internet, [7]=fuel, [8]=food, [9]=crime, [10]=civil, [11]=political
                         # Values: 1=Green, 2=Yellow, 3=Red, 4=Gray/Unknown
                         if len(srcode) >= 12:
                             sr_fields = list(srcode)
@@ -4322,8 +4348,8 @@ class MainWindow(QtWidgets.QMainWindow):
                             date_only = utc.split()[0] if utc else ""
                             cursor.execute(
                                 "INSERT OR IGNORE INTO statrep "
-                                "(datetime, date, freq, db, source, SRid, from_callsign, groupname, grid, prec, status, commpwr, pubwtr, "
-                                "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
+                                "(datetime, date, freq, db, source, SRid, from_callsign, group, grid, scope, map, power, water, "
+                                "med, telecom, travel, internet, fuel, food, crime, civil, political, comments) "
                                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                 (utc, date_only, freq, snr, 1, srid, callsign, group, curgrid, prec,
                                  sr_fields[0], sr_fields[1], sr_fields[2], sr_fields[3],
@@ -4378,7 +4404,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         if srcode == "+":
                             srcode = "111111111111"
 
-                        prec = PRECEDENCE_MAP.get(prec1, "Unknown")
+                        prec = SCOPE_MAP.get(prec1, "Unknown")
 
                         if len(srcode) >= 12:
                             sr_fields = list(srcode)
@@ -4386,8 +4412,8 @@ class MainWindow(QtWidgets.QMainWindow):
                             date_only = utc.split()[0] if utc else ""
                             cursor.execute(
                                 "INSERT OR IGNORE INTO statrep "
-                                "(datetime, date, freq, db, source, SRid, from_callsign, groupname, grid, prec, status, commpwr, pubwtr, "
-                                "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
+                                "(datetime, date, freq, db, source, SRid, from_callsign, group, grid, scope, map, power, water, "
+                                "med, telecom, travel, internet, fuel, food, crime, civil, political, comments) "
                                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                 (utc, date_only, freq, snr, 1, srid, callsign, group, curgrid, prec,
                                  sr_fields[0], sr_fields[1], sr_fields[2], sr_fields[3],
@@ -4405,8 +4431,6 @@ class MainWindow(QtWidgets.QMainWindow):
             # Note: MSG is optional
             # This must be checked before standard " MSG " to avoid false matches
             if "F!304" in value:
-                import random
-
                 # Check the pattern before "F!304" to determine if we should process
                 # Pattern: look at what comes before F!304
                 pre_msg = value.split("F!304")[0]
@@ -4429,7 +4453,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
                     # Parse the 8 digits
                     # Position 1 (digits[0]): Landline text
-                    # Position 2 (digits[1]): ota mapping
+                    # Position 2 (digits[1]): telecom mapping
                     ota_digit = int(digits[1])
                     if ota_digit == 1:
                         ota = "1"
@@ -4501,11 +4525,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     if not f304_group:
                         f304_group = "@ALL"
 
-                    # Generate random 3-digit SRid
-                    srid_f304 = random.randint(100, 999)
-
                     # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
                     date_only = utc.split()[0] if utc else ""
+
+                    # Generate time-based SRid from message datetime
+                    srid_f304 = self._generate_time_based_srid(utc)
 
                     # Calculate status based on sum of last 8 digits (all digits for F!304)
                     # Count 4 as 1, all others as face value
@@ -4527,22 +4551,22 @@ class MainWindow(QtWidgets.QMainWindow):
                     # Insert into statrep table
                     cursor.execute(
                         "INSERT OR IGNORE INTO statrep "
-                        "(datetime, date, freq, db, source, SRid, from_callsign, groupname, grid, prec, status, commpwr, pubwtr, "
-                        "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
+                        "(datetime, date, freq, db, source, sr_id, from_callsign, \"group\", grid, scope, map, power, water, "
+                        "med, telecom, travel, internet, fuel, food, crime, civil, political, comments) "
                         "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (utc, date_only, freq, snr, 1,
-                         srid_f304,      # SRid: random 3-digit number (100-999)
+                         srid_f304,      # SRid: unique 3-digit number for this date (100-999)
                          callsign,       # from_callsign
-                         f304_group,     # groupname
+                         f304_group,     # group
                          f304_grid,      # grid from message or sender's grid
-                         "My Location",  # prec: set to "My Location"
-                         f304_status,    # status: "1" if grid found in message, "4" if not
-                         commpw,         # commpwr
-                         pubwtr,         # pubwtr
+                         "My Location",  # scope: set to "My Location"
+                         f304_status,    # map: "1" if grid found in message, "4" if not
+                         commpw,         # power
+                         pubwtr,         # water
                          "4",            # med (hardcoded)
-                         ota,            # ota (mapped from digit 2)
-                         "4",            # trav (hardcoded)
-                         net,            # net
+                         ota,            # telecom (mapped from digit 2)
+                         "4",            # travel (hardcoded)
+                         net,            # internet
                          "4",            # fuel (hardcoded)
                          "4",            # food (hardcoded)
                          "4",            # crime (hardcoded)
@@ -4558,10 +4582,8 @@ class MainWindow(QtWidgets.QMainWindow):
             # Check for F!301 statrep format (BEFORE standard MSG check)
             # Format: [CALLSIGN:] [@GROUP|CALLSIGN] [MSG] F!301 {9 digits} {remainder text}
             # Note: MSG is optional
-            # First digit = precedence (1-5), remaining 8 digits same as F!304
+            # First digit = scope (1-5), remaining 8 digits same as F!304
             if "F!301" in value:
-                import random
-
                 # Check the pattern before "F!301" to determine if we should process
                 # Pattern: look at what comes before F!301
                 pre_msg = value.split("F!301")[0]
@@ -4583,13 +4605,13 @@ class MainWindow(QtWidgets.QMainWindow):
                     remainder = f301_pattern.group(2)   # Rest of message
 
                     # Parse the 9 digits
-                    # Position 1 (digits[0]): precedence (1-5, maps to PRECEDENCE_MAP)
+                    # Position 1 (digits[0]): scope (1-5, maps to SCOPE_MAP)
                     prec1 = digits[0]
-                    prec = PRECEDENCE_MAP.get(prec1, "Unknown")
+                    prec = SCOPE_MAP.get(prec1, "Unknown")
 
                     # Remaining 8 digits follow F!304 rules
                     # Position 2 (digits[1]): ignored (same as F!304 position 1)
-                    # Position 3 (digits[2]): ota mapping (same as F!304 position 2)
+                    # Position 3 (digits[2]): telecom mapping (same as F!304 position 2)
                     ota_digit = int(digits[2])
                     if ota_digit == 1:
                         ota = "1"
@@ -4659,11 +4681,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     if not f301_group:
                         f301_group = "@ALL"
 
-                    # Generate random 3-digit SRid
-                    srid_f301 = random.randint(100, 999)
-
                     # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
                     date_only = utc.split()[0] if utc else ""
+
+                    # Generate time-based SRid from message datetime
+                    srid_f301 = self._generate_time_based_srid(utc)
 
                     # Calculate status based on sum of last 8 digits (skip first precedence digit)
                     # Count 4 as 1, all others as face value
@@ -4685,22 +4707,22 @@ class MainWindow(QtWidgets.QMainWindow):
                     # Insert into statrep table
                     cursor.execute(
                         "INSERT OR IGNORE INTO statrep "
-                        "(datetime, date, freq, db, source, SRid, from_callsign, groupname, grid, prec, status, commpwr, pubwtr, "
-                        "med, ota, trav, net, fuel, food, crime, civil, political, comments) "
+                        "(datetime, date, freq, db, source, sr_id, from_callsign, \"group\", grid, scope, map, power, water, "
+                        "med, telecom, travel, internet, fuel, food, crime, civil, political, comments) "
                         "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (utc, date_only, freq, snr, 1,
-                         srid_f301,      # SRid: random 3-digit number (100-999)
+                         srid_f301,      # SRid: unique 3-digit number for this date (100-999)
                          callsign,       # from_callsign
-                         f301_group,     # groupname
+                         f301_group,     # group
                          f301_grid,      # grid from message or sender's grid
-                         prec,           # prec: from first digit (1-5) mapped to PRECEDENCE_MAP
-                         f301_status,    # status: "1" if grid found in message, "4" if not
-                         commpw,         # commpwr
-                         pubwtr,         # pubwtr
+                         prec,           # scope: from first digit (1-5) mapped to SCOPE_MAP
+                         f301_status,    # map: "1" if grid found in message, "4" if not
+                         commpw,         # power
+                         pubwtr,         # water
                          "4",            # med (hardcoded)
-                         ota,            # ota (mapped from digit 3)
-                         "4",            # trav (hardcoded)
-                         net,            # net
+                         ota,            # telecom (mapped from digit 3)
+                         "4",            # travel (hardcoded)
+                         net,            # internet
                          "4",            # fuel (hardcoded)
                          "4",            # food (hardcoded)
                          "4",            # crime (hardcoded)
@@ -4740,40 +4762,57 @@ class MainWindow(QtWidgets.QMainWindow):
                         # Apply smart title case to message (acronym detection)
                         message_text = smart_title_case(raw_message, abbreviations, self.config.get_apply_text_normalization())
 
+                        # Generate time-based alert ID
+                        from id_utils import generate_time_based_id
+                        from datetime import datetime, timezone
+                        dt_str = utc.replace("   ", " ").strip()
+                        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                        alert_id = generate_time_based_id(dt)
+                        date_only = dt_str.split()[0]  # Extract date portion
+
                         cursor.execute(
                             "INSERT INTO alerts "
-                            "(datetime, freq, db, source, from_callsign, groupname, color, title, message) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            (utc, freq, snr, 1, callsign, group, color, title, message_text)
+                            "(datetime, date, freq, db, source, alert_id, from_callsign, \"group\", color, title, message) "
+                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (utc, date_only, freq, snr, 1, alert_id, callsign, group, color, title, message_text)
                         )
                         conn.commit()
                         print(f"\033[91m[{rig_name}] Added Alert from: {callsign} - {title}\033[0m")
                         conn.close()
                         return "alert"
 
-            elif MSG_BULLETIN in value:
-                # Parse bulletin: ,ID,MESSAGE,{^%}
-                # Write to alerts table with null title
-                match = re.search(r',(.+?)\{\^\%\}', value)
-                if match:
-                    fields = match.group(1).split(",")
-                    if len(fields) >= 2:
-                        # Discard SRID (fields[0])
-                        # Join remaining fields and remove trailing comma
-                        raw_message = ",".join(fields[1:]).strip().rstrip(',')
-                        # Apply smart title case to message (acronym detection)
-                        message_text = smart_title_case(raw_message, abbreviations, self.config.get_apply_text_normalization())
-
-                        cursor.execute(
-                            "INSERT INTO alerts "
-                            "(datetime, freq, db, source, from_callsign, groupname, color, title, message) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            (utc, freq, snr, 1, callsign, group, 1, None, message_text)
-                        )
-                        conn.commit()
-                        print(f"\033[91m[{rig_name}] Added Bulletin Alert from: {callsign}\033[0m")
-                        conn.close()
-                        return "alert"
+            # DISABLED: Legacy bulletin processing (may be re-enabled later)
+            # elif MSG_BULLETIN in value:
+            #     # Parse bulletin: ,ID,MESSAGE,{^%}
+            #     # Write to alerts table with null title
+            #     match = re.search(r',(.+?)\{\^\%\}', value)
+            #     if match:
+            #         fields = match.group(1).split(",")
+            #         if len(fields) >= 2:
+            #             # Discard SRID (fields[0])
+            #             # Join remaining fields and remove trailing comma
+            #             raw_message = ",".join(fields[1:]).strip().rstrip(',')
+            #             # Apply smart title case to message (acronym detection)
+            #             message_text = smart_title_case(raw_message, abbreviations, self.config.get_apply_text_normalization())
+            #
+            #             # Generate time-based alert ID
+            #             from id_utils import generate_time_based_id
+            #             from datetime import datetime, timezone
+            #             dt_str = utc.replace("   ", " ").strip()
+            #             dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            #             alert_id = generate_time_based_id(dt)
+            #             date_only = dt_str.split()[0]  # Extract date portion
+            #
+            #             cursor.execute(
+            #                 "INSERT INTO alerts "
+            #                 "(datetime, date, freq, db, source, alert_id, from_callsign, \"group\", color, title, message) "
+            #                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            #                 (utc, date_only, freq, snr, 1, alert_id, callsign, group, 1, None, message_text)
+            #             )
+            #             conn.commit()
+            #             print(f"\033[91m[{rig_name}] Added Bulletin Alert from: {callsign}\033[0m")
+            #             conn.close()
+            #             return "alert"
 
             # =================================================================
             # Standard Message Processing (LOWEST PRIORITY)
@@ -4866,12 +4905,19 @@ class MainWindow(QtWidgets.QMainWindow):
                 # Strip leading and trailing spaces and commas
                 message_text = re.sub(r'[^ -~]+', '', message_text).strip(' ,')
 
+                # Generate time-based message ID
+                from id_utils import generate_time_based_id
+                from datetime import datetime, timezone
+                dt_str = utc.replace("   ", " ").strip()
+                dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                msg_id = generate_time_based_id(dt)
+
                 # Save message to database (raw text, no normalization)
                 cursor.execute(
                     "INSERT INTO messages "
-                    "(datetime, freq, db, source, SRid, from_callsign, target, message) "
+                    "(datetime, freq, db, source, msg_id, from_callsign, target, message) "
                     "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                    (utc, freq, snr, 1, "", callsign, target, message_text)
+                    (utc, freq, snr, 1, msg_id, callsign, target, message_text)
                 )
                 conn.commit()
                 print(f"\033[92m[{rig_name}] Added MSG from: {callsign} to: {to_call}\033[0m")

@@ -10,7 +10,6 @@ Allows creating and transmitting messages via JS8Call.
 
 import os
 import re
-import random
 import sqlite3
 from configparser import ConfigParser
 from typing import Optional, TYPE_CHECKING
@@ -500,20 +499,21 @@ class Ui_FormMessage:
             frequency: The frequency in Hz at the time of transmission.
         """
         now = QDateTime.currentDateTime()
-        date = now.toUTC().toString("yyyy-MM-dd HH:mm:ss")
+        datetime_str = now.toUTC().toString("yyyy-MM-dd HH:mm:ss")
+        date_only = now.toUTC().toString("yyyy-MM-dd")
 
         conn = sqlite3.connect(DATABASE_FILE)
         try:
             cur = conn.cursor()
             cur.execute(
                 "INSERT OR REPLACE INTO messages "
-                "(datetime, freq, db, source, SRid, from_callsign, target, message) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                (date, frequency, "", 1, self.msg_id, callsign, self.group_combo.currentText(), message)
+                "(datetime, date, freq, db, source, msg_id, from_callsign, target, message) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (datetime_str, date_only, frequency, 30, 1, self.msg_id, callsign, self.group_combo.currentText(), message)
             )
             conn.commit()
             freq_mhz = frequency / 1000000.0 if frequency else 0
-            print(f"{date}, {self.group_combo.currentText()}, {self.msg_id}, {callsign}, {message}, {freq_mhz:.6f} MHz")
+            print(f"{datetime_str}, {self.group_combo.currentText()}, {self.msg_id}, {callsign}, {message}, {freq_mhz:.6f} MHz")
         finally:
             conn.close()
 
@@ -625,23 +625,9 @@ class Ui_FormMessage:
             self._show_error(f"Failed to transmit message: {e}")
 
     def _generate_msg_id(self) -> None:
-        """Generate a unique message ID that doesn't exist in the database."""
-        self.msg_id = str(random.randint(100, 999))
-
-        try:
-            conn = sqlite3.connect(DATABASE_FILE)
-            cursor = conn.cursor()
-            cursor.execute("SELECT SRid FROM messages")
-            existing_ids = [str(row[0]) for row in cursor.fetchall()]
-            cursor.close()
-            conn.close()
-
-            if self.msg_id in existing_ids:
-                # ID already exists, generate a new one
-                self._generate_msg_id()
-
-        except sqlite3.Error as error:
-            print(f"Failed to read data from sqlite table: {error}")
+        """Generate a time-based message ID from current UTC time."""
+        from id_utils import generate_time_based_id
+        self.msg_id = generate_time_based_id()
 
 
 if __name__ == "__main__":

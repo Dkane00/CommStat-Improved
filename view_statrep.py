@@ -19,7 +19,7 @@ class StatRepDialog(QDialog):
         self.setupUi()
 
     def setupUi(self):
-        self.setWindowTitle(f"CommStat - StatRep Details (SRid: {self.srid})")
+        self.setWindowTitle(f"CommStat - StatRep Details (sr_id: {self.srid})")
         self.setMinimumSize(560, 600)
         self.resize(650, 600)
         self.setStyleSheet("background-color: rgb(255, 255, 255);")
@@ -67,15 +67,15 @@ class StatRepDialog(QDialog):
         callsign_label.setAlignment(Qt.AlignRight)
         form_layout.addWidget(callsign_label, 1, 0)
         form_layout.addWidget(self.callsign_label, 1, 1)
-        self.prec_label = QLabel()
-        self.prec_label.setFont(font)
-        self.prec_label.setStyleSheet(label_style)
-        prec_label = QLabel("Scope:")
-        prec_label.setFont(font_bold)
-        prec_label.setStyleSheet(label_style)
-        prec_label.setAlignment(Qt.AlignRight)
-        form_layout.addWidget(prec_label, 2, 0)
-        form_layout.addWidget(self.prec_label, 2, 1)
+        self.scope_label = QLabel()
+        self.scope_label.setFont(font)
+        self.scope_label.setStyleSheet(label_style)
+        scope_label = QLabel("Scope:")
+        scope_label.setFont(font_bold)
+        scope_label.setStyleSheet(label_style)
+        scope_label.setAlignment(Qt.AlignRight)
+        form_layout.addWidget(scope_label, 2, 0)
+        form_layout.addWidget(self.scope_label, 2, 1)
         self.srid_label = QLabel()
         self.srid_label.setFont(font)
         self.srid_label.setStyleSheet(label_style)
@@ -105,13 +105,13 @@ class StatRepDialog(QDialog):
         grid_layout.setHorizontalSpacing(10)
         grid_layout.setVerticalSpacing(3)
         situational_fields = [
-            ("Map Pin", "status"),
-            ("Pow", "commpwr"),
-            ("H2O", "pubwtr"),
+            ("Map Pin", "map"),
+            ("Pow", "power"),
+            ("H2O", "water"),
             ("Med", "med"),
-            ("Com", "ota"),
-            ("Trv", "trav"),
-            ("Int", "net"),
+            ("Com", "telecom"),
+            ("Trv", "travel"),
+            ("Int", "internet"),
             ("Fuel", "fuel"),
             ("Food", "food"),
             ("Cri", "crime"),
@@ -195,8 +195,8 @@ class StatRepDialog(QDialog):
         try:
             with sqlite3.connect('traffic.db3', timeout=10) as connection:
                 cursor = connection.cursor()
-                query = ("SELECT datetime, SRid, from_callsign, grid, prec, status, commpwr, pubwtr, med, ota, trav, net, "
-                         "fuel, food, crime, civil, political, comments FROM statrep WHERE SRid = ?")
+                query = ("SELECT datetime, sr_id, from_callsign, grid, scope, map, power, water, med, telecom, travel, internet, "
+                         "fuel, food, crime, civil, political, comments FROM statrep WHERE sr_id = ?")
                 cursor.execute(query, (self.srid,))
                 result = cursor.fetchone()
                 if result:
@@ -204,8 +204,8 @@ class StatRepDialog(QDialog):
                     self.srid_label.setText(str(result[1]))
                     self.callsign_label.setText(str(result[2]))
                     self.grid_label.setText(str(result[3]))
-                    self.prec_label.setText(str(result[4]))
-                    for idx, field in enumerate(["status", "commpwr", "pubwtr", "med", "ota", "trav", "net", "fuel",
+                    self.scope_label.setText(str(result[4]))
+                    for idx, field in enumerate(["map", "power", "water", "med", "telecom", "travel", "internet", "fuel",
                                                "food", "crime", "civil", "political"]):
                         value = str(result[5 + idx])
                         label = self.situational_labels[field]
@@ -355,7 +355,7 @@ class StatRepDialog(QDialog):
                         decoded_html = "<p>No Brevity found</p>"
                     self.brevity_text.setHtml(decoded_html)
                 else:
-                    QtWidgets.QMessageBox.critical(self, "Error", f"No StatRep found with SRid: {self.srid}")
+                    QtWidgets.QMessageBox.critical(self, "Error", f"No StatRep found with sr_id: {self.srid}")
                     self.close()
         except sqlite3.Error as error:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load StatRep data: {error}")
@@ -368,16 +368,16 @@ class StatRepDialog(QDialog):
                 "ID": self.srid_label.text(),
                 "Callsign": self.callsign_label.text(),
                 "Grid": self.grid_label.text(),
-                "Scope": self.prec_label.text()
+                "Scope": self.scope_label.text()
             }
             situational_status = [
-                ("Map Pin", self.situational_values.get("status", "")),
-                ("Pow", self.situational_values.get("commpwr", "")),
-                ("H2O", self.situational_values.get("pubwtr", "")),
+                ("Map Pin", self.situational_values.get("map", "")),
+                ("Pow", self.situational_values.get("power", "")),
+                ("H2O", self.situational_values.get("water", "")),
                 ("Med", self.situational_values.get("med", "")),
-                ("Com", self.situational_values.get("ota", "")),
-                ("Trv", self.situational_values.get("trav", "")),
-                ("Int", self.situational_values.get("net", "")),
+                ("Com", self.situational_values.get("telecom", "")),
+                ("Trv", self.situational_values.get("travel", "")),
+                ("Int", self.situational_values.get("internet", "")),
                 ("Fuel", self.situational_values.get("fuel", "")),
                 ("Food", self.situational_values.get("food", "")),
                 ("Cri", self.situational_values.get("crime", "")),
@@ -395,7 +395,7 @@ class StatRepDialog(QDialog):
             <!DOCTYPE html>
             <html>
             <head>
-                <title>CommStat - StatRep Details (SRid: {self.srid})</title>
+                <title>CommStat - StatRep Details (sr_id: {self.srid})</title>
                 <style>
                     body {{ font-family: Arial, sans-serif; margin: 20px; }}
                     h1 {{ color: #008000; text-align: center; }}
@@ -415,7 +415,7 @@ class StatRepDialog(QDialog):
                 </style>
             </head>
             <body>
-                <h1>CommStat - StatRep Details (SRid: {self.srid})</h1>
+                <h1>CommStat - StatRep Details (sr_id: {self.srid})</h1>
                 <h2>General Information</h2>
                 <table>
                     <tr><th>Date Time UTC</th><td>{general_info['Date Time UTC']}</td></tr>
@@ -473,7 +473,7 @@ class StatRepDialog(QDialog):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Error: SRid not provided")
+        print("Error: sr_id not provided")
         sys.exit(1)
     app = QtWidgets.QApplication(sys.argv)
     dialog = StatRepDialog(sys.argv[1])

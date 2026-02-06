@@ -10,7 +10,6 @@ Allows creating and transmitting AMRRON Status Reports via JS8Call.
 
 import os
 import re
-import random
 import sqlite3
 from typing import Optional, Dict, List, TYPE_CHECKING
 from dataclasses import dataclass
@@ -55,6 +54,7 @@ SCOPE_OPTIONS = [
 ]
 
 # Status categories in display order (label, internal_name)
+# Note: internal_name is used as dictionary key in the form, not the DB column name
 STATUS_CATEGORIES = [
     ("Overall Status", "status"),
     ("Power", "power"),
@@ -379,20 +379,9 @@ class StatRepDialog(QDialog):
         self.grid = text.upper()
 
     def _generate_statrep_id(self) -> None:
-        """Generate a unique StatRep ID that doesn't exist in the database."""
-        self.statrep_id = str(random.randint(100, 999))
-
-        try:
-            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT SRid FROM statrep")
-                existing_ids = [str(row[0]) for row in cursor.fetchall()]
-
-                while self.statrep_id in existing_ids:
-                    self.statrep_id = str(random.randint(100, 999))
-
-        except sqlite3.Error as e:
-            print(f"Database error generating StatRep ID: {e}")
+        """Generate a time-based StatRep ID from current UTC time."""
+        from id_utils import generate_time_based_id
+        self.statrep_id = generate_time_based_id()
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
@@ -769,37 +758,40 @@ class StatRepDialog(QDialog):
 
         now = QDateTime.currentDateTimeUtc()
         date = now.toString("yyyy-MM-dd HH:mm:ss")
+        date_only = now.toString("yyyy-MM-dd")
 
         try:
             with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO statrep(
-                        datetime, freq, source, SRid, from_callsign, groupname, grid, prec,
-                        status, commpwr, pubwtr, med, ota, trav, net,
+                        datetime, date, freq, db, source, sr_id, from_callsign, "group", grid, scope,
+                        map, power, water, med, telecom, travel, internet,
                         fuel, food, crime, civil, political, comments
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     date,
+                    date_only,
                     frequency,
+                    30,  # db (SNR): set to 30 for manual entries
                     1,  # source: 1=Radio, 2=Internet
                     self.statrep_id,
                     self.callsign.upper(),
                     '@' + self.to_combo.currentText().upper(),
                     self.grid.upper(),
                     scope_text,
-                    values["status"],
-                    values["power"],
-                    values["water"],
-                    values["medical"],
-                    values["comms"],
-                    values["travel"],
-                    values["internet"],
-                    values["fuel"],
-                    values["food"],
-                    values["crime"],
-                    values["civil"],
-                    values["political"],
+                    values["status"],      # -> map column
+                    values["power"],       # -> power column
+                    values["water"],       # -> water column
+                    values["medical"],     # -> med column
+                    values["comms"],       # -> telecom column
+                    values["travel"],      # -> travel column
+                    values["internet"],    # -> internet column
+                    values["fuel"],        # -> fuel column
+                    values["food"],        # -> food column
+                    values["crime"],       # -> crime column
+                    values["civil"],       # -> civil column
+                    values["political"],   # -> political column
                     remarks,
                 ))
                 conn.commit()

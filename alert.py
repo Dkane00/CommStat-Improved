@@ -184,6 +184,11 @@ class Ui_FormAlert:
         for name, value, bg_color, text_color in COLOR_OPTIONS:
             self.color_combo.addItem(name, value)
 
+        # Set default color to 1 (Red/Emergency) and hide color selection
+        self.color_combo.setCurrentIndex(0)  # Index 0 = color value 1
+        self.color_label.hide()
+        self.color_combo.hide()
+
         # Color sample boxes (80x28 each, with "Sample" text)
         sample_start_x = 310
         sample_y = 152
@@ -211,6 +216,7 @@ class Ui_FormAlert:
             """)
             sample.setObjectName(f"color_sample_{name.lower()}")
             self.color_samples.append(sample)
+            sample.hide()  # Hide color samples
 
         # Title input
         self.title_input_label = QtWidgets.QLabel(FormAlert)
@@ -547,9 +553,9 @@ class Ui_FormAlert:
     def _build_message(self, callsign: str, color: int, title: str, message: str) -> str:
         """Build the message string for transmission."""
         group = "@" + self.group_combo.currentText()
-        return f"{callsign}: {group} LRT ,{color},{title},{message},{{%%}}"
+        return f"{callsign}: {group} ,{color},{title},{message},{{%%}}"
 
-    def _save_to_database(self, callsign: str, color: int, title: str, message: str, frequency: int = 0, db: str = "") -> None:
+    def _save_to_database(self, callsign: str, color: int, title: str, message: str, frequency: int = 0, db: int = 30) -> None:
         """Save alert to database.
 
         Args:
@@ -558,24 +564,28 @@ class Ui_FormAlert:
             title: The alert title.
             message: The alert message content.
             frequency: The frequency in Hz at the time of transmission.
-            db: Signal strength in decibels.
+            db: Signal strength in decibels (default 30 for manual entries).
         """
         now = QDateTime.currentDateTime()
-        date = now.toUTC().toString("yyyy-MM-dd HH:mm:ss")
+        datetime_str = now.toUTC().toString("yyyy-MM-dd HH:mm:ss")
+        date_only = now.toUTC().toString("yyyy-MM-dd")
         group = self.group_combo.currentText()
+
+        from id_utils import generate_time_based_id
+        alert_id = generate_time_based_id()
 
         conn = sqlite3.connect(DATABASE_FILE)
         try:
             cur = conn.cursor()
             cur.execute(
                 "INSERT INTO alerts "
-                "(datetime, freq, db, from_callsign, groupname, color, title, message) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                (date, frequency, db, callsign, group, color, title, message)
+                "(datetime, date, freq, db, source, alert_id, from_callsign, \"group\", color, title, message) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (datetime_str, date_only, frequency, db, 1, alert_id, callsign, group, color, title, message)
             )
             conn.commit()
             freq_mhz = frequency / 1000000.0 if frequency else 0
-            print(f"[Alert] Saved: {date}, {group}, {callsign}, color={color}, title={title}, {freq_mhz:.6f} MHz")
+            print(f"[Alert] Saved: {datetime_str}, {group}, {alert_id}, {callsign}, color={color}, title={title}, {freq_mhz:.6f} MHz")
         finally:
             conn.close()
 
