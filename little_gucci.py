@@ -27,6 +27,7 @@ import tempfile
 import webbrowser
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 from configparser import ConfigParser
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, Set
@@ -571,30 +572,92 @@ class RSSFetcher:
 
             # Parse RSS XML
             root = ET.fromstring(content)
-            headlines = []
+            articles = []  # List of (title, pubdate_datetime) tuples
+            now = datetime.now(timezone.utc)
+            cutoff_time = now - timedelta(hours=6)
 
             # Try RSS 2.0 format first (most common)
             for item in root.findall('.//item'):
-                title = item.find('title')
-                if title is not None and title.text:
-                    headlines.append(title.text.strip())
+                title_elem = item.find('title')
+                pubdate_elem = item.find('pubDate')
+
+                if title_elem is not None and title_elem.text:
+                    title = title_elem.text.strip()
+                    pub_date = None
+
+                    # Parse publication date
+                    if pubdate_elem is not None and pubdate_elem.text:
+                        try:
+                            pub_date = parsedate_to_datetime(pubdate_elem.text)
+                            # Filter out articles older than 6 hours
+                            if pub_date < cutoff_time:
+                                continue
+                        except Exception:
+                            # If date parsing fails, include the article anyway
+                            pub_date = None
+
+                    articles.append((title, pub_date))
 
             # Try Atom format if no RSS items found
-            if not headlines:
+            if not articles:
                 # Atom uses namespace
                 ns = {'atom': 'http://www.w3.org/2005/Atom'}
                 for entry in root.findall('.//atom:entry', ns):
-                    title = entry.find('atom:title', ns)
-                    if title is not None and title.text:
-                        headlines.append(title.text.strip())
+                    title_elem = entry.find('atom:title', ns)
+                    published_elem = entry.find('atom:published', ns) or entry.find('atom:updated', ns)
+
+                    if title_elem is not None and title_elem.text:
+                        title = title_elem.text.strip()
+                        pub_date = None
+
+                        # Parse publication date
+                        if published_elem is not None and published_elem.text:
+                            try:
+                                # Atom uses ISO 8601 format
+                                pub_date = datetime.fromisoformat(published_elem.text.replace('Z', '+00:00'))
+                                # Filter out articles older than 6 hours
+                                if pub_date < cutoff_time:
+                                    continue
+                            except Exception:
+                                pub_date = None
+
+                        articles.append((title, pub_date))
 
                 # Also try without namespace
-                for entry in root.findall('.//entry'):
-                    title = entry.find('title')
-                    if title is not None and title.text:
-                        headlines.append(title.text.strip())
+                if not articles:
+                    for entry in root.findall('.//entry'):
+                        title_elem = entry.find('title')
+                        published_elem = entry.find('published') or entry.find('updated')
 
-            self._headlines = headlines[:20]  # Limit to 20 headlines
+                        if title_elem is not None and title_elem.text:
+                            title = title_elem.text.strip()
+                            pub_date = None
+
+                            if published_elem is not None and published_elem.text:
+                                try:
+                                    pub_date = datetime.fromisoformat(published_elem.text.replace('Z', '+00:00'))
+                                    if pub_date < cutoff_time:
+                                        continue
+                                except Exception:
+                                    pub_date = None
+
+                            articles.append((title, pub_date))
+
+            # Sort by date (newest first), articles without dates go to end
+            articles.sort(key=lambda x: x[1] if x[1] else datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+            # Format headlines with timestamps
+            headlines = []
+            for title, pub_date in articles[:20]:  # Limit to 20 headlines
+                if pub_date:
+                    # Convert to UTC for display
+                    utc_time = pub_date.astimezone(timezone.utc)
+                    time_str = utc_time.strftime('%H:%M UTC')
+                    headlines.append(f"{title} - {time_str}")
+                else:
+                    headlines.append(title)
+
+            self._headlines = headlines
             self._cache_time = datetime.now()
 
         except Exception as e:
