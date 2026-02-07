@@ -93,7 +93,7 @@ class Ui_FormAlert:
 
         # Set font
         font = QtGui.QFont()
-        font.setFamily("Arial")
+        font.setFamily("Roboto")
         font.setPointSize(12)
         FormAlert.setFont(font)
 
@@ -105,7 +105,7 @@ class Ui_FormAlert:
         # Title
         self.title_label = QtWidgets.QLabel(FormAlert)
         self.title_label.setGeometry(QtCore.QRect(58, 10, 400, 30))
-        title_font = QtGui.QFont("Arial", 16, QtGui.QFont.Bold)
+        title_font = QtGui.QFont("Roboto", 16, QtGui.QFont.Bold)
         self.title_label.setFont(title_font)
         self.title_label.setText("CommStat Group Alert")
         self.title_label.setStyleSheet("color: #333;")

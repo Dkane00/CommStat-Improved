@@ -4952,6 +4952,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     r'^@?\w+\s+CQ\b',
                     r'^@?\w+\s+GRID\b',
                     r'^@?\w+\s+SNR\b',
+                    r'^@?\w+:\s+@?\w+\s+SNR\b',  # Format: "NY5V: KS2H SNR -09"
+                    r'^@?\w+:\s+@?\w+\s+SNR\?',  # Format: "KS2H: @AMRRON SNR?"
+                    r'\bSNR\s+[-+]?\d+\b',        # Format: "SNR -09" or "SNR +01"
                     r'^@?\w+\s+INFO\b',
                     r'^@?\w+\s+STATUS\b',
                     r'^@?\w+\s+HEARING\b',
