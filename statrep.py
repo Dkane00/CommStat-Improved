@@ -180,7 +180,6 @@ class StatRepDialog(QDialog):
 
         # Load config and generate ID
         self._load_config()
-        self._ensure_backbone_config_exists()
         self._generate_statrep_id()
 
         # Build UI

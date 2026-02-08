@@ -60,6 +60,7 @@ from statrep import StatRepDialog
 from connector_manager import ConnectorManager
 from js8_tcp_client import TCPConnectionPool
 from js8_connectors import JS8ConnectorsDialog
+from id_utils import generate_time_based_id
 
 
 # =============================================================================
@@ -91,6 +92,14 @@ _PING = _BACKBONE + "/heartbeat-808585.php"
 
 # Internet connectivity check interval (30 minutes in ms)
 INTERNET_CHECK_INTERVAL = 30 * 60 * 1000
+
+
+class ConsoleColors:
+    """ANSI color codes for console output."""
+    SUCCESS = "\033[92m"  # Green
+    WARNING = "\033[93m"  # Yellow
+    ERROR = "\033[91m"    # Red
+    RESET = "\033[0m"
 
 
 def check_internet() -> bool:
@@ -253,6 +262,215 @@ def smart_title_case(text: str, abbreviations: Dict[str, str] = None, apply_norm
             result.append(word.capitalize())
 
     return ' '.join(result)
+
+
+# =============================================================================
+# STATREP Parsing Helper Functions
+# =============================================================================
+
+def strip_duplicate_callsign(value: str, from_call: str) -> str:
+    """
+    Remove duplicate callsign from message value if present.
+
+    JS8Call bug causes: "W8APP: W8APP: @GROUP ..." instead of "W8APP: @GROUP ..."
+    Must handle both formats since most users still have the buggy version.
+
+    Args:
+        value: Message text from JS8Call TCP stream
+        from_call: Sender callsign from JSON params (may include /P suffix)
+
+    Returns:
+        Cleaned message text with duplicate removed
+    """
+    # Extract base callsign (remove /P, /M suffixes)
+    base_call = from_call.split("/")[0] if from_call else ""
+    if not base_call:
+        return value
+
+    # Pattern: "CALLSIGN: CALLSIGN: remainder"
+    # Use word boundary to avoid partial matches
+    pattern = rf'\b{re.escape(base_call)}\s*:\s*{re.escape(base_call)}\s*:\s*'
+    if re.match(pattern, value, re.IGNORECASE):
+        # Remove first occurrence, keep second
+        value = re.sub(pattern, f'{base_call}: ', value, count=1, flags=re.IGNORECASE)
+
+    return value
+
+
+def sanitize_ascii(text: str) -> str:
+    """
+    Remove non-ASCII characters (keep only printable ASCII 32-126).
+
+    Args:
+        text: Input text
+
+    Returns:
+        Sanitized text with only printable ASCII characters
+    """
+    return re.sub(r'[^ -~]+', '', text).strip()
+
+
+def parse_message_datetime(utc: str) -> tuple:
+    """
+    Parse UTC timestamp and generate time-based ID.
+
+    Args:
+        utc: UTC timestamp string (format: "YYYY-MM-DD   HH:MM:SS" or "YYYY-MM-DD HH:MM:SS")
+
+    Returns:
+        (date_only_str, time_based_id)
+    """
+    dt_str = utc.replace("   ", " ").strip()
+    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    date_only = utc.split()[0] if utc else ""
+    msg_id = generate_time_based_id(dt)
+
+    return (date_only, msg_id)
+
+
+def expand_plus_shorthand(srcode: str) -> str:
+    """Expand '+' shorthand to '111111111111' (all green status)."""
+    return "111111111111" if srcode == "+" else srcode
+
+
+def extract_grid_from_text(text: str, default_grid: str) -> tuple:
+    """
+    Extract Maidenhead grid square from text.
+
+    Returns:
+        (grid_square, found_in_message)
+    """
+    # Pattern: 2 letters + 2 digits + optional 2 alphanumeric (e.g., EM15, EM15at)
+    match = re.search(r'\b([A-Z]{2}\d{2}[A-Z0-9]{0,2})\b', text, re.IGNORECASE)
+    if match:
+        return (match.group(1).upper(), True)
+    return (default_grid, False)
+
+
+def format_statrep_comments(raw_comments: str, abbreviations: dict, apply_norm: bool) -> str:
+    """
+    Format STATREP comments: apply smart title case and filter non-ASCII.
+
+    Args:
+        raw_comments: Raw comment text
+        abbreviations: Dictionary of known abbreviations for smart_title_case
+        apply_norm: Whether to apply text normalization
+
+    Returns:
+        Formatted comments string
+    """
+    if not raw_comments:
+        return ""
+
+    # Apply smart title case (preserves acronyms)
+    formatted = smart_title_case(raw_comments, abbreviations, apply_norm) if raw_comments else ""
+
+    # Remove non-ASCII characters (keep only space through tilde: ASCII 32-126)
+    formatted = re.sub(r'[^ -~]+', '', formatted).strip()
+
+    return formatted
+
+
+# REMOVED: extract_group_from_message() - Function was never called in codebase
+# Group extraction is now handled directly in message processing handlers
+
+
+def calculate_f304_status(digits: str, grid_found: bool) -> str:
+    """
+    Calculate map status for F!304/F!301 based on digit score.
+
+    Rules:
+    - Count 4 as 1, all others as face value
+    - Score > 12: Red (3)
+    - Score > 10: Yellow (2)
+    - Grid found: Green (1)
+    - Else: Unknown (4)
+    """
+    digit_score = sum(1 if int(d) == 4 else int(d) for d in digits)
+
+    if digit_score > 12:
+        return "3"
+    elif digit_score > 10:
+        return "2"
+    elif grid_found:
+        return "1"
+    else:
+        return "4"
+
+
+def map_f304_digits_to_fields(digits: str) -> dict:
+    """
+    Map 8-digit F!304 format to database fields.
+
+    Digit positions:
+    [0]=Landline, [1]=Telecom, [2]=AM/FM/TV, [3]=Internet,
+    [4]=Water, [5]=Power, [6]=Nat Gas, [7]=NOAA
+
+    Returns dict with: power, water, telecom, internet, and comment parts
+    """
+    # Direct mappings
+    commpw = digits[5]  # Commercial power
+    pubwtr = digits[4]  # Public water
+    net = digits[3]     # Internet
+
+    # Telecom mapping (position 1)
+    ota_digit = int(digits[1])
+    if ota_digit == 1:
+        ota = "1"
+    elif ota_digit in [2, 3]:
+        ota = "2"
+    elif ota_digit == 4:
+        ota = "3"
+    else:
+        ota = "4"
+
+    # Comment additions (fields not in 12-digit format)
+    YESNO_MAP = {1: "Yes", 2: "Limited", 3: "No", 4: "Unknown"}
+    landline = YESNO_MAP.get(int(digits[0]), "Unknown")
+    amfmtv = YESNO_MAP.get(int(digits[2]), "Unknown")
+    natgas = YESNO_MAP.get(int(digits[6]), "Unknown")
+    noaa = YESNO_MAP.get(int(digits[7]), "Unknown")
+
+    return {
+        'power': commpw,
+        'water': pubwtr,
+        'telecom': ota,
+        'internet': net,
+        'comment_parts': [
+            f"Landline = {landline}",
+            f"AM/FM/TV = {amfmtv}",
+            f"Nat Gas = {natgas}",
+            f"NOAA = {noaa}"
+        ]
+    }
+
+
+def map_f301_digits_to_fields(digits: str) -> dict:
+    """
+    Map 9-digit F!301 format to database fields.
+
+    First digit = scope (1-5), remaining 8 follow F!304 rules.
+
+    Returns dict with: scope, power, water, telecom, internet, and comment parts
+    """
+    # Scope mapping
+    SCOPE_MAP = {
+        "1": "My Location",
+        "2": "My Community",
+        "3": "My County",
+        "4": "My Region",
+        "5": "Other Location"
+    }
+    scope = SCOPE_MAP.get(digits[0], "Unknown")
+
+    # Remaining 8 digits follow F!304 format
+    f304_fields = map_f304_digits_to_fields(digits[1:])
+
+    # F!301 doesn't include Landline in comments
+    f304_fields['comment_parts'] = f304_fields['comment_parts'][1:]  # Skip Landline
+    f304_fields['scope'] = scope
+
+    return f304_fields
 
 
 # StatRep table column headers
@@ -2218,6 +2436,196 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"[QRZ] Error looking up {callsign}: {e}")
             return None
 
+    def _resolve_grid(
+        self,
+        rig_name: str,
+        grid: str,
+        callsign: str,
+        fallback_grid: str = "",
+        msg_format: str = ""
+    ) -> str:
+        """
+        Resolve grid square with QRZ fallback if needed.
+
+        Args:
+            rig_name: Rig identifier for logging
+            grid: Primary grid square (may be empty/invalid)
+            callsign: Callsign to lookup if grid is missing
+            fallback_grid: Grid to use if QRZ lookup fails
+            msg_format: Message format for logging (e.g., "STATREP", "F!304")
+
+        Returns:
+            Valid grid square or fallback
+        """
+        # If valid grid provided, use it
+        if grid and len(grid) >= 4:
+            return grid
+
+        # Try QRZ lookup
+        prefix = f"[{rig_name}] {msg_format}: " if msg_format else f"[{rig_name}] "
+        print(f"{prefix}Missing/invalid grid, attempting QRZ lookup for {callsign}")
+
+        qrz_grid = self._lookup_grid_for_callsign(callsign)
+        if qrz_grid:
+            print(f"{prefix}Found grid {qrz_grid} via QRZ for {callsign}")
+            return qrz_grid
+
+        print(f"{prefix}QRZ lookup failed, using fallback grid")
+        return fallback_grid if fallback_grid else ""
+
+    def _insert_message_data(
+        self,
+        rig_name: str,
+        table: str,
+        data: dict,
+        id_field: str,
+        msg_type: str,
+        from_callsign: str,
+        extra_info: str = ""
+    ) -> str:
+        """
+        Generic database insert with standardized error handling.
+
+        Args:
+            rig_name: Rig identifier for logging
+            table: Database table name
+            data: Dict of column_name: value pairs
+            id_field: Name of the ID field for duplicate detection
+            msg_type: Return value on success (e.g., "statrep", "message")
+            from_callsign: Sender callsign for logging
+            extra_info: Optional extra info for success message (e.g., " (FORWARDED)")
+
+        Returns:
+            msg_type on success, empty string on failure
+        """
+        try:
+            conn = sqlite3.connect(DATABASE_FILE, timeout=10)
+            cursor = conn.cursor()
+
+            # Build INSERT statement
+            columns = ", ".join(data.keys())
+            placeholders = ", ".join(["?" for _ in data])
+            query = f"INSERT INTO {table} ({columns}) VALUES({placeholders})"
+
+            cursor.execute(query, tuple(data.values()))
+            conn.commit()
+
+            print(f"{ConsoleColors.SUCCESS}[{rig_name}] Added {msg_type.upper()}{extra_info} from: {from_callsign}{ConsoleColors.RESET}")
+            conn.close()
+            return msg_type
+
+        except sqlite3.IntegrityError as e:
+            if id_field in str(e) or "UNIQUE" in str(e):
+                id_val = data.get(id_field, "unknown")
+                print(f"{ConsoleColors.WARNING}[{rig_name}] WARNING: Duplicate {msg_type} ID {id_val} from {from_callsign} - skipping{ConsoleColors.RESET}")
+            else:
+                print(f"{ConsoleColors.WARNING}[{rig_name}] WARNING: Database constraint violation: {e}{ConsoleColors.RESET}")
+        except sqlite3.Error as e:
+            print(f"{ConsoleColors.ERROR}[{rig_name}] ERROR: {msg_type.capitalize()} database insert failed for {from_callsign}: {e}{ConsoleColors.RESET}")
+        finally:
+            if 'conn' in locals():
+                conn.close()
+
+        return ""
+
+    def _process_fcode_statrep(
+        self,
+        rig_name: str,
+        value: str,
+        from_callsign: str,
+        target: str,
+        grid: str,
+        freq: int,
+        snr: int,
+        utc: str,
+        format_code: str  # "F!304" or "F!301"
+    ) -> str:
+        """
+        Process F!304 or F!301 STATREP format messages.
+
+        Args:
+            format_code: "F!304" (8 digits) or "F!301" (9 digits)
+
+        Returns:
+            "statrep" on success, empty string on failure
+        """
+        # Determine pattern based on format
+        digit_count = 8 if format_code == "F!304" else 9
+        pattern = rf'{format_code}\s+(\d{{{digit_count}}})\s*(.*?)(?:>])?$'
+
+        match = re.search(pattern, value, re.IGNORECASE)
+        if not match:
+            return ""
+
+        digits = match.group(1)
+        remainder = match.group(2)
+
+        # Map digits to fields
+        if format_code == "F!304":
+            field_map = map_f304_digits_to_fields(digits)
+            scope = "My Location"
+            status_digits = digits
+        else:  # F!301
+            field_map = map_f301_digits_to_fields(digits)
+            scope = field_map['scope']
+            status_digits = digits[1:]  # Skip scope digit
+
+        # Extract grid from remainder, then try parameter grid, then QRZ
+        fcode_grid, grid_found = extract_grid_from_text(remainder, grid)
+        fcode_grid = self._resolve_grid(rig_name, fcode_grid, from_callsign, grid, format_code)
+        grid_found = bool(fcode_grid and len(fcode_grid) >= 4)
+
+        # Remove grid from remainder if found in text
+        if grid_found and remainder:
+            remainder = re.sub(r'\b[A-Z]{2}\d{2}[A-Z0-9]{0,2}\b', '', remainder, count=1, flags=re.IGNORECASE).strip()
+
+        # Build comments
+        comment_parts = [format_code] + field_map['comment_parts']
+        comments = ", ".join(comment_parts)
+        if remainder.strip():
+            comments += f" - {remainder.strip()}"
+        comments = sanitize_ascii(comments)
+
+        # Calculate status
+        fcode_status = calculate_f304_status(status_digits, grid_found)
+
+        # Generate ID and extract date
+        date_only, srid = parse_message_datetime(utc)
+
+        # Default group
+        fcode_group = target if target else "@ALL"
+
+        # Build data dict for insertion
+        data = {
+            'datetime': utc,
+            'date': date_only,
+            'freq': freq,
+            'db': snr,
+            'source': 1,
+            'sr_id': srid,
+            'from_callsign': from_callsign,
+            'target': fcode_group,
+            'grid': fcode_grid,
+            'scope': scope,
+            'map': fcode_status,
+            'power': field_map['power'],
+            'water': field_map['water'],
+            'med': "4",
+            'telecom': field_map['telecom'],
+            'travel': "4",
+            'internet': field_map['internet'],
+            'fuel': "4",
+            'food': "4",
+            'crime': "4",
+            'civil': "4",
+            'political': "4",
+            'comments': comments
+        }
+
+        return self._insert_message_data(
+            rig_name, "statrep", data, "sr_id", "statrep", from_callsign
+        )
+
     def _handle_backbone_data_messages(self, content: str) -> bool:
         """Handle backbone server data messages with ID prefixes.
 
@@ -2486,14 +2894,45 @@ class MainWindow(QtWidgets.QMainWindow):
                         if target:
                             message_clean = message_value.replace(target, '').strip()
 
+                        # Remove duplicate callsign prefix (e.g., "NY5V: NY5V: message" -> "NY5V: message")
+                        dup_callsign_match = re.match(r'^(\w+):\s+\1:\s+(.+)', message_clean)
+                        if dup_callsign_match:
+                            message_clean = f"{dup_callsign_match.group(1)}: {dup_callsign_match.group(2)}"
+
+                        # Extract text after "MSG " if present
+                        msg_match = re.search(r'\bMSG\s+(.+)$', message_clean, re.IGNORECASE)
+                        if msg_match:
+                            message_clean = msg_match.group(1).strip()
+
+                        # If bulletin message ({^%}), remove bulletin ID pattern: ,XXX, (3 digits)
+                        # Example: "MSG ,223,ANYONE..." becomes "ANYONE..."
+                        if '{^%}' in message_clean:
+                            message_clean = re.sub(r'^\s*,\d{3},\s*', '', message_clean)
+
+                        # Remove CommStat markers from message text
+                        commstat_markers = ['{&%}', '{F%}', '{^%}', '{%%}', '{*%}', '{~%}']
+                        for marker in commstat_markers:
+                            # Remove marker and preceding comma if present
+                            message_clean = re.sub(r',\s*' + re.escape(marker), '', message_clean)
+                            # Also remove marker without comma
+                            message_clean = message_clean.replace(marker, '')
+
+                        message_clean = message_clean.strip()
+
+                        # Remove non-ASCII characters
+                        message_clean = re.sub(r'[^ -~]+', '', message_clean).strip()
+
+                        # Extract date from datetime (YYYY-MM-DD)
+                        date_only = utc.split()[0] if utc else ""
+
                         conn = sqlite3.connect(DATABASE_FILE, timeout=10)
                         cursor = conn.cursor()
                         try:
                             cursor.execute(
                                 "INSERT INTO messages "
-                                "(datetime, freq, db, source, msg_id, from_callsign, target, message) "
-                                "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                                (utc, freq, db, 2, msg_id, from_callsign, target, message_clean)
+                                "(datetime, date, freq, db, source, msg_id, from_callsign, target, message) "
+                                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                (utc, date_only, freq, db, 2, msg_id, from_callsign, target, message_clean)
                             )
                             conn.commit()
                             print(f"\033[92m[BACKBONE] Added Message from: {from_callsign} (data_id: {data_id})\033[0m")
@@ -4269,7 +4708,8 @@ class MainWindow(QtWidgets.QMainWindow):
             utc_ms = params.get("UTC", 0)
 
             if value and from_call:
-                utc_str = datetime.utcfromtimestamp(utc_ms / 1000).strftime("%Y-%m-%d   %H:%M:%S")
+                utc_dt = datetime.fromtimestamp(utc_ms / 1000, tz=timezone.utc)
+                utc_str = utc_dt.strftime("%Y-%m-%d   %H:%M:%S")
                 dial_freq_mhz = (freq - offset) / 1000000 if freq else 0
                 feed_line = f"{utc_str}\t{dial_freq_mhz:.3f}\t{offset}\t{snr:+03d}\t{from_call}: {value}"
                 self._add_to_feed(feed_line, rig_name)
@@ -4338,693 +4778,280 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Process a directed message received via TCP.
 
-        This method parses incoming JS8Call messages and stores them in the database.
-        Messages can be StatReps, bulletins, check-ins, or standard messages.
-
-        Two detection methods are used:
-        1. Marker-based: Messages with special markers like {&%}, {^%}, {~%}, {F%}
-        2. Pattern-based: Messages matching expected formats without markers
+        SIMPLIFIED: Only processes messages containing " MSG "
+        - Process ALL messages to groups (to_call starts with @)
+        - Process messages to user's callsign only
 
         Args:
             rig_name: Name of the rig that received the message.
             value: The message text content.
-            from_call: Sender callsign.
-            to_call: Recipient (callsign or @GROUP).
+            from_call: Sender callsign (from TCP connection).
+            to_call: Recipient callsign or @GROUP (from TCP connection).
             grid: Sender's grid square.
             freq: Frequency in Hz.
             snr: Signal-to-noise ratio.
             utc: UTC timestamp string.
 
         Returns:
-            Message type string ("statrep", "message", "checkin") or empty string.
+            "message" if saved, empty string otherwise.
         """
         import re
-        import maidenhead as mh
+        from id_utils import generate_time_based_id
+        from datetime import datetime, timezone
 
-        # CommStat message type markers (legacy format compatibility)
-        # These markers appear at the END of the message data
-        MSG_BULLETIN = "{^%}"          # Group bulletin/message
-        MSG_STATREP = "{&%}"           # Status report
-        MSG_FORWARDED_STATREP = "{F%}" # Forwarded status report (relayed)
-        MSG_ALERT = "{%%}"             # Group alert
-
-        # Scope levels indicate the geographic scope of a status report
-        SCOPE_MAP = {
-            "1": "My Location",
-            "2": "My Community",
-            "3": "My County",
-            "4": "My Region",
-            "5": "Other Location"
-        }
-
-        # Load abbreviations from database for text expansion
-        abbreviations = self.db.get_abbreviations()
-
-        # Extract group from to_call (keep @ symbol, e.g., "@MAGNET")
-        group = ""
-        if to_call.startswith("@"):
-            group = to_call
+        # FIRST: Strip duplicate callsign from value (JS8Call bug)
+        # Buggy JS8Call: "W8APP: W8APP: message" -> "W8APP: message"
+        # Fixed JS8Call: "W8APP: message" -> "W8APP: message" (no change)
+        value = strip_duplicate_callsign(value, from_call)
 
         # Extract callsign (remove suffix like /P)
-        callsign = from_call.split("/")[0] if from_call else ""
+        from_callsign = from_call.split("/")[0] if from_call else ""
 
-        try:
-            conn = sqlite3.connect(DATABASE_FILE, timeout=10)
-            cursor = conn.cursor()
+        # Extract target group (if present)
+        target = ""
+        if to_call.startswith("@"):
+            target = to_call
 
-            # Determine message type and process
-            # Old CommStat format has marker at END: ,DATA,FIELDS,{MARKER}
-            # Extract content BEFORE the marker, strip leading comma
-            # Processing order: StatReps first (highest priority), then Alerts, then Bulletins, then Messages
+        # =================================================================
+        # Standard STATREP Processing (HIGHEST PRIORITY)
+        # =================================================================
+        # Format: ,GRID,PREC,SRID,SRCODE,COMMENTS,{&%}
+        # Forwarded: ,GRID,PREC,SRID,SRCODE,COMMENTS,ORIG_CALL,{F%}
 
-            # =================================================================
-            # StatRep Processing (HIGHEST PRIORITY)
-            # =================================================================
+        if "{&%}" in value or "{F%}" in value:
+            is_forwarded = "{F%}" in value
+            marker = "{F%}" if is_forwarded else "{&%}"
 
-            if MSG_STATREP in value:
-                # Parse statrep: ,GRID,PREC,SRID,SRCODE,COMMENTS,{&%}
-                # GRID: 4-6 char Maidenhead locator (e.g., EM15 or EM15ab)
-                # PREC: Precedence 1-5 (scope of report)
-                # SRID: Unique StatRep ID number
-                # SRCODE: 12-digit status code or "+" shorthand for all green
-                match = re.search(r',(.+?)\{&\%\}', value)
-                if match:
-                    fields = match.group(1).split(",")
-                    if len(fields) >= 4:
-                        curgrid = fields[0].strip()
-                        prec1 = fields[1].strip()
-                        srid = fields[2].strip()
-                        srcode = fields[3].strip()
-                        # Apply smart title case to comments (acronym detection)
-                        # Join all remaining fields with commas to handle commas in comments
-                        # Filter out empty fields from trailing comma before {&%}
-                        comments_raw = ",".join([f for f in fields[4:] if f.strip()]).strip() if len(fields) > 4 else ""
-                        comments = smart_title_case(comments_raw, abbreviations, self.config.get_apply_text_normalization()) if comments_raw else ""
-                        # Remove non-ASCII characters (keep only space through tilde)
-                        comments = re.sub(r'[^ -~]+', '', comments).strip()
+            # Extract statrep data before marker
+            match = re.search(r',(.+?)' + re.escape(marker), value)
+            if match:
+                fields = match.group(1).split(",")
 
-                        # Expand compressed "+" shorthand to all green status
-                        # "+" means all 12 indicators are at level 1 (green/good)
-                        if srcode == "+":
-                            srcode = "111111111111"
+                # Need at least 4 fields: GRID, PREC, SRID, SRCODE
+                if len(fields) >= 4:
+                    statrep_grid = fields[0].strip()
+                    prec_num = fields[1].strip()
+                    sr_id = fields[2].strip()
+                    srcode = fields[3].strip()
 
-                        prec = SCOPE_MAP.get(prec1, "Unknown")
+                    # Expand "+" shorthand
+                    srcode = expand_plus_shorthand(srcode)
 
-                        # StatRep code is 12 digits, each representing a condition:
-                        # [0]=map, [1]=power, [2]=water, [3]=med, [4]=telecom, [5]=travel
-                        # [6]=internet, [7]=fuel, [8]=food, [9]=crime, [10]=civil, [11]=political
-                        # Values: 1=Green, 2=Yellow, 3=Red, 4=Gray/Unknown
-                        if len(srcode) >= 12:
-                            sr_fields = list(srcode)
-                            # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
-                            date_only = utc.split()[0] if utc else ""
-                            cursor.execute(
-                                "INSERT OR IGNORE INTO statrep "
-                                "(datetime, date, freq, db, source, SRid, from_callsign, target, grid, scope, map, power, water, "
-                                "med, telecom, travel, internet, fuel, food, crime, civil, political, comments) "
-                                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                (utc, date_only, freq, snr, 1, srid, callsign, group, curgrid, prec,
-                                 sr_fields[0], sr_fields[1], sr_fields[2], sr_fields[3],
-                                 sr_fields[4], sr_fields[5], sr_fields[6], sr_fields[7],
-                                 sr_fields[8], sr_fields[9], sr_fields[10], sr_fields[11],
-                                 comments)
-                            )
-                            conn.commit()
-                            print(f"\033[92m[{rig_name}] Added StatRep from: {callsign} ID: {srid}\033[0m")
-                            conn.close()
-                            return "statrep"
+                    # Validate and get grid (use QRZ if invalid/missing)
+                    statrep_grid = self._resolve_grid(rig_name, statrep_grid, from_callsign, grid, "STATREP")
 
-            elif MSG_FORWARDED_STATREP in value:
-                # Parse forwarded statrep: ,GRID,PREC,SRID,SRCODE,COMMENTS,ORIG_CALL,{F%}
-                match = re.search(r',(.+?)\{F\%\}', value)
-                if match:
-                    fields = match.group(1).split(",")
-                    if len(fields) >= 6:
-                        curgrid = fields[0].strip()
-                        prec1 = fields[1].strip()
-                        srid = fields[2].strip()
-                        srcode = fields[3].strip()
-                        # Extract origin callsign from last non-empty field
-                        # Strip empty fields from end (caused by trailing comma before {F%})
+                    # Handle forwarded statrep
+                    if is_forwarded and len(fields) > 4:
+                        # Remove empty trailing fields
                         while fields and not fields[-1].strip():
                             fields.pop()
-
-                        # Now extract origin_call from actual last field
-                        if len(fields) >= 5:
-                            origin_call = fields[-1].strip()
-                            # Comments are everything between SRCODE (index 3) and origin_call (last field)
-                            comments_raw = ",".join(fields[4:-1]).strip() if len(fields) > 5 else ""
-                        else:
-                            # Not enough fields, skip this message
-                            origin_call = ""
-                            comments_raw = ""
-                        # Apply smart title case to comments (acronym detection)
-                        comments = smart_title_case(comments_raw, abbreviations, self.config.get_apply_text_normalization()) if comments_raw else ""
-                        # Remove non-ASCII characters (keep only space through tilde)
-                        comments = re.sub(r'[^ -~]+', '', comments).strip()
-
-                        # Append origin information (who originally sent this statrep)
+                        # Last field is origin callsign
+                        origin_call = fields[-1].strip() if len(fields) > 4 else ""
+                        # Comments are between SRCODE and origin
+                        comments_raw = ",".join(fields[4:-1]).strip() if len(fields) > 5 else ""
+                        comments = format_statrep_comments(comments_raw, self.db.get_abbreviations(), self.config.get_apply_text_normalization())
+                        # Append forwarded info
                         if origin_call:
-                            origin_suffix = f" (FWD) ORIGIN: {origin_call}"
-                            if comments:
-                                comments = comments + origin_suffix
-                            else:
-                                # If no original comments, use origin info without leading space
-                                comments = origin_suffix.lstrip()
-
-                        # Expand compressed "+" to all green (111111111111)
-                        if srcode == "+":
-                            srcode = "111111111111"
-
-                        prec = SCOPE_MAP.get(prec1, "Unknown")
-
-                        if len(srcode) >= 12:
-                            sr_fields = list(srcode)
-                            # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
-                            date_only = utc.split()[0] if utc else ""
-                            cursor.execute(
-                                "INSERT OR IGNORE INTO statrep "
-                                "(datetime, date, freq, db, source, SRid, from_callsign, target, grid, scope, map, power, water, "
-                                "med, telecom, travel, internet, fuel, food, crime, civil, political, comments) "
-                                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                (utc, date_only, freq, snr, 1, srid, callsign, group, curgrid, prec,
-                                 sr_fields[0], sr_fields[1], sr_fields[2], sr_fields[3],
-                                 sr_fields[4], sr_fields[5], sr_fields[6], sr_fields[7],
-                                 sr_fields[8], sr_fields[9], sr_fields[10], sr_fields[11],
-                                 comments)
-                            )
-                            conn.commit()
-                            print(f"\033[92m[{rig_name}] Added Forwarded StatRep from: {callsign} (FWD) ORIGIN: {origin_call} ID: {srid}\033[0m")
-                            conn.close()
-                            return "statrep"
-
-            # Check for F!304 statrep format (BEFORE standard MSG check)
-            # Format: [CALLSIGN:] [@GROUP|CALLSIGN] [MSG] F!304 {8 digits} {remainder text}
-            # Note: MSG is optional
-            # This must be checked before standard " MSG " to avoid false matches
-            if "F!304" in value:
-                # Check the pattern before "F!304" to determine if we should process
-                # Pattern: look at what comes before F!304
-                pre_msg = value.split("F!304")[0]
-
-                # Check for callsign-to-callsign pattern (skip if found)
-                # Pattern: CALL1: CALL2 [MSG] (two callsigns before F!304)
-                callsign_pattern = re.search(r'([A-Z0-9]+):\s+([A-Z0-9/]+)\s+(?:MSG\s+)?$', pre_msg, re.IGNORECASE)
-                if callsign_pattern:
-                    # This is a callsign-to-callsign message, skip processing
-                    conn.close()
-                    return ""
-
-                # Extract pattern: [MSG] F!304 {8 digits} {remainder}
-                # MSG is optional
-                f304_pattern = re.search(r'(?:MSG\s+)?F!304\s+(\d{8})\s*(.*?)(?:>])?$', value)
-
-                if f304_pattern:
-                    digits = f304_pattern.group(1)      # 8-digit code
-                    remainder = f304_pattern.group(2)   # Rest of message
-
-                    # Parse the 8 digits
-                    # Position 1 (digits[0]): Landline text
-                    # Position 2 (digits[1]): telecom mapping
-                    ota_digit = int(digits[1])
-                    if ota_digit == 1:
-                        ota = "1"
-                    elif ota_digit in [2, 3]:
-                        ota = "2"
-                    elif ota_digit == 4:
-                        ota = "3"
+                            fwd_suffix = f" FORWARDED BY: {from_callsign}"
+                            comments = (comments + fwd_suffix) if comments else fwd_suffix.lstrip()
+                            # Use origin callsign as sender
+                            from_callsign = origin_call
                     else:
-                        ota = "4"
+                        # Standard statrep comments
+                        comments_raw = ",".join([f for f in fields[4:] if f.strip()]).strip() if len(fields) > 4 else ""
+                        comments = format_statrep_comments(comments_raw, self.db.get_abbreviations(), self.config.get_apply_text_normalization())
 
-                    # Position 4-6 (digits[3-5]): direct mapping
-                    net = digits[3]
-                    pubwtr = digits[4]
-                    commpw = digits[5]
+                    # Map scope
+                    SCOPE_MAP = {
+                        "1": "My Location",
+                        "2": "My Community",
+                        "3": "My County",
+                        "4": "My Region",
+                        "5": "Other Location"
+                    }
+                    scope = SCOPE_MAP.get(prec_num, "Unknown")
 
-                    # Build comment string
-                    # Helper function to map digit to text
-                    def map_value(digit):
-                        mapping = {1: "Yes", 2: "Limited", 3: "No", 4: "Unknown"}
-                        return mapping.get(int(digit), "Unknown")
+                    # Insert statrep
+                    if len(srcode) >= 12:
+                        sr_fields = list(srcode)
+                        date_only, _ = parse_message_datetime(utc)
 
-                    landline = map_value(digits[0])  # Position 1
-                    amfmtv = map_value(digits[2])    # Position 3
-                    natgas = map_value(digits[6])    # Position 7
-                    noaa = map_value(digits[7])      # Position 8
+                        # Build data dict for insertion
+                        data = {
+                            'datetime': utc,
+                            'date': date_only,
+                            'freq': freq,
+                            'db': snr,
+                            'source': 1,
+                            'sr_id': sr_id,
+                            'from_callsign': from_callsign,
+                            'target': target,
+                            'grid': statrep_grid,
+                            'scope': scope,
+                            'map': sr_fields[0],
+                            'power': sr_fields[1],
+                            'water': sr_fields[2],
+                            'med': sr_fields[3],
+                            'telecom': sr_fields[4],
+                            'travel': sr_fields[5],
+                            'internet': sr_fields[6],
+                            'fuel': sr_fields[7],
+                            'food': sr_fields[8],
+                            'crime': sr_fields[9],
+                            'civil': sr_fields[10],
+                            'political': sr_fields[11],
+                            'comments': comments
+                        }
 
-                    # Extract grid square from remainder (pattern: 2 alpha + 2 digits + optional 2 alphanumeric)
-                    # Look for grid square like EM48AT, EM48, etc.
-                    f304_grid = grid  # Default to sender's grid from parameter
-                    f304_grid_found = False  # Track if grid was found in message
-                    grid_match = re.search(r'\b([A-Z]{2}\d{2}[A-Z0-9]{0,2})\b', remainder, re.IGNORECASE)
-                    if grid_match:
-                        f304_grid = grid_match.group(1).upper()
-                        f304_grid_found = True
-                        # Remove grid square from remainder
-                        remainder = remainder.replace(grid_match.group(0), '').strip()
-
-                    # Build comment
-                    comment_parts = [
-                        "F!304",
-                        f"Landline = {landline}",
-                        f"AM/FM/TV = {amfmtv}",
-                        f"Nat Gas = {natgas}",
-                        f"NOAA = {noaa}"
-                    ]
-
-                    if remainder.strip():
-                        # Apply text normalization to remainder if enabled
-                        formatted_remainder = smart_title_case(
-                            remainder.strip(),
-                            abbreviations,
-                            self.config.get_apply_text_normalization()
+                        fwd_marker = " (FORWARDED)" if is_forwarded else ""
+                        result = self._insert_message_data(
+                            rig_name, "statrep", data, "sr_id", "statrep", from_callsign, fwd_marker
                         )
-                        comments = ", ".join(comment_parts) + f" - {formatted_remainder}"
-                    else:
-                        comments = ", ".join(comment_parts)
+                        if result:
+                            return result
 
-                    # Remove non-ASCII characters (keep only space through tilde)
-                    comments = re.sub(r'[^ -~]+', '', comments).strip()
+                        return ""
 
-                    # Extract group: check for @GROUP in value, otherwise use "@ALL"
-                    f304_group = group if group else ""
-                    if not f304_group and "@" in value:
-                        group_match = re.search(r'(@[A-Z0-9]+)', value, re.IGNORECASE)
-                        if group_match:
-                            f304_group = group_match.group(1).upper()
+        # =================================================================
+        # F!304 and F!301 STATREP Processing (MEDIUM PRIORITY)
+        # =================================================================
+        # These must be processed BEFORE message processing
+        # If detected, save as statrep and return "statrep" to skip message processing
 
-                    # If still no group found, set to @ALL
-                    if not f304_group:
-                        f304_group = "@ALL"
+        # Check for F!304 format: [CALLSIGN:] [@GROUP|CALLSIGN] [MSG] F!304 {8 digits} {remainder}
+        # =================================================================
+        # F!304 and F!301 STATREP Processing (PRIORITY 2 & 3)
+        # =================================================================
 
-                    # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
-                    date_only = utc.split()[0] if utc else ""
+        if "F!304" in value:
+            result = self._process_fcode_statrep(
+                rig_name, value, from_callsign, target, grid, freq, snr, utc, "F!304"
+            )
+            if result:
+                return result
 
-                    # Generate time-based SRid from message datetime
-                    srid_f304 = self._generate_time_based_srid(utc)
+        if "F!301" in value:
+            result = self._process_fcode_statrep(
+                rig_name, value, from_callsign, target, grid, freq, snr, utc, "F!301"
+            )
+            if result:
+                return result
 
-                    # Calculate status based on sum of last 8 digits (all digits for F!304)
-                    # Count 4 as 1, all others as face value
-                    digit_score = 0
-                    for d in digits:
-                        digit_val = int(d)
-                        digit_score += 1 if digit_val == 4 else digit_val
+        # =================================================================
+        # ALERT Processing (PRIORITY 4)
+        # =================================================================
+        # Format: @GROUP ,COLOR,TITLE,MESSAGE,{%%}
+        # Example: "W1ABC: @ALL ,1,Test Alert,This is a test,{%%}"
 
-                    # Determine status based on score
-                    if digit_score > 12:
-                        f304_status = "3"
-                    elif digit_score > 10:
-                        f304_status = "2"
-                    elif f304_grid_found:
-                        f304_status = "1"
-                    else:
-                        f304_status = "4"
+        if "{%%}" in value:
+            # Extract alert data before marker
+            match = re.search(r'(@\w+)\s*,(.+?)\{\%\%\}', value)
+            if match:
+                alert_target = match.group(1).strip()
+                fields_str = match.group(2).strip()
 
-                    # Insert into statrep table
-                    cursor.execute(
-                        "INSERT OR IGNORE INTO statrep "
-                        "(datetime, date, freq, db, source, sr_id, from_callsign, target, grid, scope, map, power, water, "
-                        "med, telecom, travel, internet, fuel, food, crime, civil, political, comments) "
-                        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (utc, date_only, freq, snr, 1,
-                         srid_f304,      # SRid: unique 3-digit number for this date (100-999)
-                         callsign,       # from_callsign
-                         f304_group,     # group
-                         f304_grid,      # grid from message or sender's grid
-                         "My Location",  # scope: set to "My Location"
-                         f304_status,    # map: "1" if grid found in message, "4" if not
-                         commpw,         # power
-                         pubwtr,         # water
-                         "4",            # med (hardcoded)
-                         ota,            # telecom (mapped from digit 2)
-                         "4",            # travel (hardcoded)
-                         net,            # internet
-                         "4",            # fuel (hardcoded)
-                         "4",            # food (hardcoded)
-                         "4",            # crime (hardcoded)
-                         "4",            # civil (hardcoded)
-                         "4",            # political (hardcoded)
-                         comments)       # comments (formatted string)
+                # Split into COLOR, TITLE, MESSAGE (max 2 splits to preserve commas in message)
+                fields = fields_str.split(",", 2)
+
+                if len(fields) >= 3:
+                    try:
+                        alert_color = int(fields[0].strip())
+                    except ValueError:
+                        print(f"{ConsoleColors.WARNING}[{rig_name}] WARNING: Invalid alert color in message from {from_callsign}{ConsoleColors.RESET}")
+                        return ""
+
+                    alert_title = sanitize_ascii(fields[1].strip())
+                    alert_message = sanitize_ascii(fields[2].strip())
+
+                    # Generate time-based alert ID
+                    date_only, alert_id = parse_message_datetime(utc)
+
+                    # Build data dict for insertion
+                    data = {
+                        'datetime': utc,
+                        'date': date_only,
+                        'freq': freq,
+                        'db': snr,
+                        'source': 1,
+                        'alert_id': alert_id,
+                        'from_callsign': from_callsign,
+                        'target': alert_target,
+                        'color': alert_color,
+                        'title': alert_title,
+                        'message': alert_message
+                    }
+
+                    result = self._insert_message_data(
+                        rig_name, "alerts", data, "alert_id", "alert", from_callsign
                     )
-                    conn.commit()
-                    print(f"\033[92m[{rig_name}] Added F!304 StatRep from: {callsign}\033[0m")
-                    conn.close()
-                    return "statrep"
+                    if result:
+                        return result
 
-            # Check for F!301 statrep format (BEFORE standard MSG check)
-            # Format: [CALLSIGN:] [@GROUP|CALLSIGN] [MSG] F!301 {9 digits} {remainder text}
-            # Note: MSG is optional
-            # First digit = scope (1-5), remaining 8 digits same as F!304
-            if "F!301" in value:
-                # Check the pattern before "F!301" to determine if we should process
-                # Pattern: look at what comes before F!301
-                pre_msg = value.split("F!301")[0]
-
-                # Check for callsign-to-callsign pattern (skip if found)
-                # Pattern: CALL1: CALL2 [MSG] (two callsigns before F!301)
-                callsign_pattern = re.search(r'([A-Z0-9]+):\s+([A-Z0-9/]+)\s+(?:MSG\s+)?$', pre_msg, re.IGNORECASE)
-                if callsign_pattern:
-                    # This is a callsign-to-callsign message, skip processing
-                    conn.close()
                     return ""
 
-                # Extract pattern: [MSG] F!301 {9 digits} {remainder}
-                # MSG is optional
-                f301_pattern = re.search(r'(?:MSG\s+)?F!301\s+(\d{9})\s*(.*?)(?:>])?$', value)
+        # =================================================================
+        # MESSAGE Processing (PRIORITY 5 - LOWEST PRIORITY)
+        # =================================================================
+        # Pattern: CALLSIGN: TARGET MSG message_text
+        # Where TARGET is @GROUP or CALLSIGN
+        # Example: "W8APP: @AMRRON MSG Hello everyone"
+        # Example: "W8APP: N0DDK MSG Hello there"
 
-                if f301_pattern:
-                    digits = f301_pattern.group(1)      # 9-digit code
-                    remainder = f301_pattern.group(2)   # Rest of message
+        # Match the specific pattern
+        msg_pattern = re.match(r'^(\w+):\s+(@?\w+)\s+MSG\s+(.+)$', value, re.IGNORECASE)
+        if not msg_pattern:
+            return ""
 
-                    # Parse the 9 digits
-                    # Position 1 (digits[0]): scope (1-5, maps to SCOPE_MAP)
-                    prec1 = digits[0]
-                    prec = SCOPE_MAP.get(prec1, "Unknown")
+        # Extract components
+        msg_from = msg_pattern.group(1).strip()  # Should match from_callsign
+        msg_target = msg_pattern.group(2).strip()  # Should match to_call
+        message_text = msg_pattern.group(3).strip()
 
-                    # Remaining 8 digits follow F!304 rules
-                    # Position 2 (digits[1]): ignored (same as F!304 position 1)
-                    # Position 3 (digits[2]): telecom mapping (same as F!304 position 2)
-                    ota_digit = int(digits[2])
-                    if ota_digit == 1:
-                        ota = "1"
-                    elif ota_digit in [2, 3]:
-                        ota = "2"
-                    elif ota_digit == 4:
-                        ota = "3"
-                    else:
-                        ota = "4"
+        # Determine if we should process this message
+        is_to_group = msg_target.startswith("@")
+        is_to_user = msg_target.upper() in [c.upper() for c in self.rig_callsigns.values() if c]
 
-                    # Positions 5-7 (digits[4-6]): direct mapping (same as F!304 positions 4-6)
-                    net = digits[4]
-                    pubwtr = digits[5]
-                    commpw = digits[6]
+        # Only process if it's to a group or to the user
+        if not (is_to_group or is_to_user):
+            return ""
 
-                    # Build comment string
-                    # Helper function to map digit to text
-                    def map_value(digit):
-                        mapping = {1: "Yes", 2: "Limited", 3: "No", 4: "Unknown"}
-                        return mapping.get(int(digit), "Unknown")
+        # Skip if message is empty
+        if not message_text:
+            return ""
 
-                    amfmtv = map_value(digits[3])   # Position 4 (same as F!304 position 3)
-                    natgas = map_value(digits[7])   # Position 8 (same as F!304 position 7)
-                    noaa = map_value(digits[8])     # Position 9 (same as F!304 position 8)
+        # If bulletin message ({^%}), remove bulletin ID pattern: ,XXX, (3 digits)
+        # Example: "MSG ,223,ANYONE..." becomes "ANYONE..."
+        if '{^%}' in message_text:
+            message_text = re.sub(r'^\s*,\d{3},\s*', '', message_text)
 
-                    # Extract grid square from remainder (pattern: 2 alpha + 2 digits + optional 2 alphanumeric)
-                    # Look for grid square like EM48AT, EM48, etc.
-                    f301_grid = grid  # Default to sender's grid from parameter
-                    f301_grid_found = False  # Track if grid was found in message
-                    grid_match = re.search(r'\b([A-Z]{2}\d{2}[A-Z0-9]{0,2})\b', remainder, re.IGNORECASE)
-                    if grid_match:
-                        f301_grid = grid_match.group(1).upper()
-                        f301_grid_found = True
-                        # Remove grid square from remainder
-                        remainder = remainder.replace(grid_match.group(0), '').strip()
+        # Remove bulletin marker {^%} and preceding comma
+        # (Only marker that can reach MESSAGE processing - others caught by higher priorities)
+        # {&%}/{F%} → PRIORITY 1 (STATREP), {%%} → PRIORITY 4 (ALERT), {*%}/{~%} → legacy/unused
+        message_text = message_text.replace(',{^%}', '')
 
-                    # Build comment
-                    comment_parts = [
-                        "F!301",
-                        f"AM/FM/TV = {amfmtv}",
-                        f"Nat Gas = {natgas}",
-                        f"NOAA = {noaa}"
-                    ]
+        message_text = sanitize_ascii(message_text.strip())
 
-                    if remainder.strip():
-                        # Apply text normalization to remainder if enabled
-                        formatted_remainder = smart_title_case(
-                            remainder.strip(),
-                            abbreviations,
-                            self.config.get_apply_text_normalization()
-                        )
-                        comments = ", ".join(comment_parts) + f" - {formatted_remainder}"
-                    else:
-                        comments = ", ".join(comment_parts)
+        # Generate time-based message ID
+        date_only, msg_id = parse_message_datetime(utc)
 
-                    # Remove non-ASCII characters (keep only space through tilde)
-                    comments = re.sub(r'[^ -~]+', '', comments).strip()
+        # Build data dict for insertion
+        data = {
+            'datetime': utc,
+            'date': date_only,
+            'freq': freq,
+            'db': snr,
+            'source': 1,
+            'msg_id': msg_id,
+            'from_callsign': from_callsign,
+            'target': msg_target,
+            'message': message_text
+        }
 
-                    # Extract group: check for @GROUP in value, otherwise use "@ALL"
-                    f301_group = group if group else ""
-                    if not f301_group and "@" in value:
-                        group_match = re.search(r'(@[A-Z0-9]+)', value, re.IGNORECASE)
-                        if group_match:
-                            f301_group = group_match.group(1).upper()
-
-                    # If still no group found, set to @ALL
-                    if not f301_group:
-                        f301_group = "@ALL"
-
-                    # Extract date from datetime string (format: "YYYY-MM-DD   HH:MM:SS")
-                    date_only = utc.split()[0] if utc else ""
-
-                    # Generate time-based SRid from message datetime
-                    srid_f301 = self._generate_time_based_srid(utc)
-
-                    # Calculate status based on sum of last 8 digits (skip first precedence digit)
-                    # Count 4 as 1, all others as face value
-                    digit_score = 0
-                    for d in digits[1:]:  # Skip first digit (precedence)
-                        digit_val = int(d)
-                        digit_score += 1 if digit_val == 4 else digit_val
-
-                    # Determine status based on score
-                    if digit_score > 12:
-                        f301_status = "3"
-                    elif digit_score > 10:
-                        f301_status = "2"
-                    elif f301_grid_found:
-                        f301_status = "1"
-                    else:
-                        f301_status = "4"
-
-                    # Insert into statrep table
-                    cursor.execute(
-                        "INSERT OR IGNORE INTO statrep "
-                        "(datetime, date, freq, db, source, sr_id, from_callsign, target, grid, scope, map, power, water, "
-                        "med, telecom, travel, internet, fuel, food, crime, civil, political, comments) "
-                        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (utc, date_only, freq, snr, 1,
-                         srid_f301,      # SRid: unique 3-digit number for this date (100-999)
-                         callsign,       # from_callsign
-                         f301_group,     # group
-                         f301_grid,      # grid from message or sender's grid
-                         prec,           # scope: from first digit (1-5) mapped to SCOPE_MAP
-                         f301_status,    # map: "1" if grid found in message, "4" if not
-                         commpw,         # power
-                         pubwtr,         # water
-                         "4",            # med (hardcoded)
-                         ota,            # telecom (mapped from digit 3)
-                         "4",            # travel (hardcoded)
-                         net,            # internet
-                         "4",            # fuel (hardcoded)
-                         "4",            # food (hardcoded)
-                         "4",            # crime (hardcoded)
-                         "4",            # civil (hardcoded)
-                         "4",            # political (hardcoded)
-                         comments)       # comments (formatted string)
-                    )
-                    conn.commit()
-                    print(f"\033[92m[{rig_name}] Added F!301 StatRep from: {callsign}\033[0m")
-                    conn.close()
-                    return "statrep"
-
-            # =================================================================
-            # Alert and Bulletin Processing (AFTER StatReps)
-            # =================================================================
-
-            if MSG_ALERT in value:
-                # Parse alert: LRT ,COLOR,TITLE,MESSAGE,{%%}
-                match = re.search(r'LRT\s*,(.+?)\{\%\%\}', value)
-                if match:
-                    fields = match.group(1).split(",")
-                    if len(fields) >= 3:
-                        # Only save alerts for active groups
-                        active_groups = self.db.get_active_groups()
-                        group_name = group.lstrip('@').upper() if group else ""
-                        if group_name not in [g.upper() for g in active_groups]:
-                            conn.close()
-                            return ""
-
-                        try:
-                            color = int(fields[0].strip())
-                        except ValueError:
-                            color = 1  # Default to yellow
-                        title = fields[1].strip()
-                        # Join remaining fields and remove trailing comma
-                        raw_message = ",".join(fields[2:]).strip().rstrip(',')
-                        # Apply smart title case to message (acronym detection)
-                        message_text = smart_title_case(raw_message, abbreviations, self.config.get_apply_text_normalization())
-
-                        # Generate time-based alert ID
-                        from id_utils import generate_time_based_id
-                        from datetime import datetime, timezone
-                        dt_str = utc.replace("   ", " ").strip()
-                        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                        alert_id = generate_time_based_id(dt)
-                        date_only = dt_str.split()[0]  # Extract date portion
-
-                        cursor.execute(
-                            "INSERT INTO alerts "
-                            "(datetime, date, freq, db, source, alert_id, from_callsign, target, color, title, message) "
-                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            (utc, date_only, freq, snr, 1, alert_id, callsign, group, color, title, message_text)
-                        )
-                        conn.commit()
-                        print(f"\033[91m[{rig_name}] Added Alert from: {callsign} - {title}\033[0m")
-                        conn.close()
-                        return "alert"
-
-            # DISABLED: Legacy bulletin processing (may be re-enabled later)
-            # elif MSG_BULLETIN in value:
-            #     # Parse bulletin: ,ID,MESSAGE,{^%}
-            #     # Write to alerts table with null title
-            #     match = re.search(r',(.+?)\{\^\%\}', value)
-            #     if match:
-            #         fields = match.group(1).split(",")
-            #         if len(fields) >= 2:
-            #             # Discard SRID (fields[0])
-            #             # Join remaining fields and remove trailing comma
-            #             raw_message = ",".join(fields[1:]).strip().rstrip(',')
-            #             # Apply smart title case to message (acronym detection)
-            #             message_text = smart_title_case(raw_message, abbreviations, self.config.get_apply_text_normalization())
-            #
-            #             # Generate time-based alert ID
-            #             from id_utils import generate_time_based_id
-            #             from datetime import datetime, timezone
-            #             dt_str = utc.replace("   ", " ").strip()
-            #             dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-            #             alert_id = generate_time_based_id(dt)
-            #             date_only = dt_str.split()[0]  # Extract date portion
-            #
-            #             cursor.execute(
-            #                 "INSERT INTO alerts "
-            #                 "(datetime, date, freq, db, source, alert_id, from_callsign, \"group\", color, title, message) "
-            #                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            #                 (utc, date_only, freq, snr, 1, alert_id, callsign, group, 1, None, message_text)
-            #             )
-            #             conn.commit()
-            #             print(f"\033[91m[{rig_name}] Added Bulletin Alert from: {callsign}\033[0m")
-            #             conn.close()
-            #             return "alert"
-
-            # =================================================================
-            # Standard Message Processing (LOWEST PRIORITY)
-            # =================================================================
-
-            # Check for standard JS8Call MSG format (no special marker)
-            # Save if: to group OR to one of user's callsigns
-            # Filter out common query patterns (GRID?, SNR?, etc.)
-
-            # Check if this message should be saved based on recipient
-            is_to_group = to_call.startswith("@")
-            is_to_user = to_call in self.rig_callsigns.values()
-
-            if is_to_group or is_to_user:
-                # Extract message text
-                # If contains "MSG ", remove prefix; otherwise use entire value
-                msg_match = re.search(r'\bMSG\s+(.+)', value, re.IGNORECASE)
-                if msg_match:
-                    message_text = msg_match.group(1).strip()
-                else:
-                    message_text = value.strip()
-
-                # Skip if message is empty
-                if not message_text:
-                    conn.close()
-                    return ""
-
-                # Remove CommStat special markers and their preceding commas from message text
-                # Markers: {&%}, {F%}, {*%}, {~%}, {^%}, {%%}
-                commstat_markers = ['{&%}', '{F%}', '{*%}', '{~%}', '{^%}', '{%%}']
-                for marker in commstat_markers:
-                    # Remove marker and preceding comma if present
-                    message_text = re.sub(r',\s*' + re.escape(marker), '', message_text)
-                    # Also remove marker without comma in case it appears standalone
-                    message_text = message_text.replace(marker, '')
-
-                message_text = message_text.strip()
-
-                # Define JS8Call query patterns to filter out
-                # Format: "@group KEYWORD" or "CALLSIGN KEYWORD" (automated JS8Call responses)
-                # Example: "@HB HEARTBEAT" should be filtered
-                # Example: "N0DDK SNR -12" should be filtered
-                # Example: "@GHOSTNET QUERY MSGS" should be filtered
-                query_patterns = [
-                    r'^@?\w+\s+CQ\b',
-                    r'^@?\w+\s+GRID\b',
-                    r'^@?\w+\s+SNR\b',
-                    r'^@?\w+:\s+@?\w+\s+SNR\b',  # Format: "NY5V: KS2H SNR -09"
-                    r'^@?\w+:\s+@?\w+\s+SNR\?',  # Format: "KS2H: @AMRRON SNR?"
-                    r'\bSNR\s+[-+]?\d+\b',        # Format: "SNR -09" or "SNR +01"
-                    r'^@?\w+\s+INFO\b',
-                    r'^@?\w+\s+STATUS\b',
-                    r'^@?\w+\s+HEARING\b',
-                    r'^@?\w+\s+AGN\b',
-                    r'^@?\w+\s+QSL\b',
-                    r'^@?\w+\s+YES\b',
-                    r'^@?\w+\s+NO\b',
-                    r'^@?\w+\s+HW\s+CPY\b',
-                    r'^@?\w+\s+RR\b',
-                    r'^@?\w+\s+FB\b',
-                    r'^@?\w+\s+73\b',
-                    r'^@?\w+\s+SK\b',
-                    r'^@?\w+\s+DIT\s+DIT\b',
-                    r'^@?\w+\s+HEARTBEAT\b',
-                    r'^@?\w+\s+QUERY\b',
-                    r'^@?\w+\s+STATREP\s+RECEIVED\b',
-                ]
-
-                # Check if message matches any query pattern
-                if any(re.match(pattern, message_text, re.IGNORECASE) for pattern in query_patterns):
-                    conn.close()
-                    return ""
-
-                # Remove target prefix from message text if present (AFTER query filtering)
-                # Example: "@MAGNET MS: ..." becomes "MS: ..."
-                if message_text.startswith(to_call):
-                    message_text = message_text[len(to_call):].strip()
-
-                # Skip if message is empty after removing target
-                if not message_text:
-                    conn.close()
-                    return ""
-
-                # Skip if message is less than 12 characters
-                if len(message_text) < 12:
-                    conn.close()
-                    return ""
-
-                # Use to_call for target (includes @ for groups, callsign for direct)
-                target = to_call
-
-                # Remove non-ASCII characters (keep only space through tilde)
-                # Strip leading and trailing spaces and commas
-                message_text = re.sub(r'[^ -~]+', '', message_text).strip(' ,')
-
-                # Generate time-based message ID
-                from id_utils import generate_time_based_id
-                from datetime import datetime, timezone
-                dt_str = utc.replace("   ", " ").strip()
-                dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                msg_id = generate_time_based_id(dt)
-
-                # Save message to database (raw text, no normalization)
-                cursor.execute(
-                    "INSERT INTO messages "
-                    "(datetime, freq, db, source, msg_id, from_callsign, target, message) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
-                    (utc, freq, snr, 1, msg_id, callsign, target, message_text)
-                )
-                conn.commit()
-                print(f"\033[92m[{rig_name}] Added MSG from: {callsign} to: {to_call}\033[0m")
-                conn.close()
-                return "message"
-
-            conn.close()
-
-        except sqlite3.Error as e:
-            print(f"\033[91m[{rig_name}] Database error: {e}\033[0m")
-        except Exception as e:
-            print(f"\033[91m[{rig_name}] Error processing message: {e}\033[0m")
+        result = self._insert_message_data(
+            rig_name, "messages", data, "msg_id", "message", from_callsign
+        )
+        if result:
+            return result
 
         return ""
 
