@@ -67,7 +67,7 @@ from id_utils import generate_time_based_id
 # Constants
 # =============================================================================
 
-VERSION = "3.0.0"
+VERSION = "3.0.1"
 WINDOW_TITLE = f"CommStat (v{VERSION}) by N0DDK"
 WINDOW_SIZE = (1440, 832)
 CONFIG_FILE = "config.ini"
@@ -2031,8 +2031,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Default styling (will be updated when alert is displayed)
         self.alert_display.setStyleSheet("background-color: #333333;")
         self.alert_title_label.setStyleSheet("color: #ffffff;")
-        self.alert_message_label.setStyleSheet("color: #ffffff;")
-        self.alert_date_label.setStyleSheet("color: #ffffff;")
+        self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
+        self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
 
         # Add to same layout position as map
         self.main_layout.addWidget(self.alert_display, 4, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
