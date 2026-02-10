@@ -64,7 +64,7 @@ def runsettings():
 def install(package):
     try:
         cmd = [sys.executable, "-m", "pip", "install"]
-        if sys.platform == 'darwin':
+        if sys.platform == 'darwin' or sys.platform.startswith('linux'):
             cmd.extend(["--break-system-packages", "--user"])
         cmd.append(package)
         subprocess.check_call(cmd)
