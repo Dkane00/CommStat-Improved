@@ -39,3 +39,12 @@ CLAUDE.md
 
 # Demo mode files (generated for demonstrations)
 demo_mode.py
+
+# Documentation (internal development notes)
+F304_F301_GRID_LOOKUP.md
+MESSAGES_DATE_FIELD_FIX.md
+MESSAGE_CLEANUP_FIX.md
+MESSAGE_PROCESSING_SIMPLIFICATION.md
+STATREP_FIELD_RENAME_SUMMARY.md
+STATREP_REFACTOR_SUMMARY.md
+TCP_PROCESSING_REVIEW.md
