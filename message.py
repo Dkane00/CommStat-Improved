@@ -64,10 +64,12 @@ class Ui_FormMessage:
     def __init__(
         self,
         tcp_pool: "TCPConnectionPool" = None,
-        connector_manager: "ConnectorManager" = None
+        connector_manager: "ConnectorManager" = None,
+        refresh_callback = None
     ):
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
+        self.refresh_callback = refresh_callback
         self.MainWindow: Optional[QtWidgets.QWidget] = None
         self.callsign: str = ""
         self.grid: str = ""
@@ -589,6 +591,11 @@ class Ui_FormMessage:
         self._show_info(f"CommStat has saved:\n{tx_message}")
 
         self._save_to_database(callsign, message)
+
+        # Trigger refresh callback if provided
+        if self.refresh_callback:
+            self.refresh_callback()
+
         self.MainWindow.close()
 
     def _transmit(self) -> None:
@@ -678,6 +685,10 @@ class Ui_FormMessage:
             message = self.lineEdit_2.text()
             message = re.sub(r"[^ -~]+", " ", message)
             self._save_to_database(self.callsign, message, frequency)
+
+            # Trigger refresh callback if provided
+            if self.refresh_callback:
+                self.refresh_callback()
 
             self.MainWindow.close()
         except Exception as e:

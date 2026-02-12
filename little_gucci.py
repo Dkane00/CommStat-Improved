@@ -3939,7 +3939,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_send_message(self) -> None:
         """Open Send Message window."""
         dialog = QtWidgets.QDialog(self)
-        dialog.ui = Ui_FormMessage(self.tcp_pool, self.connector_manager)
+        dialog.ui = Ui_FormMessage(self.tcp_pool, self.connector_manager, self._load_message_data)
         dialog.ui.setupUi(dialog)
         dialog.exec_()
 
