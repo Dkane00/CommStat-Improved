@@ -475,7 +475,7 @@ def map_f301_digits_to_fields(digits: str) -> dict:
 
 # StatRep table column headers
 STATREP_HEADERS = [
-    "", "Date Time", "Freq", "From", "To", "Grid", "Scope", "Map",
+    "", "Date Time", "Freq", "From", "To", "ID", "Grid", "Scope", "Map",
     "Powr", "H2O", "Med", "Comm", "Trvl", "Inet", "Fuel", "Food",
     "Crime", "Civil", "Pol", "Remarks"
 ]
@@ -982,9 +982,9 @@ class DatabaseManager:
                 # Build query based on whether we're showing all or filtering by groups
                 if show_all:
                     query = f"""
-                        SELECT db, datetime, freq, from_callsign, target, grid, scope, map,
+                        SELECT db, datetime, freq, from_callsign, target, sr_id, grid, scope, map,
                                power, water, med, telecom, travel, internet,
-                               fuel, food, crime, civil, political, comments, source, sr_id
+                               fuel, food, crime, civil, political, comments, source
                         FROM statrep
                         WHERE {date_condition}
                     """
@@ -994,9 +994,9 @@ class DatabaseManager:
                     groups_with_at = ["@" + g for g in groups]
                     placeholders = ",".join("?" * len(groups_with_at))
                     query = f"""
-                        SELECT db, datetime, freq, from_callsign, target, grid, scope, map,
+                        SELECT db, datetime, freq, from_callsign, target, sr_id, grid, scope, map,
                                power, water, med, telecom, travel, internet,
-                               fuel, food, crime, civil, political, comments, source, sr_id
+                               fuel, food, crime, civil, political, comments, source
                         FROM statrep
                         WHERE target IN ({placeholders}) AND {date_condition}
                     """
@@ -1041,7 +1041,7 @@ class DatabaseManager:
 
                 if show_all:
                     # Show all messages regardless of group
-                    query = f"""SELECT db, datetime, freq, from_callsign, target, message, source
+                    query = f"""SELECT db, datetime, freq, from_callsign, target, msg_id, message, source
                                FROM messages
                                WHERE {date_condition}"""
                     params = date_params
@@ -1049,7 +1049,7 @@ class DatabaseManager:
                     # Filter by active groups (add @ prefix for matching)
                     groups_with_at = ["@" + g for g in groups]
                     placeholders = ",".join("?" * len(groups_with_at))
-                    query = f"""SELECT db, datetime, freq, from_callsign, target, message, source
+                    query = f"""SELECT db, datetime, freq, from_callsign, target, msg_id, message, source
                                FROM messages
                                WHERE target IN ({placeholders}) AND {date_condition}"""
                     params = groups_with_at + date_params
@@ -1849,7 +1849,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Create the StatRep data table."""
         self.statrep_table = QtWidgets.QTableWidget(self.central_widget)
         self.statrep_table.setObjectName("statrepTable")
-        self.statrep_table.setColumnCount(20)
+        self.statrep_table.setColumnCount(21)
         self.statrep_table.setRowCount(0)
 
         # Apply styling
@@ -2716,8 +2716,10 @@ class MainWindow(QtWidgets.QMainWindow):
                         processed_count += 1
                         data_types_processed.add(msg_type)
 
-                except (ValueError, IndexError) as e:
+                except Exception as e:
                     print(f"Error parsing data line (ID {data_id}): {e}")
+                    import traceback
+                    traceback.print_exc()
                     continue
 
             # Update data_id in controls table if we processed any messages
@@ -3435,7 +3437,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Create the message data table."""
         self.message_table = QtWidgets.QTableWidget(self.central_widget)
         self.message_table.setObjectName("messageTable")
-        self.message_table.setColumnCount(6)
+        self.message_table.setColumnCount(7)
         self.message_table.setRowCount(0)
 
         # Apply styling
@@ -3471,7 +3473,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Set headers
         self.message_table.setHorizontalHeaderLabels([
-            "", "Date Time", "Freq", "From", "To", "Message"
+            "", "Date Time", "Freq", "From", "To", "ID", "Message"
         ])
 
         # Configure header behavior
@@ -3543,10 +3545,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
             gridlist = []
             for row in data:
-                callsign = row[4]
-                srid = row[3]
-                status = str(row[7])
-                grid = row[5]
+                callsign = row[3]  # from_callsign
+                srid = row[5]      # sr_id
+                grid = row[6]      # grid
+                status = str(row[8])  # map (status)
 
                 # Convert grid to coordinates
                 try:
@@ -3675,7 +3677,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_statrep_click(self, item: QTableWidgetItem) -> None:
         """Handle click on StatRep table row."""
         row = item.row()
-        sr_id = self.statrep_table.item(row, 1)  # Column 1 is the ID
+        sr_id = self.statrep_table.item(row, 5)  # Column 5 is the ID
         if sr_id:
             print(f"StatRep clicked: ID = {sr_id.text()}")
 
@@ -4101,9 +4103,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 if apply_normalization and display_value:
                     # For statrep table: col 19=comments only
                     # For message table: col 5=message only
-                    if is_statrep_table and col_num == 19:
+                    if is_statrep_table and col_num == 20:
                         display_value = smart_title_case(display_value, abbreviations, apply_normalization)
-                    elif is_message_table and col_num == 5:
+                    elif is_message_table and col_num == 6:
                         display_value = smart_title_case(display_value, abbreviations, apply_normalization)
 
                 # Handle SNR (db) column (first column)
@@ -4113,10 +4115,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     try:
                         # Check if source = 2 (Internet source)
                         source_value = None
-                        if is_statrep_table and len(row_data) > 20:
-                            source_value = int(row_data[20]) if row_data[20] is not None else 0
-                        elif is_message_table and len(row_data) > 6:
-                            source_value = int(row_data[6]) if row_data[6] is not None else 0
+                        if is_statrep_table and len(row_data) > 21:
+                            source_value = int(row_data[21]) if row_data[21] is not None else 0
+                        elif is_message_table and len(row_data) > 7:
+                            source_value = int(row_data[7]) if row_data[7] is not None else 0
 
                         if source_value == 2:
                             item.setToolTip("   Internet")
@@ -4807,7 +4809,7 @@ class MainWindow(QtWidgets.QMainWindow):
         Parse MESSAGE format.
 
         TCP format: CALLSIGN: TARGET MSG message_text
-        Backbone format: Any message not caught by earlier filters
+        Backbone format: @GROUP MSG ,MSG_ID,MESSAGE_TEXT,{^%}
 
         Args:
             rig_name: Name of the rig/source
@@ -4824,37 +4826,41 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         import re
 
-        # Try strict MSG pattern first
-        msg_pattern = re.match(r'^(\w+):\s+(@?\w+)\s+MSG\s+(.+)$', message_value, re.IGNORECASE)
+        msg_id = None
+        msg_target = target
+        message_text = None
 
-        if msg_pattern:
-            # Extract from pattern
-            message_text = msg_pattern.group(3).strip()
-            msg_target = msg_pattern.group(2).strip()
-        elif source == 2:
-            # Backbone: accept any non-STATREP/ALERT as message
-            message_text = message_value
-            msg_target = target if target else ""
+        # Try to parse backbone format with msg_id: @GROUP MSG ,MSG_ID,MESSAGE,{^%}
+        backbone_pattern = re.match(r'^(@?\w+)\s+MSG\s+,([^,]+),(.+?)(?:,\{[^\}]+\})?$', message_value, re.IGNORECASE)
+        if backbone_pattern:
+            msg_target = backbone_pattern.group(1).strip()
+            msg_id = backbone_pattern.group(2).strip()
+            message_text = backbone_pattern.group(3).strip()
         else:
-            # TCP: require MSG keyword
-            return ("", None)
+            # Try strict TCP MSG pattern: CALLSIGN: TARGET MSG message_text
+            tcp_pattern = re.match(r'^(\w+):\s+(@?\w+)\s+MSG\s+(.+)$', message_value, re.IGNORECASE)
+            if tcp_pattern:
+                msg_target = tcp_pattern.group(2).strip()
+                message_text = tcp_pattern.group(3).strip()
+            elif source == 2:
+                # Backbone fallback: accept raw message (for older formats)
+                message_text = message_value
+                msg_target = target if target else ""
+            else:
+                # TCP: require MSG keyword
+                return ("", None)
 
         # Skip if message is empty
         if not message_text:
             return ("", None)
 
-        # If bulletin message ({^%}), remove bulletin ID pattern: ,XXX, (3 digits)
-        # Example: "MSG ,223,ANYONE..." becomes "ANYONE..."
-        if '{^%}' in message_text:
-            message_text = re.sub(r'^\s*,\d{3},\s*', '', message_text)
-
-        # Remove bulletin marker {^%} and preceding comma
-        message_text = message_text.replace(',{^%}', '')
-
+        # Clean up message text
         message_text = sanitize_ascii(message_text.strip())
 
-        # Generate time-based message ID
-        date_only, msg_id = parse_message_datetime(utc)
+        # Extract date and generate msg_id if not extracted from message
+        date_only, generated_msg_id = parse_message_datetime(utc)
+        if not msg_id:
+            msg_id = generated_msg_id
 
         # Build data dict for insertion
         data = {
