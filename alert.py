@@ -82,6 +82,7 @@ class Ui_FormAlert:
         self.callsign: str = ""
         self.grid: str = ""
         self.selected_group: str = ""
+        self.alert_id: str = ""
         self._pending_message: str = ""
         self._pending_callsign: str = ""
 
@@ -293,6 +294,9 @@ class Ui_FormAlert:
         self.cancel_button.setStyleSheet(self._button_style("#dc3545"))
 
         QtCore.QMetaObject.connectSlotsByName(FormAlert)
+
+        # Generate alert ID
+        self._generate_alert_id()
 
         # Load config and initialize
         self._load_config()
@@ -562,10 +566,15 @@ class Ui_FormAlert:
 
         return (call, color_value, title, message)
 
+    def _generate_alert_id(self) -> None:
+        """Generate a time-based alert ID from current UTC time."""
+        from id_utils import generate_time_based_id
+        self.alert_id = generate_time_based_id()
+
     def _build_message(self, callsign: str, color: int, title: str, message: str) -> str:
         """Build the message string for transmission."""
         group = "@" + self.group_combo.currentText()
-        return f"{callsign}: {group} ,{color},{title},{message},{{%%}}"
+        return f"{callsign}: {group} ,{self.alert_id},{color},{title},{message},{{%%}}"
 
     def _submit_to_backbone_async(self, frequency: int, callsign: str, alert_data: str, now: str) -> None:
         """Start background thread to submit alert to backbone server.
@@ -624,9 +633,6 @@ class Ui_FormAlert:
         date_only = now.toUTC().toString("yyyy-MM-dd")
         group = "@" + self.group_combo.currentText()
 
-        from id_utils import generate_time_based_id
-        alert_id = generate_time_based_id()
-
         conn = sqlite3.connect(DATABASE_FILE)
         try:
             cur = conn.cursor()
@@ -634,18 +640,18 @@ class Ui_FormAlert:
                 "INSERT INTO alerts "
                 "(datetime, date, freq, db, source, alert_id, from_callsign, target, color, title, message) "
                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (datetime_str, date_only, frequency, db, 1, alert_id, callsign, group, color, title, message)
+                (datetime_str, date_only, frequency, db, 1, self.alert_id, callsign, group, color, title, message)
             )
             conn.commit()
             freq_mhz = frequency / 1000000.0 if frequency else 0
-            print(f"[Alert] Saved: {datetime_str}, {group}, {alert_id}, {callsign}, color={color}, title={title}, {freq_mhz:.6f} MHz")
+            print(f"[Alert] Saved: {datetime_str}, {group}, {self.alert_id}, {callsign}, color={color}, title={title}, {freq_mhz:.6f} MHz")
         finally:
             conn.close()
 
         # Submit to backbone server if transmitted (has frequency)
         if frequency > 0:
-            # Format: CALLSIGN: @GROUP LRT ,COLOR,TITLE,MESSAGE,{%%}
-            alert_data = f"{callsign}: {group} LRT ,{color},{title},{message},{{%%}}"
+            # Format: CALLSIGN: @GROUP ,ALERT_ID,COLOR,TITLE,MESSAGE,{%%}
+            alert_data = f"{callsign}: {group} ,{self.alert_id},{color},{title},{message},{{%%}}"
             self._submit_to_backbone_async(frequency, callsign, alert_data, datetime_str)
 
     def _save_only(self) -> None:

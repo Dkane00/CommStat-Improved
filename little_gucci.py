@@ -4708,7 +4708,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Parse ALERT message format.
 
-        Format: @GROUP ,COLOR,TITLE,MESSAGE,{%%}
+        New format: @GROUP ,ALERT_ID,COLOR,TITLE,MESSAGE,{%%}
+        Old format: @GROUP ,COLOR,TITLE,MESSAGE,{%%}
         Legacy backbone format: LRT ,COLOR,TITLE,MESSAGE,{%%}
 
         Args:
@@ -4740,23 +4741,33 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 return ("", None)
 
-        # Split into COLOR, TITLE, MESSAGE (max 2 splits to preserve commas in message)
-        fields = fields_str.split(",", 2)
+        # Split fields (max 3 splits to preserve commas in message)
+        fields = fields_str.split(",", 3)
 
-        if len(fields) < 3:
+        # Determine if we have the new format (with alert_id) or old format
+        if len(fields) >= 4:
+            # New format: ALERT_ID, COLOR, TITLE, MESSAGE
+            alert_id = fields[0].strip()
+            try:
+                alert_color = int(fields[1].strip())
+            except ValueError:
+                print(f"{ConsoleColors.WARNING}[{rig_name}] WARNING: Invalid alert color in message from {from_callsign}{ConsoleColors.RESET}")
+                return ("", None)
+            alert_title = sanitize_ascii(fields[2].strip())
+            alert_message = sanitize_ascii(fields[3].strip())
+        elif len(fields) >= 3:
+            # Old format: COLOR, TITLE, MESSAGE (no alert_id, generate one)
+            try:
+                alert_color = int(fields[0].strip())
+            except ValueError:
+                print(f"{ConsoleColors.WARNING}[{rig_name}] WARNING: Invalid alert color in message from {from_callsign}{ConsoleColors.RESET}")
+                return ("", None)
+            alert_title = sanitize_ascii(fields[1].strip())
+            alert_message = sanitize_ascii(fields[2].strip())
+            # Generate time-based alert ID for old format
+            date_only, alert_id = parse_message_datetime(utc)
+        else:
             return ("", None)
-
-        try:
-            alert_color = int(fields[0].strip())
-        except ValueError:
-            print(f"{ConsoleColors.WARNING}[{rig_name}] WARNING: Invalid alert color in message from {from_callsign}{ConsoleColors.RESET}")
-            return ("", None)
-
-        alert_title = sanitize_ascii(fields[1].strip())
-        alert_message = sanitize_ascii(fields[2].strip())
-
-        # Generate time-based alert ID
-        date_only, alert_id = parse_message_datetime(utc)
 
         # Build data dict for insertion
         data = {
