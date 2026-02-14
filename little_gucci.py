@@ -4872,6 +4872,22 @@ class MainWindow(QtWidgets.QMainWindow):
         if not msg_id:
             msg_id = generated_msg_id
 
+        # Check if message is to a group we're in or to one of our callsigns
+        if msg_target.startswith("@"):
+            # Group message - check if we're in this group (entire group list, not just active)
+            group_name = msg_target[1:].upper()  # Remove @ and normalize
+            all_groups = self.db.get_all_groups()
+            if group_name not in all_groups:
+                # Skip messages to groups we're not in
+                return ("", None)
+        else:
+            # Direct message - check if target is one of our callsigns
+            target_call = msg_target.upper()
+            user_callsigns = [c.upper() for c in self.rig_callsigns.values() if c]
+            if target_call not in user_callsigns:
+                # Skip messages not to our callsigns
+                return ("", None)
+
         # Build data dict for insertion
         data = {
             'datetime': utc,
