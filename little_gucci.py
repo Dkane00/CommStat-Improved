@@ -1937,7 +1937,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.map_disabled_label.setFixedSize(MAP_WIDTH, MAP_HEIGHT)
         self.map_disabled_label.setAlignment(Qt.AlignCenter)
         self.map_disabled_label.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
-        self.map_disabled_label.clicked.connect(self._on_slideshow_click)
 
         # Use feed colors for background
         bg_color = self.config.get_color('feed_background')
@@ -1949,10 +1948,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add to same layout position as map
         self.main_layout.addWidget(self.map_disabled_label, 4, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
 
-        # Image slideshow state: list of (image_path, click_url) tuples
-        self.slideshow_items: List[Tuple[str, Optional[str]]] = []
+        # Image slideshow state
+        self.slideshow_items: List[str] = []
         self.slideshow_index: int = 0
-        self.ping_message: Optional[str] = None  # Message from ping to display
 
         # Timer for slideshow
         self.slideshow_timer = QtCore.QTimer(self)
@@ -2790,419 +2788,55 @@ class MainWindow(QtWidgets.QMainWindow):
             # commstat.py will apply the update on next launch
             self.close()
 
-    def _parse_backbone_sections(self, content: str) -> dict:
-        """Parse backbone reply content into hierarchical sections.
-
-        Args:
-            content: Raw backbone reply (already extracted from <pre> tags).
-
-        Returns:
-            Dict with keys: 'global', 'group', 'callsign'
-            Each value is the raw text for that section (or None)
-        """
-        import re
-        sections = {'global': None, 'group': None, 'callsign': None}
-
-        # Check if content has section markers
-        if '::GLOBAL::' not in content and '::GROUP::' not in content and '::CALLSIGN::' not in content:
-            # Legacy format - no sections, return None for all
-            return sections
-
-        # Split by section markers and extract content
-        # Pattern captures section name and everything until next section or end
-        pattern = r'::(GLOBAL|GROUP|CALLSIGN)::\s*(.*?)(?=::(?:GLOBAL|GROUP|CALLSIGN)::|$)'
-        matches = re.findall(pattern, content, re.DOTALL | re.IGNORECASE)
-
-        for section_name, section_content in matches:
-            key = section_name.lower()
-            if key in sections:
-                sections[key] = section_content.strip()
-
-        return sections
-
     def _debug(self, message: str) -> None:
         """Print debug message if debug mode is enabled."""
         if self.debug_mode:
             print(f"[Backbone] {message}")
 
-    def _is_backbone_date_valid(self, section_text: str) -> bool:
-        """Check if backbone section's date is in the future.
-
-        Args:
-            section_text: Raw section content (first line should be Date:)
-
-        Returns:
-            True if date is in the future, False otherwise.
-        """
-        import re
-        from datetime import datetime
-
-        lines = section_text.strip().split('\n')
-        if not lines:
-            return False
-
-        # Look for Date: line (should be first line)
-        # Supports: YYYY-MM-DD, YYYY-MM-DD HH:MM, YYYY-MM-DD HH:MM:SS
-        date_line = lines[0].strip()
-        self._debug(f"First line of section: '{date_line}'")
-        match = re.match(
-            r'Date:\s*(\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2})(?::(\d{2}))?)?',
-            date_line, re.IGNORECASE
-        )
-        if not match:
-            self._debug("Date regex did not match")
-            return False
-
-        date_str = match.group(1)
-        time_str = match.group(2) or "23:59"  # Default to end of day if no time
-        seconds_str = match.group(3) or "00"
-
-        try:
-            expiry = datetime.strptime(
-                f"{date_str} {time_str}:{seconds_str}",
-                "%Y-%m-%d %H:%M:%S"
-            )
-            now = datetime.now()
-            is_valid = expiry > now
-            self._debug(f"Date check: {expiry} > {now} = {is_valid}")
-            return is_valid
-        except ValueError as e:
-            self._debug(f"Date parse error: {e}")
-            return False
-
-    def _matches_user_groups(self, section_text: str) -> bool:
-        """Check if user has any matching active groups.
-
-        Args:
-            section_text: Raw section content.
-
-        Returns:
-            True if user has at least one matching group.
-        """
-        import re
-
-        # Look for "Group List:" line
-        match = re.search(r'Group List:\s*(.+)', section_text, re.IGNORECASE)
-        if not match:
-            return False
-
-        target_groups = [g.strip().upper() for g in match.group(1).split(',')]
-        user_groups = [g.upper() for g in self.db.get_active_groups()]
-
-        return bool(set(target_groups) & set(user_groups))
-
-    def _matches_user_callsign(self, section_text: str) -> bool:
-        """Check if user's callsign matches any in list.
-
-        Args:
-            section_text: Raw section content.
-
-        Returns:
-            True if any connected rig's callsign is in the list.
-        """
-        import re
-
-        # Look for "Callsign List:" line
-        match = re.search(r'Callsign List:\s*(.+)', section_text, re.IGNORECASE)
-        if not match:
-            return False
-
-        target_calls = [c.strip().upper() for c in match.group(1).split(',')]
-        user_calls = [c.upper() for c in self.rig_callsigns.values() if c]
-
-        return bool(set(target_calls) & set(user_calls))
-
-    def _extract_section_message(self, section_text: str) -> Optional[str]:
-        """Extract MESSAGE START/END block from section.
-
-        Args:
-            section_text: Raw section content.
-
-        Returns:
-            Message content or None if no message block found.
-        """
-        import re
-        msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', section_text, re.DOTALL)
-        return msg_match.group(1) if msg_match else None
-
-    def _extract_section_urls(self, section_text: str) -> List[Tuple[str, Optional[str]]]:
-        """Extract and download image URLs from section.
-
-        Args:
-            section_text: Raw section content.
-
-        Returns:
-            List of (temp_image_path, click_url) tuples.
-        """
-        import re
-        items = []
-        lines = section_text.strip().split('\n')
-
-        for line in lines:
-            # Skip metadata lines
-            line_lower = line.lower().strip()
-            if (line_lower.startswith('date:') or
-                line_lower.startswith('group list:') or
-                line_lower.startswith('callsign list:') or
-                line_lower in ('message start', 'message end')):
-                continue
-
-            # Find all URLs in the line
-            urls = re.findall(r'https?://[^\s]+', line)
-            if not urls:
-                continue
-
-            image_url = urls[0]
-            click_url = urls[1] if len(urls) > 1 else None
-
-            # Download image to temp file
-            try:
-                temp_path = self._download_image(image_url)
-                if temp_path:
-                    items.append((temp_path, click_url))
-            except Exception as e:
-                self._debug(f"Failed to download {image_url}: {e}")
-
-        return items
-
-    def _process_backbone_section(
-        self,
-        section_text: str,
-        section_type: str
-    ) -> Optional[Tuple[str, any]]:
-        """Process a single backbone reply section.
-
-        Args:
-            section_text: Raw text of the section.
-            section_type: 'global', 'group', or 'callsign'.
-
-        Returns:
-            Tuple of (action, data) where:
-            - action is 'message' or 'heartbeat'
-            - data is message text or list of image tuples
-            Returns None if section doesn't apply.
-        """
-        if not section_text:
-            return None
-
-        # Check date validity
-        if not self._is_backbone_date_valid(section_text):
-            self._debug(f"{section_type.upper()} section: date expired, skipping")
-            return None
-
-        # For group/callsign sections, check targeting
-        if section_type == 'group':
-            if not self._matches_user_groups(section_text):
-                self._debug("GROUP section: no matching groups, skipping")
-                return None
-            self._debug("GROUP section: user group matched")
-
-        elif section_type == 'callsign':
-            if not self._matches_user_callsign(section_text):
-                self._debug("CALLSIGN section: no matching callsign, skipping")
-                return None
-            self._debug("CALLSIGN section: user callsign matched")
-
-        # Look for message block
-        message = self._extract_section_message(section_text)
-        if message:
-            self._debug(f"{section_type.upper()} section: showing message")
-            return ('message', message)
-
-        # Look for image URLs
-        urls = self._extract_section_urls(section_text)
-        if urls:
-            self._debug(f"{section_type.upper()} section: loaded {len(urls)} images")
-            return ('heartbeat', urls)
-
-        return None
-
-    def _fetch_backbone_reply(self) -> List[Tuple[str, Optional[str]]]:
-        """Fetch and process backbone reply with hierarchical sections.
-
-        Backbone reply format supports three sections processed in order:
-        - ::GLOBAL:: - Applies to all users
-        - ::GROUP:: - Applies to users with matching active groups
-        - ::CALLSIGN:: - Applies to users with matching callsign
-
-        Each section has:
-        - Date: YYYY-MM-DD [HH:MM] (if in past, skip section)
-        - Group List: or Callsign List: (for targeting)
-        - MESSAGE START/END block OR image URLs
-
-        Returns empty list if showing a message or no content matched.
-        """
-        from datetime import datetime
-        self.ping_message = None  # Reset message
-
-        try:
-            content = self._fetch_backbone_content()
-            if not content:
-                return []
-
-            # Parse into sections
-            sections = self._parse_backbone_sections(content)
-
-            # Check if we have any sections (new format)
-            has_sections = any(sections.values())
-
-            if has_sections:
-                # Process in priority order: GLOBAL → GROUP → CALLSIGN
-                for section_type in ['global', 'group', 'callsign']:
-                    section_text = sections.get(section_type)
-                    if not section_text:
-                        continue
-
-                    result = self._process_backbone_section(section_text, section_type)
-                    if result:
-                        action, data = result
-                        if action == 'message':
-                            self.ping_message = data
-                            return []  # No images when showing message
-                        elif action == 'heartbeat':
-                            return data  # List of (image_path, click_url) tuples
-
-                # No sections matched
-                self._debug("No sections matched user criteria")
-                return []
-
-            else:
-                # Legacy format - process as before (single date + content)
-                lines = [line.strip() for line in content.split('\n') if line.strip()]
-                if not lines:
-                    return []
-
-                # Check for expiration date
-                first_line = lines[0]
-                date_match = re.match(r'date:\s*(\d{4}-\d{2}-\d{2})', first_line, re.IGNORECASE)
-                if date_match:
-                    expiry_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
-                    if expiry_date < datetime.now().date():
-                        self._debug(f"Legacy format: date {expiry_date} expired")
-                        return []
-                    lines = lines[1:]
-
-                # Skip Force command (legacy)
-                if lines and lines[0].lower().startswith("force"):
-                    lines = lines[1:]
-
-                # Check for message
-                content = '\n'.join(lines)
-                msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', content, re.DOTALL)
-                if msg_match:
-                    self.ping_message = msg_match.group(1)
-                    return []
-
-                # Extract URLs
-                items = []
-                for line in lines:
-                    if line in ("MESSAGE START", "MESSAGE END"):
-                        continue
-                    urls = re.findall(r'https?://[^\s]+', line)
-                    if urls:
-                        image_url = urls[0]
-                        click_url = urls[1] if len(urls) > 1 else None
-                        try:
-                            temp_path = self._download_image(image_url)
-                            if temp_path:
-                                items.append((temp_path, click_url))
-                        except Exception as e:
-                            self._debug(f"Failed to download {image_url}: {e}")
-
-                return items
-
-        except Exception as e:
-            self._debug(f"Failed to fetch backbone reply: {e}")
-
-        return []
-
-    def _download_image(self, url: str) -> Optional[str]:
-        """Download an image from URL to a temp file, return the path."""
-        try:
-            # Get file extension from URL
-            ext = os.path.splitext(url)[1] or '.png'
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
-
-            with urllib.request.urlopen(url, timeout=10) as response:
-                temp_file.write(response.read())
-            temp_file.close()
-            return temp_file.name
-        except Exception as e:
-            self._debug(f"Failed to download image {url}: {e}")
-            return None
-
     def _load_slideshow_images(self) -> None:
-        """Load images with priority: URL > my_images > images > 00-default.png."""
+        """Load images with priority: my_images > images > 00-default.png."""
         self.slideshow_items = []
         self.slideshow_index = 0
         valid_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
 
-        # Priority 1: Fetch backbone reply
-        remote_items = self._fetch_backbone_reply()
-
-        if remote_items:
-            # Use backbone images only
-            self.slideshow_items.extend(remote_items)
-            return
-
-        # Priority 2: Check my_images folder
+        # Priority 1: Check my_images folder
         my_images_folder = os.path.join(os.getcwd(), "my_images")
         if os.path.isdir(my_images_folder):
             files = sorted(os.listdir(my_images_folder))
             for filename in files:
                 if filename.lower().endswith(valid_extensions):
                     image_path = os.path.join(my_images_folder, filename)
-                    self.slideshow_items.append((image_path, None))
+                    self.slideshow_items.append(image_path)
 
         if self.slideshow_items:
             return
 
-        # Priority 3: Check images folder
+        # Priority 2: Check images folder
         images_folder = os.path.join(os.getcwd(), "images")
         if os.path.isdir(images_folder):
             files = sorted(os.listdir(images_folder))
             for filename in files:
                 if filename.lower().endswith(valid_extensions):
                     image_path = os.path.join(images_folder, filename)
-                    self.slideshow_items.append((image_path, None))
+                    self.slideshow_items.append(image_path)
 
         if self.slideshow_items:
             return
 
-        # Priority 4: Use default image
+        # Priority 3: Use default image
         default_image = os.path.join(os.getcwd(), "00-default.png")
         if os.path.isfile(default_image):
-            self.slideshow_items.append((default_image, None))
+            self.slideshow_items.append(default_image)
 
     def _start_slideshow(self) -> None:
-        """Start the image slideshow or display backbone message."""
+        """Start the image slideshow."""
         self._load_slideshow_images()
-
-        # Check if we have a message to display
-        if self.ping_message:
-            self._display_ping_message()
-            self.slideshow_timer.start()  # Keep timer running to check for changes
-        elif self.slideshow_items:
+        if self.slideshow_items:
             self._show_current_image()
             self.slideshow_timer.start()
         else:
-            # No images and no message - show "Map Disabled"
             self.map_disabled_label.setPixmap(QtGui.QPixmap())
             self.map_disabled_label.setText("Map Disabled")
-
-    @QtCore.pyqtSlot()
-    def _display_ping_message(self) -> None:
-        """Display the backbone message centered in the label."""
-        if not self.ping_message:
-            return
-
-        # Clear any existing pixmap
-        self.map_disabled_label.setPixmap(QtGui.QPixmap())
-
-        # Set text with center alignment (both horizontal and vertical)
-        self.map_disabled_label.setText(self.ping_message)
-        self.map_disabled_label.setAlignment(Qt.AlignCenter)
-        self.map_disabled_label.setWordWrap(True)
 
     def _stop_slideshow(self) -> None:
         """Stop the image slideshow."""
@@ -3213,7 +2847,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.slideshow_items:
             return
 
-        image_path, _ = self.slideshow_items[self.slideshow_index]
+        image_path = self.slideshow_items[self.slideshow_index]
         pixmap = QtGui.QPixmap(image_path)
 
         # Scale to fit while maintaining aspect ratio
@@ -3226,12 +2860,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.map_disabled_label.setText("")
 
     def _show_next_image(self) -> None:
-        """Advance to the next image in the slideshow or refresh message."""
-        # If showing a message, just keep displaying it (backbone_timer handles updates)
-        if self.ping_message:
-            return
-
-        # Otherwise advance to next image
+        """Advance to the next image in the slideshow."""
         if not self.slideshow_items:
             return
 
@@ -3239,22 +2868,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._show_current_image()
 
     def _check_backbone_content_async(self) -> None:
-        """Background thread to check backbone reply for message changes.
-
-        Handles both new hierarchical format and legacy format.
-        """
-        import re
-        from datetime import datetime
-        # Backbone check runs silently
+        """Background thread to check backbone for updates."""
         try:
             content = self._fetch_backbone_content()
             if not content:
                 return
 
-            # Reset fail counter on success
             self._backbone_fail_count = 0
 
-            # Check if server returns "1" - everything is normal, no updates
             if content.strip() == '1':
                 return
 
@@ -3262,8 +2883,6 @@ class MainWindow(QtWidgets.QMainWindow):
             if content.strip() == '0':
                 print("Backbone server reply = 0")
                 return
-
-            # Check for update commands first (strip whitespace for comparison)
             content_stripped = content.strip()
 
             if content_stripped.startswith('db_update'):
@@ -3273,85 +2892,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._handle_program_update(content_stripped)
                 return
 
-            # Check for ID-prefixed data messages (from other users via backbone)
-            # Format: ID: datetime freq db unknown callsign: message
-            # Example: 113:  2026-02-06 18:32:32    14.118000    0    30    N0DDK: @MAGNET ,EM83CV,3,T31,321311111331,GA,{&%}
             if re.search(r'^\d+:\s+\d{4}-\d{2}-\d{2}', content_stripped, re.MULTILINE):
-                if self._handle_backbone_data_messages(content_stripped):
-                    return  # Data messages were processed
-
-            # Parse into sections
-            sections = self._parse_backbone_sections(content_stripped)
-            has_sections = any(sections.values())
-
-            new_message = None
-
-            if has_sections:
-                # Process hierarchical format
-                for section_type in ['global', 'group', 'callsign']:
-                    section_text = sections.get(section_type)
-                    if not section_text:
-                        continue
-
-                    # Check date validity
-                    if not self._is_backbone_date_valid(section_text):
-                        continue
-
-                    # Check targeting for group/callsign sections
-                    if section_type == 'group' and not self._matches_user_groups(section_text):
-                        continue
-                    if section_type == 'callsign' and not self._matches_user_callsign(section_text):
-                        continue
-
-                    # Extract message from this section
-                    new_message = self._extract_section_message(section_text)
-                    break  # Stop at first matching section
-
-            else:
-                # Legacy format
-                lines = [line.strip() for line in content_stripped.split('\n') if line.strip()]
-                if not lines:
-                    return
-
-                # Check for expiration date
-                first_line = lines[0]
-                date_match = re.match(r'date:\s*(\d{4}-\d{2}-\d{2})', first_line, re.IGNORECASE)
-                if date_match:
-                    expiry_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
-                    if expiry_date < datetime.now().date():
-                        # Date has passed - clear any message
-                        if self.ping_message:
-                            self.ping_message = None
-                            QtCore.QMetaObject.invokeMethod(
-                                self, "_reload_slideshow",
-                                QtCore.Qt.QueuedConnection
-                            )
-                        return
-                    lines = lines[1:]
-
-                # Skip Force command (legacy)
-                if lines and lines[0].lower().startswith("force"):
-                    lines = lines[1:]
-
-                # Check for message
-                legacy_content = '\n'.join(lines)
-                msg_match = re.search(r'MESSAGE START\s*\n(.*?)\nMESSAGE END', legacy_content, re.DOTALL)
-                if msg_match:
-                    new_message = msg_match.group(1)
-
-            # Update display if message changed
-            if new_message != self.ping_message:
-                self.ping_message = new_message
-                if new_message:
-                    QtCore.QMetaObject.invokeMethod(
-                        self, "_display_ping_message",
-                        QtCore.Qt.QueuedConnection
-                    )
-                else:
-                    QtCore.QMetaObject.invokeMethod(
-                        self, "_reload_slideshow",
-                        QtCore.Qt.QueuedConnection
-                    )
+                self._handle_backbone_data_messages(content_stripped)
 
         except Exception as e:
             self._backbone_fail_count += 1
@@ -3362,25 +2904,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def _reload_slideshow(self) -> None:
-        """Reload the slideshow (called from background thread via signal)."""
+        """Reload the slideshow."""
         self._load_slideshow_images()
-        if self.ping_message:
-            self._display_ping_message()
-        elif self.slideshow_items:
+        if self.slideshow_items:
             self.slideshow_index = 0
             self._show_current_image()
         else:
             self.map_disabled_label.setPixmap(QtGui.QPixmap())
             self.map_disabled_label.setText("Map Disabled")
-
-    def _on_slideshow_click(self) -> None:
-        """Handle click on slideshow image - open associated URL if any."""
-        if not self.slideshow_items:
-            return
-
-        _, click_url = self.slideshow_items[self.slideshow_index]
-        if click_url:
-            webbrowser.open(click_url)
 
     def _setup_live_feed(self) -> None:
         """Create the live feed text area."""
@@ -4012,7 +3543,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._start_slideshow()
         else:
             self._stop_slideshow()
-            self.ping_message = None  # Clear any message
             self.map_disabled_label.hide()
             self.alert_display.hide()
             self.map_widget.show()
