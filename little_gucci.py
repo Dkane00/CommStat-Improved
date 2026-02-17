@@ -2458,7 +2458,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Case 2: Have a 4-char grid - try to upgrade via QRZ
         if grid and len(grid) == 4:
             qrz_grid = self._lookup_grid_for_callsign(callsign)
-            if qrz_grid and len(qrz_grid) > 4:
+            if qrz_grid and len(qrz_grid) > 4 and qrz_grid[:4].upper() == grid.upper():
                 # Format as mixed case: first 4 upper + rest lower (e.g., EM83cv)
                 # This makes QRZ-upgraded grids visually distinguishable
                 qrz_grid = qrz_grid[:4].upper() + qrz_grid[4:].lower()
