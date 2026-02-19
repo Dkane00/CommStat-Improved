@@ -615,7 +615,6 @@ class StatRepDialog(QDialog):
         self.remarks_field.setMinimumHeight(36)
         self.remarks_field.setMaxLength(60)
         self.remarks_field.setPlaceholderText("Optional - max 60 characters")
-        make_uppercase(self.remarks_field)
         self.remarks_field.setText(self._get_default_remarks())
         remarks_layout.addWidget(remarks_label)
         remarks_layout.addWidget(self.remarks_field)

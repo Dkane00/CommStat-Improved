@@ -4096,6 +4096,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Strip slash suffix from callsign in message (W3BFO/P: → W3BFO:)
         value = re.sub(r'^(\w+)/\w+:', r'\1:', value)
 
+        # Strip non-ASCII characters (e.g., JS8Call EOL diamond ♦) so the
+        # backbone regex can correctly match and discard the {^%} terminator
+        value = re.sub(r'[^ -~]', '', value).strip()
+
         return value
 
     def _parse_standard_statrep(
@@ -4403,7 +4407,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return ("", None)
 
         # Clean up message text
-        message_text = sanitize_ascii(message_text.strip())
+        message_text = message_text.strip()
 
         # Extract date and generate msg_id if not extracted from message
         date_only, generated_msg_id = parse_message_datetime(utc)

@@ -243,7 +243,6 @@ class Ui_FormAlert:
         self.title_field.setFont(font)
         self.title_field.setMaxLength(MAX_TITLE_LENGTH)
         self.title_field.setObjectName("title_field")
-        make_uppercase(self.title_field)
 
         # Message input
         self.message_label = QtWidgets.QLabel(FormAlert)
@@ -257,7 +256,6 @@ class Ui_FormAlert:
         self.message_field.setFont(font)
         self.message_field.setMaxLength(MAX_MESSAGE_LENGTH)
         self.message_field.setObjectName("message_field")
-        make_uppercase(self.message_field)
 
         # Character limit note
         self.note_label = QtWidgets.QLabel(FormAlert)

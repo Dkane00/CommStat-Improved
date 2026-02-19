@@ -183,7 +183,6 @@ class Ui_FormMessage:
         self.lineEdit_2.setFont(font)
         self.lineEdit_2.setMaxLength(MAX_MESSAGE_LENGTH)
         self.lineEdit_2.setObjectName("lineEdit_2")
-        make_uppercase(self.lineEdit_2)
 
         # Character limit note
         self.note_label = QtWidgets.QLabel(FormMessage)
