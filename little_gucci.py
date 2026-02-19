@@ -1253,6 +1253,25 @@ class DatabaseManager:
             return True
         return self._execute(op, False)
 
+    def get_user_settings(self) -> Tuple[str, str]:
+        """Get user callsign and state from controls table."""
+        def op(cursor, conn):
+            cursor.execute("SELECT callsign, state FROM controls WHERE id = 1")
+            row = cursor.fetchone()
+            return (row[0] or "", row[1] or "") if row else ("", "")
+        return self._execute(op, ("", ""))
+
+    def set_user_settings(self, callsign: str, state: str) -> bool:
+        """Save user callsign and state to controls table."""
+        def op(cursor, conn):
+            cursor.execute(
+                "UPDATE controls SET callsign = ?, state = ? WHERE id = 1",
+                (callsign, state)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
+
     def set_qrz_active(self, is_active: bool) -> bool:
         """Toggle QRZ active status."""
         def op(cursor, conn):
@@ -1528,19 +1547,14 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
 
         # Create the main menu
-        self.menu = QtWidgets.QMenu("Menu", self.menubar)
+        self.menu = QtWidgets.QMenu("Config", self.menubar)
         self.menubar.addMenu(self.menu)
 
         # Define menu actions: (name, text, handler)
         menu_items = [
-            ("statrep", "Status Report", self._on_statrep),
-            ("group_alert", "Group Alert", self._on_group_alert),
-            ("send_message", "Group Message", self._on_send_message),
-            ("js8email", "JS8 Email", self._on_js8email),
-            ("js8sms", "JS8 SMS", self._on_js8sms),
-            None,  # Separator
             ("js8_connectors", "JS8 Connectors", self._on_js8_connectors),
-            ("qrz_enable", "QRZ Enable", self._on_qrz_enable),
+            ("qrz_enable", "QRZ Settings", self._on_qrz_enable),
+            ("user_settings", "User Settings", self._on_user_settings),
             None,  # Separator
         ]
 
@@ -1576,6 +1590,23 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Populate group checkboxes (will be called after menu setup)
         # Deferred to after db initialization in __init__
+
+        # Create the Transmit menu
+        self.transmit_menu = QtWidgets.QMenu("Transmit", self.menubar)
+        self.menubar.addMenu(self.transmit_menu)
+
+        transmit_items = [
+            ("statrep", "Status Report", self._on_statrep),
+            ("group_alert", "Group Alert", self._on_group_alert),
+            ("send_message", "Group Message", self._on_send_message),
+            ("js8email", "JS8 Email", self._on_js8email),
+            ("js8sms", "JS8 SMS", self._on_js8sms),
+        ]
+        for name, text, handler in transmit_items:
+            action = QtWidgets.QAction(text, self)
+            action.triggered.connect(handler)
+            self.transmit_menu.addAction(action)
+            self.actions[name] = action
 
         # Create the Filter menu
         self.filter_menu = QtWidgets.QMenu("Filter", self.menubar)
@@ -1648,9 +1679,6 @@ class MainWindow(QtWidgets.QMainWindow):
         statrep_messages_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(statrep_messages_label)
 
-        self.apply_text_normalization_checkbox = create_menu_checkbox(
-            self.filter_menu, "Apply Text Normalization",
-            self.config.get_apply_text_normalization(), self._on_toggle_text_normalization)
         self.show_all_groups_checkbox = create_menu_checkbox(
             self.filter_menu, "Show All My Groups",
             self.config.get_show_all_groups(), self._on_toggle_show_all_groups)
@@ -2166,8 +2194,12 @@ class MainWindow(QtWidgets.QMainWindow):
             Extracted content string, or None on error.
         """
         try:
-            # Get callsign (first available from rig_callsigns)
-            callsign = next((cs for cs in self.rig_callsigns.values() if cs), "UNKNOWN")
+            # Get callsign: prefer first active JS8 connector callsign, fall back to user settings
+            callsign = next((cs for cs in self.rig_callsigns.values() if cs), None)
+            if not callsign:
+                callsign, _ = self.db.get_user_settings()
+            if not callsign:
+                callsign = "UNKNOWN"
 
             # Get db_version, build_number, and data_id from controls table
             db_version = 0
@@ -4663,6 +4695,69 @@ class MainWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.warning(
                     self, "Error",
                     "Failed to save QRZ settings."
+                )
+
+    def _on_user_settings(self) -> None:
+        """Open User Settings dialog for editing default callsign and state."""
+        callsign, state = self.db.get_user_settings()
+
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("User Settings")
+        dialog.setFixedWidth(400)
+        layout = QtWidgets.QVBoxLayout(dialog)
+
+        # Info message
+        info_label = QtWidgets.QLabel(
+            "These settings are used when CommStat is not connected to JS8Call "
+            "or when 'Internet' is selected as the transmit method."
+        )
+        info_label.setStyleSheet("color: #FF6600; font-weight: bold;")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        layout.addSpacing(10)
+
+        # Form fields
+        form_layout = QtWidgets.QFormLayout()
+
+        callsign_input = QtWidgets.QLineEdit()
+        callsign_input.setText(callsign)
+        callsign_input.setMaxLength(12)
+        callsign_input.setPlaceholderText("Your callsign")
+        callsign_input.textChanged.connect(lambda t: callsign_input.setText(t.upper()) or callsign_input.setCursorPosition(len(t)))
+        form_layout.addRow("Callsign:", callsign_input)
+
+        state_input = QtWidgets.QLineEdit()
+        state_input.setText(state)
+        state_input.setMaxLength(6)
+        state_input.setPlaceholderText("State/region code")
+        state_input.textChanged.connect(lambda t: state_input.setText(t.upper()) or state_input.setCursorPosition(len(t)))
+        form_layout.addRow("State:", state_input)
+
+        layout.addLayout(form_layout)
+        layout.addSpacing(20)
+
+        # Buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        save_btn = QtWidgets.QPushButton("Save")
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        save_btn.clicked.connect(dialog.accept)
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addStretch()
+        button_layout.addWidget(save_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            new_callsign = callsign_input.text().strip().upper()
+            new_state = state_input.text().strip().upper()
+            if self.db.set_user_settings(new_callsign, new_state):
+                QtWidgets.QMessageBox.information(
+                    self, "User Settings", "Settings saved."
+                )
+            else:
+                QtWidgets.QMessageBox.warning(
+                    self, "Error", "Failed to save settings."
                 )
 
     def _show_image_dialog(
