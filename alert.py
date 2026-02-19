@@ -42,6 +42,8 @@ _DATAFEED = _BACKBONE + "/datafeed-808585.php"
 # Debug mode via --debug-mode command line flag
 _DEBUG_MODE = "--debug-mode" in sys.argv
 
+INTERNET_RIG = "Internet"
+
 # Callsign pattern for US amateur radio
 CALLSIGN_PATTERN = re.compile(r'[AKNW][A-Z]{0,2}[0-9][A-Z]{1,3}')
 
@@ -338,51 +340,63 @@ class Ui_FormAlert:
         # Callsign will be loaded from JS8Call when rig is selected
 
     def _load_rigs(self) -> None:
-        """Load connected rigs into the rig dropdown.
-
-        Auto-selects only if exactly 1 rig is connected.
-        If multiple rigs are connected, user must select one.
-        """
-        if not self.tcp_pool:
-            return
-
+        """Load enabled connectors into the rig dropdown, plus Internet option."""
         self.rig_combo.blockSignals(True)
         self.rig_combo.clear()
 
-        # Get connected rigs
-        connected_rigs = self.tcp_pool.get_connected_rig_names()
+        enabled_connectors = self.connector_manager.get_all_connectors(enabled_only=True) if self.connector_manager else []
+        connected_rigs = self.tcp_pool.get_connected_rig_names() if self.tcp_pool else []
+        enabled_count = len(enabled_connectors)
 
-        if not connected_rigs:
-            # No connected rigs - show all configured rigs as disconnected
-            all_rigs = self.tcp_pool.get_all_rig_names()
-            if all_rigs:
-                self.rig_combo.addItem("")  # Empty first item
-                for rig_name in all_rigs:
-                    self.rig_combo.addItem(f"{rig_name} (disconnected)")
-        elif len(connected_rigs) == 1:
-            # Exactly 1 connected rig - auto-select it
-            self.rig_combo.addItem(connected_rigs[0])
+        if enabled_count == 0:
+            # No enabled connectors — Internet is the only/preselected option
+            self.rig_combo.addItem(INTERNET_RIG)
+        elif enabled_count == 1:
+            # 1 enabled connector — preselect it; Internet still available
+            rig_name = enabled_connectors[0]['rig_name']
+            label = rig_name if rig_name in connected_rigs else f"{rig_name} (disconnected)"
+            self.rig_combo.addItem(label)
+            self.rig_combo.addItem(INTERNET_RIG)
         else:
-            # Multiple connected rigs - require user selection
-            self.rig_combo.addItem("")  # Empty first item
-            for rig_name in connected_rigs:
-                self.rig_combo.addItem(rig_name)
+            # Multiple enabled connectors — require selection; Internet at bottom
+            self.rig_combo.addItem("")  # empty first
+            for c in enabled_connectors:
+                rig_name = c['rig_name']
+                label = rig_name if rig_name in connected_rigs else f"{rig_name} (disconnected)"
+                self.rig_combo.addItem(label)
+            self.rig_combo.addItem(INTERNET_RIG)
 
         self.rig_combo.blockSignals(False)
 
-        # Trigger rig changed to load callsign (only if a rig is selected)
         current_text = self.rig_combo.currentText()
-        if current_text and "(disconnected)" not in current_text:
+        if current_text:
             self._on_rig_changed(current_text)
 
     def _on_rig_changed(self, rig_name: str) -> None:
         """Handle rig selection change - fetch callsign from JS8Call."""
-        if not rig_name or "(disconnected)" in rig_name or not self.tcp_pool:
+        if not rig_name or "(disconnected)" in rig_name:
             self.callsign = ""
             self.callsign_field.setText("")
             if hasattr(self, 'freq_field'):
                 self.freq_field.setText("")
             return
+
+        if rig_name == INTERNET_RIG:
+            callsign = self._get_internet_callsign()
+            self.callsign = callsign
+            self.callsign_field.setText(callsign)
+            if hasattr(self, 'freq_field'):
+                self.freq_field.setText("")
+            if hasattr(self, 'mode_combo'):
+                self.mode_combo.setEnabled(False)
+            return
+
+        if not self.tcp_pool:
+            return
+
+        # Re-enable mode combo for real rig
+        if hasattr(self, 'mode_combo'):
+            self.mode_combo.setEnabled(True)
 
         client = self.tcp_pool.get_client(rig_name)
         if client and client.is_connected():
@@ -424,10 +438,21 @@ class Ui_FormAlert:
             self.callsign = callsign
             self.callsign_field.setText(callsign)
 
+    def _get_internet_callsign(self) -> str:
+        """Get callsign from User Settings for internet-only transmission."""
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT callsign FROM controls WHERE id = 1")
+                row = cursor.fetchone()
+                return (row[0] or "").strip().upper() if row else ""
+        except sqlite3.Error:
+            return ""
+
     def _on_mode_changed(self, index: int) -> None:
         """Handle mode dropdown change - send MODE.SET_SPEED to JS8Call."""
         rig_name = self.rig_combo.currentText()
-        if not rig_name or "(disconnected)" in rig_name:
+        if not rig_name or rig_name == INTERNET_RIG or "(disconnected)" in rig_name:
             return
 
         if not self.tcp_pool:
@@ -672,6 +697,26 @@ class Ui_FormAlert:
             return
 
         rig_name = self.rig_combo.currentText()
+        callsign, color, title, message = result
+
+        if rig_name == INTERNET_RIG:
+            callsign = self._get_internet_callsign()
+            if not callsign:
+                self._show_error(
+                    "No callsign configured.\n\nPlease set your callsign in Settings → User Settings."
+                )
+                return
+            self.callsign = callsign
+            self._pending_callsign = callsign
+            self._pending_message = self._build_message(callsign, color, title, message)
+            self._save_to_database(callsign, color, title, message, frequency=0)
+            now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
+            self._submit_to_backbone_async(0, callsign, self._pending_message, now)
+            self.MainWindow.close()
+            if self.on_alert_saved:
+                self.on_alert_saved()
+            return
+
         if "(disconnected)" in rig_name:
             self._show_error("Cannot transmit: rig is disconnected")
             return
@@ -684,8 +729,6 @@ class Ui_FormAlert:
         if not client or not client.is_connected():
             self._show_error("Cannot transmit: not connected to rig")
             return
-
-        callsign, color, title, message = result
 
         # Store pending values for transmission after frequency is received
         self._pending_message = self._build_message(callsign, color, title, message)
