@@ -1576,11 +1576,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.menu.addAction(action)
                 self.actions[name] = action
 
-        # Create the Groups menu (with checkable group items)
-        self.groups_menu = QtWidgets.QMenu("Groups", self.menubar)
-        self.menubar.addMenu(self.groups_menu)
+        # Groups section inside Config menu
+        groups_header = QtWidgets.QAction("GROUPS", self)
+        groups_header.setEnabled(False)
+        self.menu.addAction(groups_header)
+        self.groups_menu = self.menu
 
-        # Add Manage Groups option at top
+        # Add Manage Groups option
         manage_groups_action = QtWidgets.QAction("Manage Groups", self)
         manage_groups_action.triggered.connect(self._on_manage_groups)
         self.groups_menu.addAction(manage_groups_action)
@@ -1840,7 +1842,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.last20_button.clicked.connect(self._on_last20_clicked)
         self.header_layout.addWidget(self.last20_button)
 
-        # Spacer to push time to right
+        # Equal stretches on both sides to center "What's New" between Last 20 and Time
+        self.header_layout.addStretch()
+
+        # What's New hyperlink
+        self.whats_new_label = QtWidgets.QLabel(self.header_widget)
+        self.whats_new_label.setText('<a href="https://commstat-improved.com/new-features.php" style="color: white; text-decoration: underline;">What\'s New</a>')
+        self.whats_new_label.setFont(font)
+        self.whats_new_label.setOpenExternalLinks(True)
+        self.header_layout.addWidget(self.whats_new_label)
+
         self.header_layout.addStretch()
 
         # Time label
@@ -3866,11 +3877,11 @@ class MainWindow(QtWidgets.QMainWindow):
         """Populate the Groups menu with checkable group items."""
         # Remove existing group actions (keep Manage Groups, Show Groups, separator, and title)
         actions = self.groups_menu.actions()
-        for action in actions[4:]:  # Skip Manage Groups, Show Groups, separator, and title
+        for action in actions[9:]:  # Skip Config items, GROUPS header, Manage Groups, Show Groups, separator, and title
             self.groups_menu.removeAction(action)
 
         # Add section title if not already present
-        if len(self.groups_menu.actions()) == 3:
+        if len(self.groups_menu.actions()) == 8:
             title_action = QtWidgets.QAction("ACTIVE GROUPS", self)
             title_action.setEnabled(False)
             self.groups_menu.addAction(title_action)
@@ -4726,10 +4737,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Info message
         info_label = QtWidgets.QLabel(
-            "These settings are used when CommStat is not connected to JS8Call "
-            "or when 'Internet' is selected as the transmit method."
+            "These settings are used when INTERNET ONLY is selected as the Rig."
         )
-        info_label.setStyleSheet("color: #FF6600; font-weight: bold;")
+        info_label.setStyleSheet("color: #000000;")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 

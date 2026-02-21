@@ -96,7 +96,7 @@ FONT_FAMILY = "Arial"
 FONT_SIZE = 12
 WINDOW_WIDTH = 700
 WINDOW_HEIGHT = 580
-INTERNET_RIG = "Internet"
+INTERNET_RIG = "INTERNET ONLY"
 
 
 # =============================================================================
@@ -642,10 +642,10 @@ class StatRepDialog(QDialog):
 
         # Legend
         legend = QtWidgets.QLabel(
-            "<b>Green</b> = Normal | "
+            "<b>Maximum Reach</b> = RF + Internet | <b>Limited Reach</b> = RF Only"
+            "<br><b>Green</b> = Normal | "
             "<b>Yellow</b> = Limited | "
             "<b>Red</b> = Collapsed/None"
-            "<br>Delivery: Maximum Reach = RF + Internet | Limited Reach = RF Only"
         )
         legend.setAlignment(Qt.AlignCenter)
         legend.setFont(QtGui.QFont(FONT_FAMILY, 10))

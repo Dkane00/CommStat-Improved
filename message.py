@@ -42,10 +42,10 @@ _DATAFEED = _BACKBONE + "/datafeed-808585.php"
 # Debug mode via --debug-mode command line flag
 _DEBUG_MODE = "--debug-mode" in sys.argv
 
-INTERNET_RIG = "Internet"
+INTERNET_RIG = "INTERNET ONLY"
 
-# Callsign pattern for US amateur radio
-CALLSIGN_PATTERN = re.compile(r'[AKNW][A-Z]{0,2}[0-9][A-Z]{1,3}')
+# Callsign pattern for international amateur radio
+CALLSIGN_PATTERN = re.compile(r'[A-Z0-9]{1,3}[0-9][A-Z]{1,3}')
 
 
 def make_uppercase(field):
