@@ -21,6 +21,7 @@ from typing import Optional, TYPE_CHECKING
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDateTime
 from PyQt5.QtWidgets import QMessageBox
+from theme_manager import theme
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -42,10 +43,8 @@ _DATAFEED = _BACKBONE + "/datafeed-808585.php"
 # Debug mode via --debug-mode command line flag
 _DEBUG_MODE = "--debug-mode" in sys.argv
 
-INTERNET_RIG = "INTERNET ONLY"
-
-# Callsign pattern for international amateur radio
-CALLSIGN_PATTERN = re.compile(r'[A-Z0-9]{1,3}[0-9][A-Z]{1,3}')
+# Callsign pattern for US amateur radio
+CALLSIGN_PATTERN = re.compile(r'[AKNW][A-Z]{0,2}[0-9][A-Z]{1,3}')
 
 # Color options: (name, value, background_color, text_color)
 COLOR_OPTIONS = [
@@ -92,7 +91,7 @@ class Ui_FormAlert:
         """Initialize the UI components."""
         self.MainWindow = FormAlert
         FormAlert.setObjectName("FormAlert")
-        FormAlert.resize(900, 404)
+        FormAlert.resize(900, 360)
 
         # Set font
         font = QtGui.QFont()
@@ -111,37 +110,30 @@ class Ui_FormAlert:
         title_font = QtGui.QFont("Roboto", 16, QtGui.QFont.Bold)
         self.title_label.setFont(title_font)
         self.title_label.setText("CommStat Group Alert")
-        self.title_label.setStyleSheet("color: #333;")
+        self.title_label.setStyleSheet(theme.dialog_title_style_compact())
         self.title_label.setObjectName("title_label")
 
-        # Settings row label (left column, vertically centered in row)
-        self.settings_label = QtWidgets.QLabel(FormAlert)
-        self.settings_label.setGeometry(QtCore.QRect(58, 72, 120, 20))
-        self.settings_label.setFont(font)
-        self.settings_label.setText("Settings:")
-        self.settings_label.setObjectName("settings_label")
-
-        # Rig dropdown (label above control, aligned with other controls at x=190)
+        # Rig dropdown
         self.rig_label = QtWidgets.QLabel(FormAlert)
-        self.rig_label.setGeometry(QtCore.QRect(190, 46, 150, 20))
+        self.rig_label.setGeometry(QtCore.QRect(58, 50, 120, 20))
         self.rig_label.setFont(font)
         self.rig_label.setText("Rig:")
         self.rig_label.setObjectName("rig_label")
 
         self.rig_combo = QtWidgets.QComboBox(FormAlert)
-        self.rig_combo.setGeometry(QtCore.QRect(190, 72, 150, 26))
+        self.rig_combo.setGeometry(QtCore.QRect(190, 50, 150, 26))
         self.rig_combo.setFont(font)
         self.rig_combo.setObjectName("rig_combo")
 
-        # Mode dropdown (label above control)
+        # Mode dropdown
         self.mode_label = QtWidgets.QLabel(FormAlert)
-        self.mode_label.setGeometry(QtCore.QRect(350, 46, 100, 20))
+        self.mode_label.setGeometry(QtCore.QRect(350, 50, 45, 26))
         self.mode_label.setFont(font)
         self.mode_label.setText("Mode:")
         self.mode_label.setObjectName("mode_label")
 
         self.mode_combo = QtWidgets.QComboBox(FormAlert)
-        self.mode_combo.setGeometry(QtCore.QRect(350, 72, 100, 26))
+        self.mode_combo.setGeometry(QtCore.QRect(400, 50, 100, 26))
         self.mode_combo.setFont(font)
         self.mode_combo.addItem("Slow", 3)
         self.mode_combo.addItem("Normal", 0)
@@ -149,70 +141,56 @@ class Ui_FormAlert:
         self.mode_combo.addItem("Turbo", 2)
         self.mode_combo.setObjectName("mode_combo")
 
-        # Frequency field (label above control)
+        # Frequency field
         self.freq_label = QtWidgets.QLabel(FormAlert)
-        self.freq_label.setGeometry(QtCore.QRect(460, 46, 80, 20))
+        self.freq_label.setGeometry(QtCore.QRect(510, 50, 40, 26))
         self.freq_label.setFont(font)
         self.freq_label.setText("Freq:")
         self.freq_label.setObjectName("freq_label")
 
         self.freq_field = QtWidgets.QLineEdit(FormAlert)
-        self.freq_field.setGeometry(QtCore.QRect(460, 72, 80, 26))
+        self.freq_field.setGeometry(QtCore.QRect(555, 50, 80, 26))
         self.freq_field.setFont(font)
         self.freq_field.setReadOnly(True)
-        self.freq_field.setStyleSheet("background-color: #f0f0f0;")
+        self.freq_field.setStyleSheet(theme.input_readonly_style())
         self.freq_field.setObjectName("freq_field")
-
-        # Delivery dropdown (label above control)
-        self.delivery_label = QtWidgets.QLabel(FormAlert)
-        self.delivery_label.setGeometry(QtCore.QRect(550, 46, 150, 20))
-        self.delivery_label.setFont(font)
-        self.delivery_label.setText("Delivery:")
-        self.delivery_label.setObjectName("delivery_label")
-
-        self.delivery_combo = QtWidgets.QComboBox(FormAlert)
-        self.delivery_combo.setGeometry(QtCore.QRect(550, 72, 150, 26))
-        self.delivery_combo.setFont(font)
-        self.delivery_combo.addItem("Maximum Reach")
-        self.delivery_combo.addItem("Limited Reach")
-        self.delivery_combo.setObjectName("delivery_combo")
 
         # Group dropdown
         self.group_label = QtWidgets.QLabel(FormAlert)
-        self.group_label.setGeometry(QtCore.QRect(58, 107, 120, 20))
+        self.group_label.setGeometry(QtCore.QRect(58, 85, 120, 20))
         self.group_label.setFont(font)
         self.group_label.setText("Group:")
         self.group_label.setObjectName("group_label")
 
         self.group_combo = QtWidgets.QComboBox(FormAlert)
-        self.group_combo.setGeometry(QtCore.QRect(190, 107, 150, 26))
+        self.group_combo.setGeometry(QtCore.QRect(190, 85, 150, 26))
         self.group_combo.setFont(font)
         self.group_combo.setObjectName("group_combo")
 
         # Callsign input (read-only, from JS8Call)
         self.callsign_label = QtWidgets.QLabel(FormAlert)
-        self.callsign_label.setGeometry(QtCore.QRect(58, 142, 120, 20))
+        self.callsign_label.setGeometry(QtCore.QRect(58, 120, 120, 20))
         self.callsign_label.setFont(font)
         self.callsign_label.setText("From Callsign:")
         self.callsign_label.setObjectName("callsign_label")
 
         self.callsign_field = QtWidgets.QLineEdit(FormAlert)
-        self.callsign_field.setGeometry(QtCore.QRect(190, 142, 100, 26))
+        self.callsign_field.setGeometry(QtCore.QRect(190, 120, 100, 26))
         self.callsign_field.setFont(font)
         self.callsign_field.setMaxLength(MAX_CALLSIGN_LENGTH)
         self.callsign_field.setReadOnly(True)
-        self.callsign_field.setStyleSheet("background-color: #e9ecef;")
+        self.callsign_field.setStyleSheet(theme.input_readonly_style())
         self.callsign_field.setObjectName("callsign_field")
 
         # Color dropdown
         self.color_label = QtWidgets.QLabel(FormAlert)
-        self.color_label.setGeometry(QtCore.QRect(58, 177, 120, 20))
+        self.color_label.setGeometry(QtCore.QRect(58, 155, 120, 20))
         self.color_label.setFont(font)
         self.color_label.setText("Color:")
         self.color_label.setObjectName("color_label")
 
         self.color_combo = QtWidgets.QComboBox(FormAlert)
-        self.color_combo.setGeometry(QtCore.QRect(190, 177, 100, 26))
+        self.color_combo.setGeometry(QtCore.QRect(190, 155, 100, 26))
         self.color_combo.setFont(font)
         self.color_combo.setObjectName("color_combo")
 
@@ -227,7 +205,7 @@ class Ui_FormAlert:
 
         # Color sample boxes (80x28 each, with "Sample" text)
         sample_start_x = 310
-        sample_y = 174
+        sample_y = 152
         sample_width = 80
         sample_height = 28
         sample_spacing = 10
@@ -256,33 +234,35 @@ class Ui_FormAlert:
 
         # Title input
         self.title_input_label = QtWidgets.QLabel(FormAlert)
-        self.title_input_label.setGeometry(QtCore.QRect(58, 212, 120, 20))
+        self.title_input_label.setGeometry(QtCore.QRect(58, 190, 120, 20))
         self.title_input_label.setFont(font)
         self.title_input_label.setText("Title:")
         self.title_input_label.setObjectName("title_input_label")
 
         self.title_field = QtWidgets.QLineEdit(FormAlert)
-        self.title_field.setGeometry(QtCore.QRect(190, 212, 200, 26))
+        self.title_field.setGeometry(QtCore.QRect(190, 190, 200, 26))
         self.title_field.setFont(font)
         self.title_field.setMaxLength(MAX_TITLE_LENGTH)
         self.title_field.setObjectName("title_field")
+        make_uppercase(self.title_field)
 
         # Message input
         self.message_label = QtWidgets.QLabel(FormAlert)
-        self.message_label.setGeometry(QtCore.QRect(58, 247, 120, 20))
+        self.message_label.setGeometry(QtCore.QRect(58, 225, 120, 20))
         self.message_label.setFont(font)
         self.message_label.setText("Message:")
         self.message_label.setObjectName("message_label")
 
         self.message_field = QtWidgets.QLineEdit(FormAlert)
-        self.message_field.setGeometry(QtCore.QRect(190, 247, 530, 26))
+        self.message_field.setGeometry(QtCore.QRect(190, 225, 530, 26))
         self.message_field.setFont(font)
         self.message_field.setMaxLength(MAX_MESSAGE_LENGTH)
         self.message_field.setObjectName("message_field")
+        make_uppercase(self.message_field)
 
         # Character limit note
         self.note_label = QtWidgets.QLabel(FormAlert)
-        self.note_label.setGeometry(QtCore.QRect(190, 277, 530, 20))
+        self.note_label.setGeometry(QtCore.QRect(190, 255, 530, 20))
         note_font = QtGui.QFont()
         note_font.setFamily("Arial")
         note_font.setPointSize(10)
@@ -292,31 +272,23 @@ class Ui_FormAlert:
         self.note_label.setText("Title: 20 chars max. Message: 80 chars max.")
         self.note_label.setObjectName("note_label")
 
-        # Delivery legend
-        self.delivery_legend_label = QtWidgets.QLabel(FormAlert)
-        self.delivery_legend_label.setGeometry(QtCore.QRect(190, 299, 530, 20))
-        self.delivery_legend_label.setFont(note_font)
-        self.delivery_legend_label.setStyleSheet("color: #AA0000;")
-        self.delivery_legend_label.setText("Delivery: Maximum Reach = RF + Internet | Limited Reach = RF Only")
-        self.delivery_legend_label.setObjectName("delivery_legend_label")
-
         # Buttons
         self.save_button = QtWidgets.QPushButton(FormAlert)
-        self.save_button.setGeometry(QtCore.QRect(410, 334, 100, 32))
+        self.save_button.setGeometry(QtCore.QRect(410, 290, 100, 32))
         self.save_button.setText("Save Only")
         self.save_button.setObjectName("save_button")
         self.save_button.clicked.connect(self._save_only)
         self.save_button.setStyleSheet(self._button_style("#17a2b8"))
 
         self.transmit_button = QtWidgets.QPushButton(FormAlert)
-        self.transmit_button.setGeometry(QtCore.QRect(520, 334, 100, 32))
+        self.transmit_button.setGeometry(QtCore.QRect(520, 290, 100, 32))
         self.transmit_button.setText("Transmit")
         self.transmit_button.setObjectName("transmit_button")
         self.transmit_button.clicked.connect(self._transmit)
         self.transmit_button.setStyleSheet(self._button_style("#007bff"))
 
         self.cancel_button = QtWidgets.QPushButton(FormAlert)
-        self.cancel_button.setGeometry(QtCore.QRect(630, 334, 100, 32))
+        self.cancel_button.setGeometry(QtCore.QRect(630, 290, 100, 32))
         self.cancel_button.setText("Cancel")
         self.cancel_button.setObjectName("cancel_button")
         self.cancel_button.clicked.connect(self.MainWindow.close)
@@ -369,72 +341,51 @@ class Ui_FormAlert:
         # Callsign will be loaded from JS8Call when rig is selected
 
     def _load_rigs(self) -> None:
-        """Load enabled connectors into the rig dropdown, plus Internet option."""
+        """Load connected rigs into the rig dropdown.
+
+        Auto-selects only if exactly 1 rig is connected.
+        If multiple rigs are connected, user must select one.
+        """
+        if not self.tcp_pool:
+            return
+
         self.rig_combo.blockSignals(True)
         self.rig_combo.clear()
 
-        enabled_connectors = self.connector_manager.get_all_connectors(enabled_only=True) if self.connector_manager else []
-        connected_rigs = self.tcp_pool.get_connected_rig_names() if self.tcp_pool else []
-        enabled_count = len(enabled_connectors)
+        # Get connected rigs
+        connected_rigs = self.tcp_pool.get_connected_rig_names()
 
-        if enabled_count == 0:
-            # No enabled connectors — Internet is the only/preselected option
-            self.rig_combo.addItem(INTERNET_RIG)
-        elif enabled_count == 1:
-            # 1 enabled connector — preselect it; Internet still available
-            rig_name = enabled_connectors[0]['rig_name']
-            label = rig_name if rig_name in connected_rigs else f"{rig_name} (disconnected)"
-            self.rig_combo.addItem(label)
-            self.rig_combo.addItem(INTERNET_RIG)
+        if not connected_rigs:
+            # No connected rigs - show all configured rigs as disconnected
+            all_rigs = self.tcp_pool.get_all_rig_names()
+            if all_rigs:
+                self.rig_combo.addItem("")  # Empty first item
+                for rig_name in all_rigs:
+                    self.rig_combo.addItem(f"{rig_name} (disconnected)")
+        elif len(connected_rigs) == 1:
+            # Exactly 1 connected rig - auto-select it
+            self.rig_combo.addItem(connected_rigs[0])
         else:
-            # Multiple enabled connectors — require selection; Internet at bottom
-            self.rig_combo.addItem("")  # empty first
-            for c in enabled_connectors:
-                rig_name = c['rig_name']
-                label = rig_name if rig_name in connected_rigs else f"{rig_name} (disconnected)"
-                self.rig_combo.addItem(label)
-            self.rig_combo.addItem(INTERNET_RIG)
+            # Multiple connected rigs - require user selection
+            self.rig_combo.addItem("")  # Empty first item
+            for rig_name in connected_rigs:
+                self.rig_combo.addItem(rig_name)
 
         self.rig_combo.blockSignals(False)
 
+        # Trigger rig changed to load callsign (only if a rig is selected)
         current_text = self.rig_combo.currentText()
-        if current_text:
+        if current_text and "(disconnected)" not in current_text:
             self._on_rig_changed(current_text)
 
     def _on_rig_changed(self, rig_name: str) -> None:
         """Handle rig selection change - fetch callsign from JS8Call."""
-        if not rig_name or "(disconnected)" in rig_name:
+        if not rig_name or "(disconnected)" in rig_name or not self.tcp_pool:
             self.callsign = ""
             self.callsign_field.setText("")
             if hasattr(self, 'freq_field'):
                 self.freq_field.setText("")
             return
-
-        is_internet = (rig_name == INTERNET_RIG)
-        if hasattr(self, 'delivery_combo'):
-            self.delivery_combo.blockSignals(True)
-            self.delivery_combo.clear()
-            self.delivery_combo.addItem("Maximum Reach")
-            if not is_internet:
-                self.delivery_combo.addItem("Limited Reach")
-            self.delivery_combo.blockSignals(False)
-
-        if rig_name == INTERNET_RIG:
-            callsign = self._get_internet_callsign()
-            self.callsign = callsign
-            self.callsign_field.setText(callsign)
-            if hasattr(self, 'freq_field'):
-                self.freq_field.setText("")
-            if hasattr(self, 'mode_combo'):
-                self.mode_combo.setEnabled(False)
-            return
-
-        if not self.tcp_pool:
-            return
-
-        # Re-enable mode combo for real rig
-        if hasattr(self, 'mode_combo'):
-            self.mode_combo.setEnabled(True)
 
         client = self.tcp_pool.get_client(rig_name)
         if client and client.is_connected():
@@ -476,21 +427,10 @@ class Ui_FormAlert:
             self.callsign = callsign
             self.callsign_field.setText(callsign)
 
-    def _get_internet_callsign(self) -> str:
-        """Get callsign from User Settings for internet-only transmission."""
-        try:
-            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT callsign FROM controls WHERE id = 1")
-                row = cursor.fetchone()
-                return (row[0] or "").strip().upper() if row else ""
-        except sqlite3.Error:
-            return ""
-
     def _on_mode_changed(self, index: int) -> None:
         """Handle mode dropdown change - send MODE.SET_SPEED to JS8Call."""
         rig_name = self.rig_combo.currentText()
-        if not rig_name or rig_name == INTERNET_RIG or "(disconnected)" in rig_name:
+        if not rig_name or "(disconnected)" in rig_name:
             return
 
         if not self.tcp_pool:
@@ -537,23 +477,7 @@ class Ui_FormAlert:
 
     def _button_style(self, color: str) -> str:
         """Generate button stylesheet."""
-        return f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                border: none;
-                padding: 8px 12px;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                opacity: 0.9;
-            }}
-            QPushButton:pressed {{
-                opacity: 0.8;
-            }}
-        """
+        return theme.button_style(color)
 
     def _show_info(self, message: str) -> None:
         """Display an info message box."""
@@ -635,8 +559,7 @@ class Ui_FormAlert:
     def _build_message(self, callsign: str, color: int, title: str, message: str) -> str:
         """Build the message string for transmission."""
         group = "@" + self.group_combo.currentText()
-        marker = "{%%3}" if self.rig_combo.currentText() == INTERNET_RIG else "{%%}"
-        return f"{callsign}: {group} ,{self.alert_id},{color},{title},{message},{marker}"
+        return f"{callsign}: {group} ,{self.alert_id},{color},{title},{message},{{%%}}"
 
     def _submit_to_backbone_async(self, frequency: int, callsign: str, alert_data: str, now: str) -> None:
         """Start background thread to submit alert to backbone server.
@@ -702,7 +625,7 @@ class Ui_FormAlert:
                 "INSERT INTO alerts "
                 "(datetime, date, freq, db, source, alert_id, from_callsign, target, color, title, message) "
                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (datetime_str, date_only, frequency, db, 3 if self.rig_combo.currentText() == INTERNET_RIG else 1, self.alert_id, callsign, group, color, title, message)
+                (datetime_str, date_only, frequency, db, 1, self.alert_id, callsign, group, color, title, message)
             )
             conn.commit()
             freq_mhz = frequency / 1000000.0 if frequency else 0
@@ -712,10 +635,9 @@ class Ui_FormAlert:
 
         # Submit to backbone server if transmitted (has frequency)
         if frequency > 0:
-            if self.delivery_combo.currentText() != "Limited Reach":
-                # Format: CALLSIGN: @GROUP ,ALERT_ID,COLOR,TITLE,MESSAGE,{%%}
-                alert_data = f"{callsign}: {group} ,{self.alert_id},{color},{title},{message},{{%%}}"
-                self._submit_to_backbone_async(frequency, callsign, alert_data, datetime_str)
+            # Format: CALLSIGN: @GROUP ,ALERT_ID,COLOR,TITLE,MESSAGE,{%%}
+            alert_data = f"{callsign}: {group} ,{self.alert_id},{color},{title},{message},{{%%}}"
+            self._submit_to_backbone_async(frequency, callsign, alert_data, datetime_str)
 
     def _save_only(self) -> None:
         """Validate and save alert to database without transmitting."""
@@ -737,26 +659,6 @@ class Ui_FormAlert:
             return
 
         rig_name = self.rig_combo.currentText()
-        callsign, color, title, message = result
-
-        if rig_name == INTERNET_RIG:
-            callsign = self._get_internet_callsign()
-            if not callsign:
-                self._show_error(
-                    "No callsign configured.\n\nPlease set your callsign in Settings → User Settings."
-                )
-                return
-            self.callsign = callsign
-            self._pending_callsign = callsign
-            self._pending_message = self._build_message(callsign, color, title, message)
-            self._save_to_database(callsign, color, title, message, frequency=0)
-            now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
-            self._submit_to_backbone_async(0, callsign, self._pending_message, now)
-            self.MainWindow.close()
-            if self.on_alert_saved:
-                self.on_alert_saved()
-            return
-
         if "(disconnected)" in rig_name:
             self._show_error("Cannot transmit: rig is disconnected")
             return
@@ -769,6 +671,8 @@ class Ui_FormAlert:
         if not client or not client.is_connected():
             self._show_error("Cannot transmit: not connected to rig")
             return
+
+        callsign, color, title, message = result
 
         # Store pending values for transmission after frequency is received
         self._pending_message = self._build_message(callsign, color, title, message)

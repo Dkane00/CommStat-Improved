@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDateTime, Qt
 from PyQt5.QtWidgets import QMessageBox, QDialog
+from theme_manager import theme
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -30,8 +31,8 @@ MIN_PHONE_LENGTH = 10  # 10 digits
 MIN_MESSAGE_LENGTH = 8
 MAX_MESSAGE_LENGTH = 67
 
-FONT_FAMILY = "Arial"
-FONT_SIZE = 12
+FONT_FAMILY = theme.font_family
+FONT_SIZE = theme.font_size
 WINDOW_WIDTH = 550
 WINDOW_HEIGHT = 380
 
@@ -134,7 +135,7 @@ class JS8SMSDialog(QDialog):
         title.setAlignment(Qt.AlignCenter)
         title_font = QtGui.QFont(FONT_FAMILY, 16, QtGui.QFont.Bold)
         title.setFont(title_font)
-        title.setStyleSheet("color: #333; margin-bottom: 5px;")
+        title.setStyleSheet(theme.dialog_title_style_compact())
         layout.addWidget(title)
 
         # Rig selection
@@ -166,7 +167,7 @@ class JS8SMSDialog(QDialog):
         self.freq_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.freq_field.setMaximumWidth(80)
         self.freq_field.setReadOnly(True)
-        self.freq_field.setStyleSheet("background-color: #f0f0f0;")
+        self.freq_field.setStyleSheet(theme.input_readonly_style())
         rig_layout.addWidget(freq_label)
         rig_layout.addWidget(self.freq_field)
         rig_layout.addStretch()
@@ -253,20 +254,7 @@ class JS8SMSDialog(QDialog):
 
     def _button_style(self, color: str) -> str:
         """Generate button stylesheet."""
-        return f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                border: none;
-                padding: 8px 12px;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                opacity: 0.9;
-            }}
-        """
+        return theme.button_style(color)
 
     def _on_rig_changed(self, rig_name: str) -> None:
         """Handle rig selection change - update mode/frequency display."""

@@ -25,45 +25,45 @@ DATABASE_FILE = SCRIPT_DIR / "traffic.db3"
 DATABASE_TEMPLATE = SCRIPT_DIR / "traffic.db3.template"
 
 
-def apply_update() -> bool:
-    """
-    Check for and apply pending update.
+# def apply_update() -> bool:
+#     """
+#     Check for and apply pending update.
 
-    Returns:
-        True if update was applied, False otherwise.
-    """
-    if not UPDATE_ZIP.exists():
-        return False
+#     Returns:
+#         True if update was applied, False otherwise.
+#     """
+#     if not UPDATE_ZIP.exists():
+#         return False
 
-    print("Update found. Applying...")
+#     print("Update found. Applying...")
 
-    try:
-        with zipfile.ZipFile(UPDATE_ZIP, 'r') as zf:
-            file_list = zf.namelist()
-            print(f"Updating {len(file_list)} files...")
-            zf.extractall(SCRIPT_DIR)
+#     try:
+#         with zipfile.ZipFile(UPDATE_ZIP, 'r') as zf:
+#             file_list = zf.namelist()
+#             print(f"Updating {len(file_list)} files...")
+#             zf.extractall(SCRIPT_DIR)
 
-        UPDATE_ZIP.unlink()
-        print("Update applied successfully.")
+#         UPDATE_ZIP.unlink()
+#         print("Update applied successfully.")
 
-        if UPDATE_FOLDER.exists() and not any(UPDATE_FOLDER.iterdir()):
-            UPDATE_FOLDER.rmdir()
+#         if UPDATE_FOLDER.exists() and not any(UPDATE_FOLDER.iterdir()):
+#             UPDATE_FOLDER.rmdir()
 
-        return True
+#         return True
 
-    except zipfile.BadZipFile:
-        print(f"Error: {UPDATE_ZIP} is not a valid zip file.")
-        bad_zip = UPDATE_FOLDER / "update_bad.zip"
-        UPDATE_ZIP.rename(bad_zip)
-        return False
+#     except zipfile.BadZipFile:
+#         print(f"Error: {UPDATE_ZIP} is not a valid zip file.")
+#         bad_zip = UPDATE_FOLDER / "update_bad.zip"
+#         UPDATE_ZIP.rename(bad_zip)
+#         return False
 
-    except PermissionError as e:
-        print(f"Error: Permission denied - {e}")
-        return False
+#     except PermissionError as e:
+#         print(f"Error: Permission denied - {e}")
+#         return False
 
-    except Exception as e:
-        print(f"Error applying update: {e}")
-        return False
+#     except Exception as e:
+#         print(f"Error applying update: {e}")
+#         return False
 
 
 def setup_database() -> bool:
@@ -91,14 +91,9 @@ def launch_main_app() -> None:
         print(f"Error: {MAIN_APP} not found.")
         sys.exit(1)
 
-    # Fix Linux menu bar issues by disabling global menu integration
-    env = os.environ.copy()
-    if sys.platform.startswith('linux'):
-        env['QT_QPA_PLATFORMTHEME'] = ''  # Disable platform theme that steals menu bar
-
     python = sys.executable
     args = [python, str(MAIN_APP)] + sys.argv[1:]  # Pass through any command line args
-    subprocess.run(args, cwd=str(SCRIPT_DIR), env=env)
+    subprocess.run(args, cwd=str(SCRIPT_DIR))
 
 
 def main() -> None:
@@ -106,7 +101,7 @@ def main() -> None:
     if not UPDATE_FOLDER.exists():
         UPDATE_FOLDER.mkdir(parents=True, exist_ok=True)
 
-    apply_update()
+    #apply_update()
     setup_database()
     launch_main_app()
 
