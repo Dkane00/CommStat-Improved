@@ -682,7 +682,7 @@ class Ui_FormMessage:
             self._pending_callsign = callsign
             self._pending_message = self._build_message(message)
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
-            message_data = f"{callsign}: @{self.group_combo.currentText()} MSG ,{self.msg_id},{message},{{^%}}"
+            message_data = f"{callsign}: @{self.group_combo.currentText()} MSG ,{self.msg_id},{message},{{^%3}}"
             self._save_to_database(callsign, message, frequency=0)
             self._submit_to_backbone_async(0, callsign, message_data, now)
             if self.refresh_callback:
