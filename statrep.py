@@ -506,6 +506,8 @@ class StatRepDialog(QDialog):
             QDialog {{ background-color: {DATA_BACKGROUND}; }}
             QLabel {{ color: #333333; }}
             QLineEdit {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
+            QComboBox {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
+            QComboBox QAbstractItemView {{ background-color: white; color: #333333; selection-background-color: #0078d7; selection-color: white; }}
         """)
 
         layout = QtWidgets.QVBoxLayout(self)
