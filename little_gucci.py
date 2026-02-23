@@ -508,7 +508,7 @@ DEFAULT_COLORS: Dict[str, str] = {
     'condition_red': '#BB0000',         # Critical/emergency status
     'condition_gray': '#808080',        # Unknown/no data
     # Data table colors
-    'data_background': '#FFF0D4',
+    'data_background': '#FFF5E1',
     'data_foreground': '#000000',
     # Live feed display colors
     'feed_background': '#000000',
@@ -4991,12 +4991,6 @@ def main() -> None:
     QtWidgets.QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
-
-    # On Linux, apply Fusion style to ensure consistent light backgrounds for all dialogs.
-    # QT_QPA_PLATFORMTHEME is cleared by commstat.py to fix menu bar theft, which leaves
-    # dialogs without a default background color on some desktop environments (e.g. Cosmic).
-    if sys.platform.startswith('linux'):
-        app.setStyle('Fusion')
 
     # Set tooltip colors to match Windows (tan background, black text)
     app.setStyleSheet("QToolTip { background-color: #FFFFE1; color: black; border: 1px solid black; }")
