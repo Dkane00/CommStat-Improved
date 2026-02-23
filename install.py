@@ -83,46 +83,56 @@ def pip_supports_break_system_packages():
 
 
 def install(package):
-    try:
-        cmd = [sys.executable, "-m", "pip", "install"]
-        if sys.platform == 'darwin' or sys.platform.startswith('linux'):
-            if pip_supports_break_system_packages():
-                cmd.append("--break-system-packages")
-            cmd.append("--user")
-        cmd.append(package)
-        subprocess.check_call(cmd)
+    print(f"  Installing {package}...")
+    is_unix = sys.platform == 'darwin' or sys.platform.startswith('linux')
 
-    except subprocess.CalledProcessError as e:
-        # print("this is the except install error: "+str(e.returncode))
-        if e.returncode > 0:
-            print(
-                " Installation failed, copy and paste this screen \n into https://groups.io/g/CommStat for support exiting now")
-            sys.exit()
-            # Exception("failed installation, cannot conntinue")
+    # Build candidate command lists to try in order
+    attempts = []
+    if is_unix:
+        if pip_supports_break_system_packages():
+            # Preferred: user install with break-system-packages (needed on Ubuntu 24.04+ / Mint 22+)
+            attempts.append([sys.executable, "-m", "pip", "install", "--user", "--break-system-packages", package])
+        # Fallback: user install without break-system-packages (older distros)
+        attempts.append([sys.executable, "-m", "pip", "install", "--user", package])
+    else:
+        attempts.append([sys.executable, "-m", "pip", "install", package])
+
+    last_error = None
+    for cmd in attempts:
+        try:
+            subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            print(f"  OK: {package}")
+            return
+        except subprocess.CalledProcessError as e:
+            last_error = e
+
+    # All attempts failed
+    print(f"\nERROR: Could not install '{package}'.")
+    print("  This may be due to a network issue or a restricted Python environment.")
+    print("  Try manually: pip3 install " + package + " --user --break-system-packages")
+    print("  For help, post this screen to: https://groups.io/g/CommStat")
+    sys.exit(1)
 
 
 def test_python():
     global osver
-    print("HERE is the version "+osver)
     try:
         if int(sys.version_info[0]) < 3:
             print("You are using Python " + str(sys.version_info[0]))
-            print("Commstatx requires Python 3.9 or newer, install cannot continue")
-            # raise Exception("Wrong Python version, cannot continue installation, please upgrade Python")
-            sys.exit()
+            print("CommStat requires Python 3.8 or newer, install cannot continue")
+            sys.exit(1)
 
         if int(sys.version_info[1]) < 8:
             print("You are using Python 3." + str(sys.version_info[1]))
-            print("Commstatx requires Python 3.8 or newer")
-            # raise Exception("Wrong Python cannot continue")
-            sys.exit()
+            print("CommStat requires Python 3.8 or newer")
+            sys.exit(1)
         else:
-            print("Appropriate version of Python found : Python 3." + str(
+            print("Appropriate version of Python found: Python 3." + str(
                 sys.version_info[1]) + ", continuing installation")
 
-    except:
+    except Exception:
         print("Exception while testing Python version, cannot continue installation")
-        sys.exit()
+        sys.exit(1)
     if osver == "Windows":
         print("Installing for Windows 10 or 11")
         wininstall()
@@ -147,6 +157,7 @@ def lininstall():
         "psutil",
         "pyenchant",
     ]
+    print(f"\nInstalling {len(packages)} packages...")
     for package in packages:
         install(package)
     runsettings()
@@ -167,6 +178,7 @@ def macinstall():
         "psutil",
         "pyenchant",
     ]
+    print(f"\nInstalling {len(packages)} packages...")
     for package in packages:
         install(package)
     runsettings()
@@ -185,6 +197,7 @@ def wininstall():
         "psutil",
         "pyenchant",
     ]
+    print(f"\nInstalling {len(packages)} packages...")
     for package in packages:
         install(package)
     runsettings()
