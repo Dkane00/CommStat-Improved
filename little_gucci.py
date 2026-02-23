@@ -5188,6 +5188,8 @@ def main() -> None:
         )
         sys.exit(1)
 
+    QtWidgets.QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
 
     # Let system theme handle tooltip styling

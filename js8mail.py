@@ -128,6 +128,42 @@ class JS8MailDialog(QDialog):
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
+        # Safety-net stylesheet: Ensures dialog has proper background/foreground on all platforms
+        self.setStyleSheet(f"""
+            QDialog {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')};
+            }}
+            QLabel {{ 
+                color: {theme.color('text')}; 
+            }}
+            QLineEdit {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+                border-radius: 4px; 
+                padding: 2px 4px; 
+            }}
+            QComboBox {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+                border-radius: 4px; 
+                padding: 2px 4px; 
+            }}
+            QComboBox:disabled {{ 
+                background-color: {theme.color('mid')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+            }}
+            QComboBox QAbstractItemView {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                selection-background-color: {theme.color('highlight')}; 
+                selection-color: {theme.color('highlightedtext')}; 
+            }}
+        """)
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 20)

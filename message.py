@@ -43,8 +43,10 @@ _DATAFEED = _BACKBONE + "/datafeed-808585.php"
 # Debug mode via --debug-mode command line flag
 _DEBUG_MODE = "--debug-mode" in sys.argv
 
-# Callsign pattern for US amateur radio
-CALLSIGN_PATTERN = re.compile(r'[AKNW][A-Z]{0,2}[0-9][A-Z]{1,3}')
+INTERNET_RIG = "INTERNET ONLY"
+
+# Callsign pattern for international amateur radio
+CALLSIGN_PATTERN = re.compile(r'[A-Z0-9]{1,3}[0-9][A-Z]{1,3}')
 
 
 def make_uppercase(field):
@@ -95,6 +97,42 @@ class Ui_FormMessage:
         icon = QtGui.QIcon()
         icon.addPixmap(QtGui.QPixmap("radiation-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         FormMessage.setWindowIcon(icon)
+
+        # Safety-net stylesheet: Ensures dialog has proper background/foreground on all platforms
+        FormMessage.setStyleSheet(f"""
+            QWidget {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')};
+            }}
+            QLabel {{ 
+                color: {theme.color('text')}; 
+            }}
+            QLineEdit {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+                border-radius: 4px; 
+                padding: 2px 4px; 
+            }}
+            QComboBox {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+                border-radius: 4px; 
+                padding: 2px 4px; 
+            }}
+            QComboBox:disabled {{ 
+                background-color: {theme.color('mid')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+            }}
+            QComboBox QAbstractItemView {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                selection-background-color: {theme.color('highlight')}; 
+                selection-color: {theme.color('highlightedtext')}; 
+            }}
+        """)
 
         # Title
         self.title_label = QtWidgets.QLabel(FormMessage)

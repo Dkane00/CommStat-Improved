@@ -97,6 +97,7 @@ FONT_FAMILY = theme.font_family
 FONT_SIZE = theme.font_size
 WINDOW_WIDTH = 700
 WINDOW_HEIGHT = 580
+INTERNET_RIG = "INTERNET ONLY"
 
 
 # =============================================================================
@@ -333,6 +334,37 @@ class StatRepDialog(QDialog):
                 self.freq_field.setText("")
             return
 
+        is_internet = (rig_name == INTERNET_RIG)
+        if hasattr(self, 'delivery_combo'):
+            self.delivery_combo.blockSignals(True)
+            self.delivery_combo.clear()
+            self.delivery_combo.addItem("Maximum Reach")
+            if not is_internet:
+                self.delivery_combo.addItem("Limited Reach")
+            self.delivery_combo.blockSignals(False)
+
+        if rig_name == INTERNET_RIG:
+            callsign, grid, state = self._get_internet_user_settings()
+            self.callsign = callsign
+            self.grid = grid
+            if hasattr(self, 'from_field'):
+                self.from_field.setText(callsign)
+                self.grid_field.setText(grid)
+            if hasattr(self, 'freq_field'):
+                self.freq_field.setText("")
+            if hasattr(self, 'mode_combo'):
+                self.mode_combo.setEnabled(False)
+                self.mode_combo.setCurrentIndex(-1)
+            if hasattr(self, 'remarks_field') and state:
+                self.remarks_field.setText(state)
+            return
+
+        # Re-enable mode combo for real rig
+        if hasattr(self, 'mode_combo'):
+            self.mode_combo.setEnabled(True)
+            if self.mode_combo.currentIndex() == -1:
+                self.mode_combo.setCurrentIndex(0)
+
         # Update remarks with state from connector
         if hasattr(self, 'remarks_field'):
             state = get_state_from_connector(self.connector_manager, rig_name)
@@ -454,6 +486,43 @@ class StatRepDialog(QDialog):
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
+        # Safety-net stylesheet: Ensures dialog has proper background/foreground on all platforms
+        # Uses theme manager colors to respect system theme while preventing black backgrounds
+        self.setStyleSheet(f"""
+            QDialog {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')};
+            }}
+            QLabel {{ 
+                color: {theme.color('text')}; 
+            }}
+            QLineEdit {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+                border-radius: 4px; 
+                padding: 2px 4px; 
+            }}
+            QComboBox {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+                border-radius: 4px; 
+                padding: 2px 4px; 
+            }}
+            QComboBox:disabled {{ 
+                background-color: {theme.color('mid')}; 
+                color: {theme.color('text')}; 
+                border: 1px solid {theme.color('mid')}; 
+            }}
+            QComboBox QAbstractItemView {{ 
+                background-color: {theme.color('base')}; 
+                color: {theme.color('text')}; 
+                selection-background-color: {theme.color('highlight')}; 
+                selection-color: {theme.color('highlightedtext')}; 
+            }}
+        """)
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 20)
