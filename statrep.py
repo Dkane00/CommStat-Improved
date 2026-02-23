@@ -97,6 +97,7 @@ FONT_SIZE = 12
 WINDOW_WIDTH = 700
 WINDOW_HEIGHT = 580
 INTERNET_RIG = "INTERNET ONLY"
+DATA_BACKGROUND = "#FFF5E1"   # matches little_gucci.py 'data_background'
 
 
 # =============================================================================
@@ -501,6 +502,8 @@ class StatRepDialog(QDialog):
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
+        self.setStyleSheet(f"QDialog {{ background-color: {DATA_BACKGROUND}; }}")
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 20)
