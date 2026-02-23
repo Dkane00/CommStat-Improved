@@ -671,18 +671,58 @@ class StatRepDialog(QDialog):
             lambda text, c=combo: self._update_combo_color(c, text)
         )
 
+        # Preserve the original palette so we can restore it when clearing styles
+        try:
+            combo._orig_palette = QtGui.QPalette(combo.palette())
+        except Exception:
+            combo._orig_palette = None
+
+        # Ensure the combo uses the application's structural combo style by default
+        try:
+            combo.setStyleSheet(theme.combo_style())
+        except Exception:
+            pass
+
         return combo
 
     def _update_combo_color(self, combo: QComboBox, text: str) -> None:
         """Update combo box background color based on selection."""
-        color = STATUS_COLORS.get(text, "#ffffff")
-        if text in ("Green", "Yellow", "Red", "Unknown"):
+        # Use the semantic STATUS_COLORS mapping for selected items.
+        # Apply comprehensive styling including all subcontrols to ensure
+        # the color overrides platform/system theme styling.
+        color = STATUS_COLORS.get(text, "")
+        if text in ("Green", "Yellow", "Red", "Unknown") and color:
             text_color = "#000" if text == "Yellow" else "#fff"
-            combo.setStyleSheet(
-                f"background-color: {color}; color: {text_color}; font-weight: bold;"
-            )
+            # Style the main combo box and all its subcontrols
+            combo.setStyleSheet(f"""
+                QComboBox {{
+                    background-color: {color};
+                    color: {text_color};
+                    font-weight: bold;
+                    border: 1px solid {color};
+                    padding: 2px 5px;
+                    border-radius: 4px;
+                }}
+                QComboBox::drop-down {{
+                    background-color: {color};
+                    border: none;
+                }}
+                QComboBox::down-arrow {{
+                    image: none;
+                    border-left: 4px solid transparent;
+                    border-right: 4px solid transparent;
+                    border-top: 5px solid {text_color};
+                    width: 0px;
+                    height: 0px;
+                }}
+            """)
         else:
-            combo.setStyleSheet("")
+            # Revert to structural combo styling from theme manager so the
+            # app follows the system theme for non-status selections.
+            try:
+                combo.setStyleSheet(theme.combo_style())
+            except Exception:
+                combo.setStyleSheet("")
 
     def _button_style(self, color: str) -> str:
         """Generate button stylesheet."""
