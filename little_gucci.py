@@ -4992,6 +4992,12 @@ def main() -> None:
     QtWidgets.QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
 
+    # On Linux, apply Fusion style to ensure consistent light backgrounds for all dialogs.
+    # QT_QPA_PLATFORMTHEME is cleared by commstat.py to fix menu bar theft, which leaves
+    # dialogs without a default background color on some desktop environments (e.g. Cosmic).
+    if sys.platform.startswith('linux'):
+        app.setStyle('Fusion')
+
     # Set tooltip colors to match Windows (tan background, black text)
     app.setStyleSheet("QToolTip { background-color: #FFFFE1; color: black; border: 1px solid black; }")
 
