@@ -502,7 +502,11 @@ class StatRepDialog(QDialog):
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
-        self.setStyleSheet(f"QDialog {{ background-color: {DATA_BACKGROUND}; }}")
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {DATA_BACKGROUND}; }}
+            QLabel {{ color: #333333; }}
+            QLineEdit {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
+        """)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(12)
