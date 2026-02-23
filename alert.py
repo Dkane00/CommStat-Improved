@@ -43,6 +43,7 @@ _DATAFEED = _BACKBONE + "/datafeed-808585.php"
 _DEBUG_MODE = "--debug-mode" in sys.argv
 
 INTERNET_RIG = "INTERNET ONLY"
+DATA_BACKGROUND = "#FFF5E1"   # matches little_gucci.py 'data_background'
 
 # Callsign pattern for international amateur radio
 CALLSIGN_PATTERN = re.compile(r'[A-Z0-9]{1,3}[0-9][A-Z]{1,3}')
@@ -104,6 +105,16 @@ class Ui_FormAlert:
         icon = QtGui.QIcon()
         icon.addPixmap(QtGui.QPixmap("radiation-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         FormAlert.setWindowIcon(icon)
+
+        # Apply theme
+        FormAlert.setStyleSheet(f"""
+            QWidget {{ background-color: {DATA_BACKGROUND}; }}
+            QLabel {{ color: #333333; }}
+            QLineEdit {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
+            QComboBox {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
+            QComboBox:disabled {{ background-color: #e9ecef; color: #999999; border: 1px solid #cccccc; }}
+            QComboBox QAbstractItemView {{ background-color: white; color: #333333; selection-background-color: #0078d7; selection-color: white; }}
+        """)
 
         # Title
         self.title_label = QtWidgets.QLabel(FormAlert)

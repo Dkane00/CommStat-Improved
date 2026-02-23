@@ -34,6 +34,7 @@ FONT_FAMILY = "Arial"
 FONT_SIZE = 12
 WINDOW_WIDTH = 550
 WINDOW_HEIGHT = 380
+DATA_BACKGROUND = "#FFF5E1"   # matches little_gucci.py 'data_background'
 
 
 def make_uppercase(field):
@@ -125,6 +126,15 @@ class JS8SMSDialog(QDialog):
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {DATA_BACKGROUND}; }}
+            QLabel {{ color: #333333; }}
+            QLineEdit {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
+            QComboBox {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
+            QComboBox:disabled {{ background-color: #e9ecef; color: #999999; border: 1px solid #cccccc; }}
+            QComboBox QAbstractItemView {{ background-color: white; color: #333333; selection-background-color: #0078d7; selection-color: white; }}
+        """)
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 20)
