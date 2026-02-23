@@ -352,6 +352,7 @@ class StatRepDialog(QDialog):
                 self.freq_field.setText("")
             if hasattr(self, 'mode_combo'):
                 self.mode_combo.setEnabled(False)
+                self.mode_combo.setCurrentIndex(-1)
             if hasattr(self, 'remarks_field') and state:
                 self.remarks_field.setText(state)
             return
@@ -359,6 +360,8 @@ class StatRepDialog(QDialog):
         # Re-enable mode combo for real rig
         if hasattr(self, 'mode_combo'):
             self.mode_combo.setEnabled(True)
+            if self.mode_combo.currentIndex() == -1:
+                self.mode_combo.setCurrentIndex(0)
 
         # Update remarks with state from connector
         if hasattr(self, 'remarks_field'):
