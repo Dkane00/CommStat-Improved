@@ -288,7 +288,7 @@ class StatRepDialog(QDialog):
         thread.start()
 
     def _load_rigs(self) -> None:
-        """Load connected rigs into the rig dropdown.
+        """Load connected rigs into the rig dropdown, plus Internet option.
 
         Auto-selects only if exactly 1 rig is connected.
         If multiple rigs are connected, user must select one.
@@ -306,14 +306,19 @@ class StatRepDialog(QDialog):
                 self.rig_combo.addItem("")  # Empty first item
                 for rig_name in all_rigs:
                     self.rig_combo.addItem(f"{rig_name} (disconnected)")
+                self.rig_combo.addItem(INTERNET_RIG)
+            else:
+                self.rig_combo.addItem(INTERNET_RIG)
         elif len(connected_rigs) == 1:
             # Exactly 1 connected rig - auto-select it
             self.rig_combo.addItem(connected_rigs[0])
+            self.rig_combo.addItem(INTERNET_RIG)
         else:
             # Multiple connected rigs - require user selection
             self.rig_combo.addItem("")  # Empty first item
             for rig_name in connected_rigs:
                 self.rig_combo.addItem(rig_name)
+            self.rig_combo.addItem(INTERNET_RIG)
 
         self.rig_combo.blockSignals(False)
 
@@ -427,10 +432,27 @@ class StatRepDialog(QDialog):
             if hasattr(self, 'freq_field'):
                 self.freq_field.setText("")
 
+    def _get_internet_user_settings(self) -> tuple:
+        """Get callsign, grid, and state from User Settings for internet-only transmission."""
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT callsign, gridsquare, state FROM controls WHERE id = 1")
+                row = cursor.fetchone()
+                if row:
+                    return (
+                        (row[0] or "").strip().upper(),
+                        (row[1] or "").strip(),
+                        (row[2] or "").strip().upper(),
+                    )
+        except sqlite3.Error:
+            pass
+        return ("", "", "")
+
     def _on_mode_changed(self, index: int) -> None:
         """Handle mode dropdown change - send MODE.SET_SPEED to JS8Call."""
         rig_name = self.rig_combo.currentText()
-        if not rig_name or "(disconnected)" in rig_name:
+        if not rig_name or rig_name == INTERNET_RIG or "(disconnected)" in rig_name:
             return
 
         if not self.tcp_pool:
@@ -1006,6 +1028,33 @@ class StatRepDialog(QDialog):
             return
 
         rig_name = self.rig_combo.currentText()
+
+        if rig_name == INTERNET_RIG:
+            callsign, _, _ = self._get_internet_user_settings()
+            if not callsign:
+                self._show_error(
+                    "No callsign configured.\n\nPlease set your callsign in Settings → User Settings."
+                )
+                return
+            self.callsign = callsign
+            self._pending_message = self._build_message()
+            self._save_to_database(0)
+            self._submit_to_backbone_async(0)
+            now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
+            print(f"\n{'='*60}")
+            print(f"STATREP TRANSMITTED (Internet) - {now} UTC")
+            print(f"{'='*60}")
+            print(f"  ID:       {self.statrep_id}")
+            print(f"  To:       {self.to_combo.currentText()}")
+            print(f"  From:     {self.callsign}")
+            print(f"  Grid:     {self.grid}")
+            print(f"  Scope:    {self.scope_combo.currentText()}")
+            print(f"  Message:  {self._pending_message}")
+            print(f"{'='*60}\n")
+            self._refresh_parent_data()
+            self.accept()
+            return
+
         if "(disconnected)" in rig_name:
             self._show_error("Cannot transmit: rig is disconnected")
             return

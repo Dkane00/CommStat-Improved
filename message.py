@@ -324,22 +324,27 @@ class Ui_FormMessage:
 
         # Get connected rigs
         connected_rigs = self.tcp_pool.get_connected_rig_names()
+        all_rigs = self.tcp_pool.get_all_rig_names()
 
-        if not connected_rigs:
-            # No connected rigs - show all configured rigs as disconnected
-            all_rigs = self.tcp_pool.get_all_rig_names()
-            if all_rigs:
+        if not all_rigs:
+            self.rig_combo.addItem(INTERNET_RIG)
+        else:
+            if not connected_rigs:
+                # No connected rigs - show all configured rigs as disconnected
                 self.rig_combo.addItem("")  # Empty first item
                 for rig_name in all_rigs:
                     self.rig_combo.addItem(f"{rig_name} (disconnected)")
-        elif len(connected_rigs) == 1:
-            # Exactly 1 connected rig - auto-select it
-            self.rig_combo.addItem(connected_rigs[0])
-        else:
-            # Multiple connected rigs - require user selection
-            self.rig_combo.addItem("")  # Empty first item
-            for rig_name in connected_rigs:
-                self.rig_combo.addItem(rig_name)
+                self.rig_combo.addItem(INTERNET_RIG)
+            elif len(connected_rigs) == 1:
+                # Exactly 1 connected rig - auto-select it
+                self.rig_combo.addItem(connected_rigs[0])
+                self.rig_combo.addItem(INTERNET_RIG)
+            else:
+                # Multiple connected rigs - require user selection
+                self.rig_combo.addItem("")  # Empty first item
+                for rig_name in connected_rigs:
+                    self.rig_combo.addItem(rig_name)
+                self.rig_combo.addItem(INTERNET_RIG)
 
         self.rig_combo.blockSignals(False)
 
@@ -411,10 +416,21 @@ class Ui_FormMessage:
             if hasattr(self, 'freq_field'):
                 self.freq_field.setText(f"{frequency_mhz:.3f}")
 
+    def _get_internet_callsign(self) -> str:
+        """Get callsign from User Settings for internet-only transmission."""
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT callsign FROM controls WHERE id = 1")
+                row = cursor.fetchone()
+                return (row[0] or "").strip().upper() if row else ""
+        except sqlite3.Error:
+            return ""
+
     def _on_mode_changed(self, index: int) -> None:
         """Handle mode dropdown change - send MODE.SET_SPEED to JS8Call."""
         rig_name = self.rig_combo.currentText()
-        if not rig_name or "(disconnected)" in rig_name:
+        if not rig_name or rig_name == INTERNET_RIG or "(disconnected)" in rig_name:
             return
 
         if not self.tcp_pool:
@@ -628,6 +644,27 @@ class Ui_FormMessage:
             return
 
         rig_name = self.rig_combo.currentText()
+        callsign, message = result
+
+        if rig_name == INTERNET_RIG:
+            callsign = self._get_internet_callsign()
+            if not callsign:
+                self._show_error(
+                    "No callsign configured.\n\nPlease set your callsign in Settings → User Settings."
+                )
+                return
+            self.callsign = callsign
+            self._pending_callsign = callsign
+            self._pending_message = self._build_message(message)
+            now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
+            message_data = f"{callsign}: @{self.group_combo.currentText()} MSG ,{self.msg_id},{message},{{^%3}}"
+            self._save_to_database(callsign, message, frequency=0)
+            self._submit_to_backbone_async(0, callsign, message_data, now)
+            if self.refresh_callback:
+                self.refresh_callback()
+            self.MainWindow.close()
+            return
+
         if "(disconnected)" in rig_name:
             self._show_error("Cannot transmit: rig is disconnected")
             return
