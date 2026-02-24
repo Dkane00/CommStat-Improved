@@ -4460,7 +4460,7 @@ class MainWindow(QtWidgets.QMainWindow):
         message_text = None
 
         # Try to parse backbone format with msg_id: SENDER: @GROUP MSG ,MSG_ID,MESSAGE,{^%}
-        backbone_pattern = re.match(r'^(\w+):\s+(@?\w+)\s+MSG\s+,([^,]+),(.+?)(?:\s*,\{[^\}]+\})?$', message_value, re.IGNORECASE)
+        backbone_pattern = re.match(r'^(\w+):\s+(@?\w+)\s+MSG\s+,([^,]+),(.+?)(?:\s*,\{\^%\})?$', message_value, re.IGNORECASE)
         if backbone_pattern:
             # Group 1 is sender (already have from from_callsign parameter)
             msg_target = backbone_pattern.group(2).strip()
