@@ -499,7 +499,18 @@ class StatRepDialog(QDialog):
 
     def _on_grid_field_changed(self, text: str) -> None:
         """Handle user editing the Grid field."""
-        self.grid = text.upper()
+        raw = text.strip()
+        if len(raw) == 6:
+            formatted = raw[:2].upper() + raw[2:4] + raw[4:].lower()
+        else:
+            formatted = raw.upper()
+        self.grid = formatted
+        if text != formatted:
+            pos = self.grid_field.cursorPosition()
+            self.grid_field.blockSignals(True)
+            self.grid_field.setText(formatted)
+            self.grid_field.blockSignals(False)
+            self.grid_field.setCursorPosition(pos)
 
     def _generate_statrep_id(self) -> None:
         """Generate a time-based StatRep ID from current UTC time."""
@@ -640,10 +651,10 @@ class StatRepDialog(QDialog):
         grid_label = QtWidgets.QLabel("Grid:")
         grid_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
         self.grid_field = QtWidgets.QLineEdit(self.grid)
+        self.grid_field.setMaxLength(6)
         self.grid_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.grid_field.setMinimumHeight(28)
         self.grid_field.textChanged.connect(self._on_grid_field_changed)
-        make_uppercase(self.grid_field)
         grid_layout.addWidget(grid_label)
         grid_layout.addWidget(self.grid_field)
         header_layout.addLayout(grid_layout)
@@ -860,6 +871,20 @@ class StatRepDialog(QDialog):
                 self._show_error(f"Please select a status for '{label}'")
                 combo.setFocus()
                 return False
+
+        # Check grid format
+        grid = self.grid.strip()
+        if not grid or len(grid) not in (4, 6):
+            self._show_error("Please enter a valid grid square (4 or 6 characters).")
+            self.grid_field.setFocus()
+            return False
+        grid_upper = grid.upper()
+        if not (grid_upper[0] in 'ABCDEFGHIJKLMNOPQR' and
+                grid_upper[1] in 'ABCDEFGHIJKLMNOPQR' and
+                grid_upper[2].isdigit() and grid_upper[3].isdigit()):
+            self._show_error("Please enter a valid Maidenhead grid square (e.g., EM83 or EM83cv).")
+            self.grid_field.setFocus()
+            return False
 
         # Check remarks length
         remarks = self.remarks_field.text().strip()
