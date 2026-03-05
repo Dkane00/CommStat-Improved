@@ -4975,17 +4975,18 @@ def main() -> None:
                 if i + 2 < len(sys.argv) and sys.argv[i + 2].isdigit():
                     demo_duration = int(sys.argv[i + 2])
 
-    # Check for pending update - refuse to run if update.zip exists
-    update_zip = Path(__file__).parent / "updates" / "update.zip"
-    if update_zip.exists():
-        app = QtWidgets.QApplication(sys.argv)
-        QtWidgets.QMessageBox.critical(
-            None,
-            "Update Pending",
-            "An update is waiting to be applied.\n\n"
-            "Please run commstat.py to apply the update and launch the application."
-        )
-        sys.exit(1)
+    # Replace commstat.py with commstat-copy.py if the copy exists
+    _script_dir = Path(__file__).parent
+    _copy = _script_dir / "commstat-copy.py"
+    _launcher = _script_dir / "commstat.py"
+    if _copy.exists():
+        try:
+            if _launcher.exists():
+                _launcher.unlink()
+            _copy.rename(_launcher)
+            print("Launcher updated: commstat-copy.py → commstat.py")
+        except Exception as e:
+            print(f"Warning: Could not replace launcher: {e}")
 
     QtWidgets.QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
