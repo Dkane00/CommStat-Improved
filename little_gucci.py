@@ -2809,13 +2809,15 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         if 'statrep' in data_types:
             self._load_statrep_data()
-            self._save_map_position(callback=self._load_map)
+            alert_after_map = self._trigger_show_alerts if 'alert' in data_types else None
+            self._save_map_position(callback=lambda: self._load_map(callback=alert_after_map))
 
         if 'message' in data_types:
             self._load_message_data()
 
         if 'alert' in data_types:
-            self._trigger_show_alerts()
+            if 'statrep' not in data_types:
+                self._trigger_show_alerts()
             self._load_live_feed()
 
     @QtCore.pyqtSlot(int)
@@ -3096,7 +3098,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._populate_table(self.message_table, data)
 
-    def _load_map(self) -> None:
+    def _load_map(self, callback=None) -> None:
         """Generate and display the folium map with StatRep pins."""
         filters = self.config.filter_settings
         groups, show_all = self._get_filtered_groups()
@@ -3208,6 +3210,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Always set new HTML content (reload() only refreshes cached content)
         self.map_widget.setHtml(map_data.getvalue().decode())
         self.map_loaded = True
+
+        if callback:
+            callback()
 
     def _save_map_position(self, callback=None) -> None:
         """Save current map center and zoom via JavaScript."""
