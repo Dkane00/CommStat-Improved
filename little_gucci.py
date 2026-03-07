@@ -2562,6 +2562,14 @@ class MainWindow(QtWidgets.QMainWindow):
             if id_field in str(e) or "UNIQUE" in str(e):
                 id_val = data.get(id_field, "unknown")
                 print(f"{ConsoleColors.SUCCESS}[{rig_name}] Skipping {msg_type} from {from_callsign} — already received (ID: {id_val}){ConsoleColors.RESET}")
+                # Backfill global_id if backbone returned a real ID for a locally-stored record (global_id=0)
+                incoming_global_id = data.get('global_id', 0)
+                if incoming_global_id:
+                    cursor.execute(
+                        f"UPDATE {table} SET global_id = ? WHERE {id_field} = ? AND (global_id IS NULL OR global_id = 0)",
+                        (incoming_global_id, id_val)
+                    )
+                    conn.commit()
             else:
                 print(f"{ConsoleColors.WARNING}[{rig_name}] WARNING: Database constraint violation: {e}{ConsoleColors.RESET}")
         except sqlite3.Error as e:
@@ -2583,7 +2591,8 @@ class MainWindow(QtWidgets.QMainWindow):
         snr: int,
         utc: str,
         format_code: str,  # "F!304" or "F!301"
-        source: int = 1  # 1=Radio (TCP), 2=Internet (backbone)
+        source: int = 1,  # 1=Radio (TCP), 2=Internet (backbone)
+        global_id: int = 0
     ) -> str:
         """
         Process F!304 or F!301 STATREP format messages.
@@ -2660,7 +2669,8 @@ class MainWindow(QtWidgets.QMainWindow):
             'crime': "4",
             'civil': "4",
             'political': "4",
-            'comments': comments
+            'comments': comments,
+            'global_id': global_id
         }
 
         return self._insert_message_data(
@@ -2749,7 +2759,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
                     # Parse using unified parser (source=2 for Internet)
                     msg_type, _ = self._parse_commstat_message(
-                        "BACKBONE", from_callsign, message_value, target, "", freq, db, utc, source=2
+                        "BACKBONE", from_callsign, message_value, target, "", freq, db, utc, source=2, global_id=data_id
                     )
 
                     if msg_type:
@@ -4189,7 +4199,8 @@ class MainWindow(QtWidgets.QMainWindow):
         freq: int,
         snr: int,
         utc: str,
-        source: int
+        source: int,
+        global_id: int = 0
     ) -> tuple:
         """
         Parse standard STATREP message format.
@@ -4302,7 +4313,8 @@ class MainWindow(QtWidgets.QMainWindow):
             'crime': sr_fields[9],
             'civil': sr_fields[10],
             'political': sr_fields[11],
-            'comments': comments
+            'comments': comments,
+            'global_id': global_id
         }
 
         fwd_marker = " (FORWARDED)" if is_forwarded else ""
@@ -4538,7 +4550,8 @@ class MainWindow(QtWidgets.QMainWindow):
         freq: int,
         snr: int,
         utc: str,
-        source: int  # 1=Radio, 2=Internet
+        source: int,  # 1=Radio, 2=Internet
+        global_id: int = 0
     ) -> tuple:
         """
         Parse and validate CommStat message in any format.
@@ -4584,13 +4597,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # PRIORITY 1: Standard STATREP ({&%} or {F%})
         if "{&%}" in message_value or "{F%}" in message_value:
             return self._parse_standard_statrep(
-                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, source
+                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, source, global_id
             )
 
         # PRIORITY 2: F!304 STATREP
         if "F!304" in message_value:
             result = self._process_fcode_statrep(
-                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, "F!304", source
+                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, "F!304", source, global_id
             )
             if result:
                 return (result, None)
@@ -4598,7 +4611,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # PRIORITY 3: F!301 STATREP
         if "F!301" in message_value:
             result = self._process_fcode_statrep(
-                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, "F!301", source
+                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, "F!301", source, global_id
             )
             if result:
                 return (result, None)
