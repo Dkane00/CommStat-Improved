@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Manuel Ochoa
+# Copyright (c) 2025, 2026 Manuel Ochoa
 # This file is part of CommStat.
 # Licensed under the GNU General Public License v3.0.
 # AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
@@ -4520,6 +4520,11 @@ class MainWindow(QtWidgets.QMainWindow):
             # Direct message - check if target is one of our callsigns
             target_call = msg_target.upper()
             user_callsigns = [c.upper() for c in self.rig_callsigns.values() if c]
+            if not user_callsigns:
+                # No JS8 connectors active — fall back to user settings callsign
+                settings_callsign, _, __ = self.db.get_user_settings()
+                if settings_callsign:
+                    user_callsigns = [settings_callsign.upper()]
             if target_call not in user_callsigns:
                 # Skip messages not to our callsigns
                 return ("", None)
