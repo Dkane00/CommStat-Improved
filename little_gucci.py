@@ -989,7 +989,7 @@ class DatabaseManager:
                     query = f"""
                         SELECT db, datetime, freq, from_callsign, target, sr_id, grid, scope, map,
                                power, water, med, telecom, travel, internet,
-                               fuel, food, crime, civil, political, comments, source
+                               fuel, food, crime, civil, political, comments, source, id
                         FROM statrep
                         WHERE {date_condition}
                     """
@@ -1001,7 +1001,7 @@ class DatabaseManager:
                     query = f"""
                         SELECT db, datetime, freq, from_callsign, target, sr_id, grid, scope, map,
                                power, water, med, telecom, travel, internet,
-                               fuel, food, crime, civil, political, comments, source
+                               fuel, food, crime, civil, political, comments, source, id
                         FROM statrep
                         WHERE target IN ({placeholders}) AND {date_condition}
                     """
@@ -1513,11 +1513,11 @@ class MainWindow(QtWidgets.QMainWindow):
             # Internet just became available
             print("Internet connectivity: Now available")
             self.internet_timer.stop()
-            # Send first heartbeat after 30 second delay, then start timer
+            # Send first heartbeat after 15 second delay, then start timer
             def start_backbone_heartbeat():
                 self._check_backbone()  # Send first heartbeat immediately
                 self.backbone_timer.start(180000)  # Then start 3 minute interval timer
-            QTimer.singleShot(30000, start_backbone_heartbeat)
+            QTimer.singleShot(15000, start_backbone_heartbeat)
         elif not self._internet_available:
             print("Internet connectivity: Still not available (will retry in 30 minutes)")
 
@@ -3140,10 +3140,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
             gridlist = []
             for row in data:
-                callsign = row[3]  # from_callsign
-                srid = row[5]      # sr_id
-                grid = row[6]      # grid
+                callsign = row[3]   # from_callsign
+                srid = row[5]       # sr_id (display only)
+                grid = row[6]       # grid
                 status = str(row[8])  # map (status)
+                statrep_id = row[22]  # database primary key (unique)
 
                 # Convert grid to coordinates
                 try:
@@ -3164,7 +3165,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             <p style="color:blue;font-size:14px;">
                                 Callsign: {callsign}<br>
                                 StatRep ID: {srid}<br>
-                                <button onclick="window.location.href='http://localhost/statrep/{srid}'"
+                                <button onclick="window.location.href='http://localhost/statrep/{statrep_id}'"
                                     style="color:#0000FF;font-family:Arial;font-size:12px;font-weight:bold;
                                     cursor:pointer;border:1px solid #000;padding:2px 5px;">
                                     View StatRep
@@ -3300,11 +3301,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.backbone_timer = QTimer(self)
         self.backbone_timer.timeout.connect(self._check_backbone)
         if self._internet_available:
-            # Delay first heartbeat by 30 seconds, then start timer for subsequent heartbeats
+            # Delay first heartbeat by 15 seconds, then start timer for subsequent heartbeats
             def start_backbone_heartbeat():
                 self._check_backbone()  # Send first heartbeat immediately
                 self.backbone_timer.start(180000)  # Then start 3 minute interval timer
-            QTimer.singleShot(30000, start_backbone_heartbeat)
+            QTimer.singleShot(15000, start_backbone_heartbeat)
 
         # News ticker animation timer
         self.newsfeed_timer = QTimer(self)
