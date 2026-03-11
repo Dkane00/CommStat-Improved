@@ -47,6 +47,7 @@ def apply_update() -> bool:
         "Update Available",
         "A CommStat update is available. Would you like to install it now?"
     )
+    root.update()
     root.destroy()
 
     if not answer:
@@ -147,6 +148,7 @@ def check_database() -> None:
     root = tk.Tk()
     root.withdraw()
     proceed = messagebox.askyesno("Database Warning", msg, icon="warning")
+    root.update()
     root.destroy()
     if not proceed:
         sys.exit(1)
