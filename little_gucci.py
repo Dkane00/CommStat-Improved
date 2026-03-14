@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Manuel Ochoa
+# Copyright (c) 2025, 2026 Manuel Ochoa
 # This file is part of CommStat.
 # Licensed under the GNU General Public License v3.0.
 # AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
@@ -68,7 +68,7 @@ from id_utils import generate_time_based_id
 # Constants
 # =============================================================================
 
-VERSION = "3.0.6"
+VERSION = "3.0.7b"
 WINDOW_TITLE = f"CommStat (v{VERSION}) by N0DDK"
 WINDOW_SIZE = (1440, 832)
 CONFIG_FILE = "config.ini"
@@ -79,7 +79,7 @@ DATABASE_FILE = "traffic.db3"
 DEFAULT_FILTER_START = "2023-01-01"
 
 # Group settings
-MAX_GROUP_NAME_LENGTH = 15
+MAX_GROUP_NAME_LENGTH = 8
 
 # Map and layout dimensions
 MAP_WIDTH = 604
@@ -989,7 +989,7 @@ class DatabaseManager:
                     query = f"""
                         SELECT db, datetime, freq, from_callsign, target, sr_id, grid, scope, map,
                                power, water, med, telecom, travel, internet,
-                               fuel, food, crime, civil, political, comments, source
+                               fuel, food, crime, civil, political, comments, source, id
                         FROM statrep
                         WHERE {date_condition}
                     """
@@ -1001,7 +1001,7 @@ class DatabaseManager:
                     query = f"""
                         SELECT db, datetime, freq, from_callsign, target, sr_id, grid, scope, map,
                                power, water, med, telecom, travel, internet,
-                               fuel, food, crime, civil, political, comments, source
+                               fuel, food, crime, civil, political, comments, source, id
                         FROM statrep
                         WHERE target IN ({placeholders}) AND {date_condition}
                     """
@@ -1513,11 +1513,11 @@ class MainWindow(QtWidgets.QMainWindow):
             # Internet just became available
             print("Internet connectivity: Now available")
             self.internet_timer.stop()
-            # Send first heartbeat after 30 second delay, then start timer
+            # Send first heartbeat after 15 second delay, then start timer
             def start_backbone_heartbeat():
                 self._check_backbone()  # Send first heartbeat immediately
                 self.backbone_timer.start(180000)  # Then start 3 minute interval timer
-            QTimer.singleShot(30000, start_backbone_heartbeat)
+            QTimer.singleShot(15000, start_backbone_heartbeat)
         elif not self._internet_available:
             print("Internet connectivity: Still not available (will retry in 30 minutes)")
 
@@ -2562,6 +2562,14 @@ class MainWindow(QtWidgets.QMainWindow):
             if id_field in str(e) or "UNIQUE" in str(e):
                 id_val = data.get(id_field, "unknown")
                 print(f"{ConsoleColors.SUCCESS}[{rig_name}] Skipping {msg_type} from {from_callsign} — already received (ID: {id_val}){ConsoleColors.RESET}")
+                # Backfill global_id if backbone returned a real ID for a locally-stored record (global_id=0)
+                incoming_global_id = data.get('global_id', 0)
+                if incoming_global_id:
+                    cursor.execute(
+                        f"UPDATE {table} SET global_id = ? WHERE {id_field} = ? AND (global_id IS NULL OR global_id = 0)",
+                        (incoming_global_id, id_val)
+                    )
+                    conn.commit()
             else:
                 print(f"{ConsoleColors.WARNING}[{rig_name}] WARNING: Database constraint violation: {e}{ConsoleColors.RESET}")
         except sqlite3.Error as e:
@@ -2583,7 +2591,8 @@ class MainWindow(QtWidgets.QMainWindow):
         snr: int,
         utc: str,
         format_code: str,  # "F!304" or "F!301"
-        source: int = 1  # 1=Radio (TCP), 2=Internet (backbone)
+        source: int = 1,  # 1=Radio (TCP), 2=Internet (backbone)
+        global_id: int = 0
     ) -> str:
         """
         Process F!304 or F!301 STATREP format messages.
@@ -2660,7 +2669,8 @@ class MainWindow(QtWidgets.QMainWindow):
             'crime': "4",
             'civil': "4",
             'political': "4",
-            'comments': comments
+            'comments': comments,
+            'global_id': global_id
         }
 
         return self._insert_message_data(
@@ -2749,7 +2759,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
                     # Parse using unified parser (source=2 for Internet)
                     msg_type, _ = self._parse_commstat_message(
-                        "BACKBONE", from_callsign, message_value, target, "", freq, db, utc, source=2
+                        "BACKBONE", from_callsign, message_value, target, "", freq, db, utc, source=2, global_id=data_id
                     )
 
                     if msg_type:
@@ -2799,13 +2809,15 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         if 'statrep' in data_types:
             self._load_statrep_data()
-            self._save_map_position(callback=self._load_map)
+            alert_after_map = self._trigger_show_alerts if 'alert' in data_types else None
+            self._save_map_position(callback=lambda: self._load_map(callback=alert_after_map))
 
         if 'message' in data_types:
             self._load_message_data()
 
         if 'alert' in data_types:
-            # Alerts are shown in the live feed, so refresh it
+            if 'statrep' not in data_types:
+                self._trigger_show_alerts()
             self._load_live_feed()
 
     @QtCore.pyqtSlot(int)
@@ -3086,7 +3098,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._populate_table(self.message_table, data)
 
-    def _load_map(self) -> None:
+    def _load_map(self, callback=None) -> None:
         """Generate and display the folium map with StatRep pins."""
         filters = self.config.filter_settings
         groups, show_all = self._get_filtered_groups()
@@ -3128,10 +3140,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
             gridlist = []
             for row in data:
-                callsign = row[3]  # from_callsign
-                srid = row[5]      # sr_id
-                grid = row[6]      # grid
+                callsign = row[3]   # from_callsign
+                srid = row[5]       # sr_id (display only)
+                grid = row[6]       # grid
                 status = str(row[8])  # map (status)
+                statrep_id = row[22]  # database primary key (unique)
 
                 # Convert grid to coordinates
                 try:
@@ -3152,7 +3165,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             <p style="color:blue;font-size:14px;">
                                 Callsign: {callsign}<br>
                                 StatRep ID: {srid}<br>
-                                <button onclick="window.location.href='http://localhost/statrep/{srid}'"
+                                <button onclick="window.location.href='http://localhost/statrep/{statrep_id}'"
                                     style="color:#0000FF;font-family:Arial;font-size:12px;font-weight:bold;
                                     cursor:pointer;border:1px solid #000;padding:2px 5px;">
                                     View StatRep
@@ -3198,6 +3211,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Always set new HTML content (reload() only refreshes cached content)
         self.map_widget.setHtml(map_data.getvalue().decode())
         self.map_loaded = True
+
+        if callback:
+            callback()
 
     def _save_map_position(self, callback=None) -> None:
         """Save current map center and zoom via JavaScript."""
@@ -3285,11 +3301,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.backbone_timer = QTimer(self)
         self.backbone_timer.timeout.connect(self._check_backbone)
         if self._internet_available:
-            # Delay first heartbeat by 30 seconds, then start timer for subsequent heartbeats
+            # Delay first heartbeat by 15 seconds, then start timer for subsequent heartbeats
             def start_backbone_heartbeat():
                 self._check_backbone()  # Send first heartbeat immediately
                 self.backbone_timer.start(180000)  # Then start 3 minute interval timer
-            QTimer.singleShot(30000, start_backbone_heartbeat)
+            QTimer.singleShot(15000, start_backbone_heartbeat)
 
         # News ticker animation timer
         self.newsfeed_timer = QTimer(self)
@@ -4189,7 +4205,8 @@ class MainWindow(QtWidgets.QMainWindow):
         freq: int,
         snr: int,
         utc: str,
-        source: int
+        source: int,
+        global_id: int = 0
     ) -> tuple:
         """
         Parse standard STATREP message format.
@@ -4302,7 +4319,8 @@ class MainWindow(QtWidgets.QMainWindow):
             'crime': sr_fields[9],
             'civil': sr_fields[10],
             'political': sr_fields[11],
-            'comments': comments
+            'comments': comments,
+            'global_id': global_id
         }
 
         fwd_marker = " (FORWARDED)" if is_forwarded else ""
@@ -4503,6 +4521,11 @@ class MainWindow(QtWidgets.QMainWindow):
             # Direct message - check if target is one of our callsigns
             target_call = msg_target.upper()
             user_callsigns = [c.upper() for c in self.rig_callsigns.values() if c]
+            if not user_callsigns:
+                # No JS8 connectors active — fall back to user settings callsign
+                settings_callsign, _, __ = self.db.get_user_settings()
+                if settings_callsign:
+                    user_callsigns = [settings_callsign.upper()]
             if target_call not in user_callsigns:
                 # Skip messages not to our callsigns
                 return ("", None)
@@ -4538,7 +4561,8 @@ class MainWindow(QtWidgets.QMainWindow):
         freq: int,
         snr: int,
         utc: str,
-        source: int  # 1=Radio, 2=Internet
+        source: int,  # 1=Radio, 2=Internet
+        global_id: int = 0
     ) -> tuple:
         """
         Parse and validate CommStat message in any format.
@@ -4584,13 +4608,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # PRIORITY 1: Standard STATREP ({&%} or {F%})
         if "{&%}" in message_value or "{F%}" in message_value:
             return self._parse_standard_statrep(
-                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, source
+                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, source, global_id
             )
 
         # PRIORITY 2: F!304 STATREP
         if "F!304" in message_value:
             result = self._process_fcode_statrep(
-                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, "F!304", source
+                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, "F!304", source, global_id
             )
             if result:
                 return (result, None)
@@ -4598,7 +4622,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # PRIORITY 3: F!301 STATREP
         if "F!301" in message_value:
             result = self._process_fcode_statrep(
-                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, "F!301", source
+                rig_name, message_value, from_callsign, target, grid, freq, snr, utc, "F!301", source, global_id
             )
             if result:
                 return (result, None)

@@ -196,7 +196,7 @@ class StatRepDialog(QDialog):
             with sqlite3.connect('traffic.db3', timeout=10) as connection:
                 cursor = connection.cursor()
                 query = ("SELECT datetime, sr_id, from_callsign, grid, scope, map, power, water, med, telecom, travel, internet, "
-                         "fuel, food, crime, civil, political, comments FROM statrep WHERE sr_id = ?")
+                         "fuel, food, crime, civil, political, comments FROM statrep WHERE id = ?")
                 cursor.execute(query, (self.srid,))
                 result = cursor.fetchone()
                 if result:
@@ -355,7 +355,7 @@ class StatRepDialog(QDialog):
                         decoded_html = "<p>No Brevity found</p>"
                     self.brevity_text.setHtml(decoded_html)
                 else:
-                    QtWidgets.QMessageBox.critical(self, "Error", f"No StatRep found with sr_id: {self.srid}")
+                    QtWidgets.QMessageBox.critical(self, "Error", f"No StatRep found with id: {self.srid}")
                     self.close()
         except sqlite3.Error as error:
             QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load StatRep data: {error}")
