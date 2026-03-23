@@ -49,6 +49,7 @@ from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import QTimer, QDateTime, Qt
 from PyQt5.QtWidgets import qApp
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
+from theme_manager import theme
 from about import Ui_FormAbout
 from filter import FilterDialog
 from groups import GroupsDialog
@@ -486,33 +487,18 @@ STATREP_HEADERS = [
     "Crime", "Civil", "Pol", "Remarks"
 ]
 
-# Default color scheme for UI elements
-# These colors can be customized via config.ini in the future
+# Semantic color scheme for UI elements (NOT managed by system theme)
+# Structural colors (backgrounds, text, menus, tables) are provided by
+# theme_manager.ThemeManager and follow the OS/desktop theme.
 DEFAULT_COLORS: Dict[str, str] = {
-    # Main window colors
-    'program_background': '#A52A2A',   # Brown/maroon
-    'program_foreground': '#FFFFFF',
-    'menu_background': '#3050CC',       # Blue
-    'menu_foreground': '#FFFFFF',
-    'title_bar_background': '#F07800',  # Orange
-    'title_bar_foreground': '#FFFFFF',
-    # News feed marquee colors
+    # News feed marquee colors (semantic — kept as-is)
     'newsfeed_background': '#242424',   # Dark gray
     'newsfeed_foreground': '#00FF00',   # Green text
-    # Clock display colors
-    'time_background': '#282864',       # Navy blue
-    'time_foreground': '#88CCFF',       # Light blue
     # StatRep condition indicator colors (traffic light system)
     'condition_green': '#108010',       # Good/normal status
     'condition_yellow': '#FFFF77',      # Caution/degraded status
     'condition_red': '#BB0000',         # Critical/emergency status
     'condition_gray': '#808080',        # Unknown/no data
-    # Data table colors
-    'data_background': '#FFF5E1',
-    'data_foreground': '#000000',
-    # Live feed display colors
-    'feed_background': '#000000',
-    'feed_foreground': '#FFFFFF',
 }
 
 # Default RSS news feeds
@@ -677,8 +663,18 @@ class ConfigManager:
             self.directed_config = {'hide_heartbeat': False, 'show_all_groups': True, 'show_every_group': True, 'hide_map': False, 'show_alerts': False, 'selected_rss_feed': default_feed, 'apply_text_normalization': False}
 
     def get_color(self, key: str) -> str:
-        """Get a color value by key."""
-        return self.colors.get(key, '#FFFFFF')
+        """Get a color value by key.
+        Structural colors are provided by the system theme via ThemeManager.
+        Semantic colors (newsfeed, condition indicators) come from DEFAULT_COLORS.
+        """
+        # Check semantic colors first (newsfeed, condition indicators)
+        if key in self.colors:
+            return self.colors[key]
+        # Structural colors come from the system theme
+        structural = theme.structural_colors()
+        if key in structural:
+            return structural[key]
+        return '#FFFFFF'
 
     def _save_setting(self, key: str, value) -> None:
         """Save a setting to both memory and config file."""
@@ -1459,9 +1455,14 @@ class MainWindow(QtWidgets.QMainWindow):
         """Build the user interface."""
         # Create central widget with background color
         self.central_widget = QtWidgets.QWidget(self)
-        self.central_widget.setStyleSheet(
-            f"background-color: {self.config.get_color('program_background')};"
-        )
+        if theme.legacy_ui:
+            # Windows/macOS: apply hardcoded branded background so palette
+            # inheritance for child widgets is unaffected on those platforms.
+            self.central_widget.setStyleSheet(
+                f"background-color: {self.config.get_color('program_background')};"
+            )
+        # Linux: no setStyleSheet — letting qt5ct palette flow through to all
+        # child widgets so the system theme is honoured throughout the window.
         self.setCentralWidget(self.central_widget)
 
         # Main layout
@@ -1530,27 +1531,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Clear corner widgets that may interfere with menu layout on Linux
         self.menubar.setCornerWidget(None, Qt.TopLeftCorner)
         self.menubar.setCornerWidget(None, Qt.TopRightCorner)
-        menu_bg = self.config.get_color('menu_background')
-        menu_fg = self.config.get_color('menu_foreground')
-        self.menubar.setStyleSheet(f"""
-            QMenuBar {{
-                background-color: {menu_bg};
-                color: {menu_fg};
-            }}
-            QMenuBar::item {{
-                padding: 4px 8px;
-            }}
-            QMenuBar::item:selected {{
-                background-color: {menu_bg};
-            }}
-            QMenu {{
-                background-color: {menu_bg};
-                color: {menu_fg};
-            }}
-            QMenu::item:selected {{
-                background-color: {menu_bg};
-            }}
-        """)
+        self.menubar.setStyleSheet(theme.menu_style())
 
         # Create the main menu
         self.menu = QtWidgets.QMenu("Config", self.menubar)
@@ -1758,9 +1739,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.header_layout.setContentsMargins(0, 0, 0, 0)
 
         fg_color = self.config.get_color('program_foreground')
-        menu_bg = self.config.get_color('menu_background')
-        menu_fg = self.config.get_color('menu_foreground')
-        font = QtGui.QFont("Arial", 13, QtGui.QFont.Bold)
+        font = QtGui.QFont(theme.font_family, 13, QtGui.QFont.Bold)
 
         # News label
         self.label_newsfeed = QtWidgets.QLabel(self.header_widget)
@@ -1772,33 +1751,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # RSS Feed selector dropdown
         self.feed_combo = QtWidgets.QComboBox(self.header_widget)
         self.feed_combo.setFixedSize(120, 28)
-        self.feed_combo.setFont(QtGui.QFont("Arial", 13))
-        self.feed_combo.setStyleSheet(f"""
-            QComboBox {{
-                background-color: {menu_bg};
-                color: {menu_fg};
-                border: 1px solid {menu_fg};
-                padding: 2px 5px;
-            }}
-            QComboBox::drop-down {{
-                border: none;
-            }}
-        """)
+        self.feed_combo.setFont(QtGui.QFont(theme.font_family, 13))
+        self.feed_combo.setStyleSheet(theme.combo_style())
         # Style the dropdown list view directly
         combo_view = QtWidgets.QListView()
-        combo_view.setFont(QtGui.QFont("Arial", 13))
-        combo_view.setStyleSheet(f"""
-            QListView {{
-                background-color: {menu_bg};
-                color: {menu_fg};
-                outline: none;
-            }}
-            QListView::item {{
-                background-color: {menu_bg};
-                color: {menu_fg};
-                padding: 4px;
-            }}
-        """)
+        combo_view.setStyleSheet(theme.combo_list_style())
         self.feed_combo.setView(combo_view)
         # Populate with feed names
         for feed_name in DEFAULT_RSS_FEEDS.keys():
@@ -1816,7 +1773,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # News ticker (scrolling text)
         self.newsfeed_label = QtWidgets.QLabel(self.header_widget)
         self.newsfeed_label.setFixedSize(740, 32)
-        self.newsfeed_label.setFont(QtGui.QFont("Arial", 13))
+        self.newsfeed_label.setFont(QtGui.QFont(theme.font_family, 13))
         self.newsfeed_label.setStyleSheet(
             f"background-color: {self.config.get_color('newsfeed_background')};"
             f"color: {self.config.get_color('newsfeed_foreground')};"
@@ -1826,19 +1783,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Last 20 button - shows last 20 news headlines
         self.last20_button = QtWidgets.QPushButton("Last 20", self.header_widget)
         self.last20_button.setFixedSize(80, 28)
-        self.last20_button.setFont(QtGui.QFont("Arial", 13))
-        self.last20_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {menu_bg};
-                color: {menu_fg};
-                border: 1px solid {menu_fg};
-                padding: 2px 5px;
-            }}
-            QPushButton:hover {{
-                background-color: {menu_fg};
-                color: {menu_bg};
-            }}
-        """)
+        self.last20_button.setFont(QtGui.QFont(theme.font_family, 13))
+        self.last20_button.setStyleSheet(theme.header_button_style())
         self.last20_button.clicked.connect(self._on_last20_clicked)
         self.header_layout.addWidget(self.last20_button)
 
@@ -1848,7 +1794,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # What's New hyperlink
         self.whats_new_label = QtWidgets.QLabel(self.header_widget)
         self.whats_new_label.setText('<a href="https://commstat-improved.com/new-features.php" style="color: white; text-decoration: underline;">What\'s New</a>')
-        self.whats_new_label.setFont(font)
+        self.whats_new_label.setFont(QtGui.QFont(theme.font_family, 13))
         self.whats_new_label.setOpenExternalLinks(True)
         self.header_layout.addWidget(self.whats_new_label)
 
@@ -1864,7 +1810,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Time display
         self.time_label = QtWidgets.QLabel(self.header_widget)
         self.time_label.setFixedSize(120, 32)
-        self.time_label.setFont(QtGui.QFont("Arial", 13))
+        self.time_label.setFont(QtGui.QFont(theme.font_family, 13))
         self.time_label.setStyleSheet(
             f"background-color: {self.config.get_color('time_background')};"
             f"color: {self.config.get_color('time_foreground')};"
@@ -1883,40 +1829,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statrep_table.setRowCount(0)
 
         # Apply styling
-        title_bg = self.config.get_color('title_bar_background')
-        title_fg = self.config.get_color('title_bar_foreground')
-        data_bg = self.config.get_color('data_background')
-        data_fg = self.config.get_color('data_foreground')
-
-        self.statrep_table.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {data_bg};
-                color: {data_fg};
-            }}
-            QTableWidget QHeaderView::section {{
-                background-color: {title_bg};
-                color: {title_fg};
-                font-weight: bold;
-                padding: 4px;
-                border: 1px solid {title_bg};
-            }}
-            QToolTip {{
-                background-color: #FFFFE1;
-                color: black;
-                border: 1px solid black;
-            }}
-        """)
+        self.statrep_table.setStyleSheet(theme.table_style())
 
         # Explicitly style the horizontal header
-        self.statrep_table.horizontalHeader().setStyleSheet(f"""
-            QHeaderView::section {{
-                background-color: {title_bg};
-                color: {title_fg};
-                font-weight: bold;
-                font-size: 10pt;
-                padding: 4px;
-            }}
-        """)
+        self.statrep_table.horizontalHeader().setStyleSheet(theme.header_style())
 
         # Set headers
         self.statrep_table.setHorizontalHeaderLabels(STATREP_HEADERS)
@@ -3031,40 +2947,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.message_table.setRowCount(0)
 
         # Apply styling
-        title_bg = self.config.get_color('title_bar_background')
-        title_fg = self.config.get_color('title_bar_foreground')
-        data_bg = self.config.get_color('data_background')
-        data_fg = self.config.get_color('data_foreground')
-
-        self.message_table.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {data_bg};
-                color: {data_fg};
-            }}
-            QTableWidget QHeaderView::section {{
-                background-color: {title_bg};
-                color: {title_fg};
-                font-weight: bold;
-                padding: 4px;
-                border: 1px solid {title_bg};
-            }}
-            QToolTip {{
-                background-color: #FFFFE1;
-                color: black;
-                border: 1px solid black;
-            }}
-        """)
+        self.message_table.setStyleSheet(theme.table_style())
 
         # Explicitly style the horizontal header
-        self.message_table.horizontalHeader().setStyleSheet(f"""
-            QHeaderView::section {{
-                background-color: {title_bg};
-                color: {title_fg};
-                font-weight: bold;
-                font-size: 10pt;
-                padding: 4px;
-            }}
-        """)
+        self.message_table.horizontalHeader().setStyleSheet(theme.header_style())
 
         # Set headers
         self.message_table.setHorizontalHeaderLabels([
@@ -3526,12 +3412,12 @@ class MainWindow(QtWidgets.QMainWindow):
         # Feed name label
         feed_name = self.feed_combo.currentText()
         feed_label = QtWidgets.QLabel(f"Feed: {feed_name}")
-        feed_label.setFont(QtGui.QFont("Arial", 12, QtGui.QFont.Bold))
+        feed_label.setFont(QtGui.QFont(theme.font_family, 12, QtGui.QFont.Bold))
         layout.addWidget(feed_label)
 
         # Headlines list
         list_widget = QtWidgets.QListWidget()
-        list_widget.setFont(QtGui.QFont("Arial", 11))
+        list_widget.setFont(QtGui.QFont(theme.font_family, 11))
         list_widget.setAlternatingRowColors(True)
         for i, headline in enumerate(headlines[:20], 1):
             list_widget.addItem(f"{i}. {headline}")
@@ -5002,6 +4888,15 @@ def main() -> None:
                 if i + 2 < len(sys.argv) and sys.argv[i + 2].isdigit():
                     demo_duration = int(sys.argv[i + 2])
 
+    # cross-platform theme environment variables (e.g. QT_QPA_PLATFORMTHEME) should be set before creating the QApplication instance 
+    try:  
+        # Import local theme manager helper that sets env vars (e.g. QT_QPA_PLATFORMTHEME)  
+        from theme_manager import prepare_platform_env_defaults  
+        prepare_platform_env_defaults()  
+    except Exception:  
+        # If theme helpers are missing or fail, continue with defaults  
+        pass
+    
     # Replace commstat.py with commstat-copy.py if the copy exists
     _script_dir = Path(__file__).parent
     _copy = _script_dir / "commstat-copy.py"
@@ -5019,8 +4914,7 @@ def main() -> None:
     QtWidgets.QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
 
-    # Set tooltip colors to match Windows (tan background, black text)
-    app.setStyleSheet("QToolTip { background-color: #FFFFE1; color: black; border: 1px solid black; }")
+    # Let system theme handle tooltip styling
 
     # Load bundled fonts
     from PyQt5.QtGui import QFontDatabase

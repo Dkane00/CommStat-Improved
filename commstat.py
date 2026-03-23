@@ -160,10 +160,17 @@ def launch_main_app() -> None:
         print(f"Error: {MAIN_APP} not found.")
         sys.exit(1)
 
-    # Fix Linux menu bar issues by disabling global menu integration
     env = os.environ.copy()
     if sys.platform.startswith('linux'):
-        env['QT_QPA_PLATFORMTHEME'] = ''  # Disable platform theme that steals menu bar
+        # Use qt5ct so the app follows the system theme on Linux.
+        # Only set it if the user hasn't already configured a preference.
+        if not env.get('QT_QPA_PLATFORMTHEME'):
+            env['QT_QPA_PLATFORMTHEME'] = 'qt5ct'
+        # Disable the Ubuntu/Unity global menu proxy that hijacks the menu bar.
+        # These env vars are ignored on desktops that don't use the global menu
+        # (KDE, XFCE, Cinnamon, etc.) so they are safe to set unconditionally.
+        env['UBUNTU_MENUPROXY'] = ''
+        env['QT_NO_UBUNTU_OVERLAY'] = '1'
 
     python = sys.executable
     args = [python, str(MAIN_APP)] + sys.argv[1:]  # Pass through any command line args
