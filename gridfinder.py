@@ -1,58 +1,73 @@
-# Grid Finder: A cross-platform application for searching city, state, and grid data from a CSV file.
-# Requirements: Install dependencies with `pip install pandas PyQt5`.
-# On Linux, ensure Qt dependencies: `sudo apt-get install libqt5gui5`.
-# CSV file: Place `GridSearchData1_preprocessed.csv` in the same directory as this script.
-# Note: File names are case-sensitive on Linux; ensure exact match.
+# Grid Finder: Search US cities/states and world capitals by city, state/country, or Maidenhead grid
+# Requirements: pip install pandas PyQt5
+# On Linux: sudo apt install python3-pyqt5 (Ubuntu/Debian) or equivalent
+# CSV file: gridsearchdata.csv (columns: City, State, MGrid)
 
 import sys
 import os
 import pandas as pd
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QLineEdit, QTableWidget, QTableWidgetItem,
-    QStatusBar, QCompleter, QMenu, QMessageBox, QGridLayout
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTableWidget, QTableWidgetItem,
+    QStatusBar, QCompleter, QMenu, QAction, QMessageBox, QPushButton
 )
-from PyQt5.QtCore import Qt, QTimer, QEvent
-from PyQt5.QtGui import QFont, QBrush, QColor, QPalette
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QFont, QColor, QPalette
 
 class AppTheme:
     COLORS = {
-        'primary': '#4CAF50',  # Green for inputs
-        'primary_hover': '#66BB6A',  # Lighter green for hover
-        'container_bg': '#F8F7F2',  # Light gray for containers
-        'content_bg': '#FFFFFF',  # White for content areas
-        'border': '#666666',  # Darker gray for borders
-        'flash_red': '#FF0000',  # Red for alerts
-        'text': '#000000',  # Black for input text
-        'text_table': '#000000',  # Black for table text
-        'placeholder': '#E0E0E0',  # Light gray for placeholder text
+        'primary': '#4CAF50',
+        'primary_hover': '#66BB6A',
+        'primary_pressed': '#388E3C',
+        'container_bg': '#F8F7F2',
+        'content_bg': '#FFFFFF',
+        'border': '#666666',
+        'flash_red': '#FF0000',
+        'text': '#000000',
+        'text_table': '#000000',
+        'placeholder': '#E0E0E0',
     }
 
     @staticmethod
     def get_stylesheet():
         return f"""
-            QLineEdit {{
+            QLineEdit, QPushButton {{
                 background-color: {AppTheme.COLORS['primary']};
                 color: {AppTheme.COLORS['text']};
-                font-family: Arial, sans-serif;
+                font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
                 font-size: 11pt;
                 font-weight: bold;
                 border: 3px solid {AppTheme.COLORS['border']};
-                padding: 2px 8px;
                 border-radius: 5px;
             }}
-            QLineEdit:hover {{
+            QLineEdit {{
+                padding: 4px 8px;
+            }}
+            QPushButton {{
+                padding: 4px 16px;
+                min-width: 90px;
+                text-align: center;
+            }}
+            QLineEdit:hover, QPushButton:hover {{
                 background-color: {AppTheme.COLORS['primary_hover']};
             }}
             QLineEdit:focus {{
-                border: 3px solid #388E3C;
+                border: 5px solid #1B5E20;             /* thicker + dark green border */
+                background-color: #A5D6A7;             /* lighter green background */
+                color: #000000;
+            }}
+            QPushButton:focus {{
+                border: 4px solid #388E3C;
                 background-color: {AppTheme.COLORS['primary']};
+            }}
+            QPushButton:pressed {{
+                background-color: {AppTheme.COLORS['primary_pressed']};
             }}
             QLineEdit::placeholder {{
                 color: {AppTheme.COLORS['placeholder']};
                 font-weight: normal;
             }}
             QTableWidget {{
-                font-family: Arial, sans-serif;
+                font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
                 font-size: 11pt;
                 background-color: {AppTheme.COLORS['content_bg']};
                 color: {AppTheme.COLORS['text_table']};
@@ -73,26 +88,34 @@ class AppTheme:
 class GridFinderApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Grid Finder V1.0")
-        self.setGeometry(200, 200, 500, 400)
-        self.setMinimumSize(500, 400)
+        self.setWindowTitle("GridFinder2 - US Cities + World Capitals v1.0")
+        self.setGeometry(200, 200, 600, 450)
+        self.setMinimumSize(600, 450)
+
         palette = self.palette()
         palette.setColor(QPalette.Window, QColor(AppTheme.COLORS['container_bg']))
         self.setPalette(palette)
-        print("Applied application palette")  # Debug
+
         self.data = self.load_data()
+
+        # Pre-compute lowercase versions once for faster filtering
+        self.data['City_lower']   = self.data['City'].str.lower().str.strip()
+        self.data['State_lower']  = self.data['State'].str.lower().str.strip()
+        self.data['MGrid_lower']  = self.data['MGrid'].str.lower().str.strip()
+
         self.debounce_timer = QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.filter_data)
-        self.debounce_delay = 300  # milliseconds
+        self.debounce_delay = 400
+
         self.initUI()
 
     def load_data(self):
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            file_name = "GridSearchData1_preprocessed.csv"
+            file_name = "gridsearchdata.csv"
             file_path = os.path.join(script_dir, file_name)
-            # Case-insensitive file search for Linux
+
             if not os.path.exists(file_path):
                 for f in os.listdir(script_dir):
                     if f.lower() == file_name.lower():
@@ -100,19 +123,19 @@ class GridFinderApp(QMainWindow):
                         break
                 else:
                     raise FileNotFoundError(f"CSV file '{file_name}' not found")
+
             data = pd.read_csv(file_path, encoding='utf-8')
-            data['MGrid'] = data['MGrid'].astype(str).str.strip()
+            data['MGrid'] = data['MGrid'].astype(str).str.strip().str.upper()
             data['City'] = data['City'].astype(str).str.strip()
             data['State'] = data['State'].astype(str).str.strip()
-            print(f"Data loaded successfully: {len(data)} rows")  # Debug
-            print(f"Unique MGrid values: {data['MGrid'].unique().tolist()[:10]}")  # Debug
+
+            print(f"Data loaded successfully: {len(data)} rows")
             return data
+
         except FileNotFoundError:
-            print("Error: CSV file not found")  # Debug
-            self._show_error_dialog("Error", f"CSV file '{file_name}' not found. Ensure it is in the same directory as the script.")
+            self._show_error_dialog("Error", f"CSV file '{file_name}' not found in the same folder.")
             return pd.DataFrame()
         except Exception as e:
-            print(f"Error loading data: {str(e)}")  # Debug
             self._show_error_dialog("Error", f"Error loading data: {str(e)}")
             return pd.DataFrame()
 
@@ -125,165 +148,88 @@ class GridFinderApp(QMainWindow):
         msg_box.exec_()
 
     def initUI(self):
-        # Set up central widget and main layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.central_widget.setStyleSheet(f"""
-            border: 1px solid {AppTheme.COLORS['border']};
-            border-radius: 4px;
-            background-color: {AppTheme.COLORS['container_bg']};
-        """)
+        self.central_widget.setStyleSheet(
+            f"border: 1px solid {AppTheme.COLORS['border']}; border-radius: 4px; "
+            f"background-color: {AppTheme.COLORS['container_bg']};"
+        )
+
         layout = QVBoxLayout()
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
         self.central_widget.setLayout(layout)
-        print("Applied central widget stylesheet with border: #666666")  # Debug
 
-        # Input grid
-        input_grid = QGridLayout()
-        input_grid.setSpacing(10)
-        input_grid.setColumnStretch(0, 3)
-        input_grid.setColumnStretch(1, 1)
-        input_grid.setColumnStretch(2, 1)
-        print("Created QGridLayout for inputs")  # Debug
+        # Top row: City input + Clear button
+        city_layout = QHBoxLayout()
+        city_layout.setSpacing(10)
 
-        # Inputs
         self.city_input = QLineEdit()
         self.city_input.setPlaceholderText("Enter City")
-        self.city_input.setReadOnly(False)
-        self.city_input.setEnabled(True)
-        self.city_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {AppTheme.COLORS['primary']};
-                color: {AppTheme.COLORS['text']};
-                font-family: Arial, sans-serif;
-                font-size: 11pt;
-                font-weight: bold;
-                border: 3px solid {AppTheme.COLORS['border']};
-                padding: 2px 8px;
-                border-radius: 5px;
-            }}
-            QLineEdit:hover {{
-                background-color: {AppTheme.COLORS['primary_hover']};
-            }}
-            QLineEdit:focus {{
-                border: 3px solid #388E3C;
-                background-color: {AppTheme.COLORS['primary']};
-            }}
-            QLineEdit::placeholder {{
-                color: {AppTheme.COLORS['placeholder']};
-                font-weight: normal;
-            }}
-        """)
-        self.city_input.setToolTip("Enter city name (partial, case-insensitive)")
+        self.city_input.setToolTip("Enter city name (partial match, case-insensitive)")
         self.city_input.textChanged.connect(self.on_text_changed)
         self.city_input.textChanged.connect(self.validate_inputs)
+
         if not self.data.empty:
-            self.city_completer = QCompleter(self.data['City'].unique(), self)
-            self.city_completer.setCaseSensitivity(Qt.CaseInsensitive)
-            self.city_input.setCompleter(self.city_completer)
-        input_grid.addWidget(self.city_input, 0, 0)
-        print("Applied city input stylesheet with border: #666666, text: #000000, font-size: 11pt")  # Debug
+            completer = QCompleter(self.data['City'].unique(), self)
+            completer.setCaseSensitivity(Qt.CaseInsensitive)
+            self.city_input.setCompleter(completer)
+
+        city_layout.addWidget(self.city_input, stretch=4)
+
+        self.clear_button = QPushButton("Clear")
+        self.clear_button.setToolTip("Clear all input fields")
+        self.clear_button.clicked.connect(self.clear_fields)
+        self.clear_button.setFixedHeight(self.city_input.sizeHint().height())
+        city_layout.addWidget(self.clear_button, stretch=0)
+
+        layout.addLayout(city_layout)
+
+        # Middle row: State/Country + Grid
+        lower_input_layout = QHBoxLayout()
+        lower_input_layout.setSpacing(10)
 
         self.state_input = QLineEdit()
-        self.state_input.setPlaceholderText("State")
-        self.state_input.setReadOnly(False)
-        self.state_input.setEnabled(True)
-        self.state_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {AppTheme.COLORS['primary']};
-                color: {AppTheme.COLORS['text']};
-                font-family: Arial, sans-serif;
-                font-size: 11pt;
-                font-weight: bold;
-                border: 3px solid {AppTheme.COLORS['border']};
-                padding: 2px 8px;
-                border-radius: 5px;
-            }}
-            QLineEdit:hover {{
-                background-color: {AppTheme.COLORS['primary_hover']};
-            }}
-            QLineEdit:focus {{
-                border: 3px solid #388E3C;
-                background-color: {AppTheme.COLORS['primary']};
-            }}
-            QLineEdit::placeholder {{
-                color: {AppTheme.COLORS['placeholder']};
-                font-weight: normal;
-            }}
-        """)
-        self.state_input.setToolTip("Enter 2-letter state code (case-insensitive)")
+        self.state_input.setPlaceholderText("State (US) or Country")
+        self.state_input.setToolTip("US: 2-letter state code (e.g. IN) | World: country name (partial ok)")
         self.state_input.textChanged.connect(self.on_text_changed)
         self.state_input.textChanged.connect(self.validate_inputs)
-        input_grid.addWidget(self.state_input, 0, 1)
-        print("Applied state input stylesheet with border: #666666, text: #000000, font-size: 11pt")  # Debug
+        lower_input_layout.addWidget(self.state_input, stretch=2)
 
         self.grid_input = QLineEdit()
         self.grid_input.setPlaceholderText("Grid")
-        self.grid_input.setReadOnly(False)
-        self.grid_input.setEnabled(True)
-        self.grid_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {AppTheme.COLORS['primary']};
-                color: {AppTheme.COLORS['text']};
-                font-family: Arial, sans-serif;
-                font-size: 11pt;
-                font-weight: bold;
-                border: 3px solid {AppTheme.COLORS['border']};
-                padding: 2px 8px;
-                border-radius: 5px;
-            }}
-            QLineEdit:hover {{
-                background-color: {AppTheme.COLORS['primary_hover']};
-            }}
-            QLineEdit:focus {{
-                border: 3px solid #388E3C;
-                background-color: {AppTheme.COLORS['primary']};
-            }}
-            QLineEdit::placeholder {{
-                color: {AppTheme.COLORS['placeholder']};
-                font-weight: normal;
-            }}
-        """)
-        self.grid_input.setToolTip("Enter grid code (partial or full, up to 6 characters, case-insensitive)")
+        self.grid_input.setToolTip("Enter Maidenhead grid (partial or full, up to 6 chars)")
         self.grid_input.textChanged.connect(self.on_text_changed)
         self.grid_input.textChanged.connect(self.validate_inputs)
-        input_grid.addWidget(self.grid_input, 0, 2)
-        print("Applied grid input stylesheet with border: #666666, text: #000000, font-size: 11pt")  # Debug
+        lower_input_layout.addWidget(self.grid_input, stretch=1)
 
-        layout.addLayout(input_grid)
+        layout.addLayout(lower_input_layout)
 
-        # Results table
+        # Explicit tab order: only the three input fields, loop back
+        self.setTabOrder(self.city_input, self.state_input)
+        self.setTabOrder(self.state_input, self.grid_input)
+        self.setTabOrder(self.grid_input, self.city_input)
+
+        # Prevent Clear button from being tabbed to
+        self.clear_button.setFocusPolicy(Qt.NoFocus)
+
+        # Results table — prevent tab from reaching it
         self.results = QTableWidget()
+        self.results.setFocusPolicy(Qt.NoFocus)
         self.results.setColumnCount(3)
-        self.results.setHorizontalHeaderLabels(["City", "State", "Grid"])
+        self.results.setHorizontalHeaderLabels(["City", "State / Country", "Grid"])
+        self.results.setSelectionBehavior(QTableWidget.SelectRows)
         self.results.setSelectionMode(QTableWidget.SingleSelection)
         self.results.setEditTriggers(QTableWidget.NoEditTriggers)
         self.results.setSortingEnabled(True)
-        self.results.setStyleSheet(f"""
-            QTableWidget {{
-                font-family: Arial, sans-serif;
-                font-size: 11pt;
-                background-color: {AppTheme.COLORS['content_bg']};
-                color: {AppTheme.COLORS['text_table']};
-                border: 1px solid {AppTheme.COLORS['border']};
-                border-radius: 5px;
-            }}
-            QTableWidget::item {{
-                padding: 2px;
-            }}
-            QHeaderView::section {{
-                background-color: {AppTheme.COLORS['container_bg']};
-                color: {AppTheme.COLORS['text_table']};
-                border: 1px solid {AppTheme.COLORS['border']};
-                padding: 4px;
-            }}
-        """)
-        self.results.setColumnWidth(0, 200)
-        self.results.setColumnWidth(1, 60)
+        self.results.setColumnWidth(0, 220)
+        self.results.setColumnWidth(1, 160)
         self.results.setColumnWidth(2, 100)
+        self.results.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.results.customContextMenuRequested.connect(self.show_table_context_menu)
+        self.results.selectionModel().currentChanged.connect(self.on_row_selected)
+
         layout.addWidget(self.results)
-        print("Applied results table stylesheet with border: #666666")  # Debug
 
         # Status bar
         self.statusBar = QStatusBar()
@@ -291,7 +237,7 @@ class GridFinderApp(QMainWindow):
             QStatusBar {{
                 background: #D6E4FF;
                 border: 1px solid {AppTheme.COLORS['border']};
-                font-family: Arial, sans-serif;
+                font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
                 font-size: 11pt;
                 font-weight: bold;
                 color: {AppTheme.COLORS['text_table']};
@@ -300,31 +246,96 @@ class GridFinderApp(QMainWindow):
         self.statusBar.setContextMenuPolicy(Qt.CustomContextMenu)
         self.statusBar.customContextMenuRequested.connect(self._create_status_context_menu)
         self.setStatusBar(self.statusBar)
+
         if self.data.empty:
-            self.show_styled_message("Error: Failed to load data. Check CSV file.", 15000, "#CC0000")
-        print("Applied status bar stylesheet with border: #666666")  # Debug
+            self.show_styled_message("Error: Failed to load gridsearchdata.csv", 15000, "#CC0000")
 
-        # Install event filter for focus debugging
-        self.state_input.installEventFilter(self)
-        self.grid_input.installEventFilter(self)
-
-        # Initial validation
         self.validate_inputs()
+
+        # ── NEW: Set initial focus to City field on launch ───────────────────────────────
+        self.city_input.setFocus()
+
+    def clear_fields(self):
+        self.city_input.clear()
+        self.state_input.clear()
+        self.grid_input.clear()
+        self.city_input.setFocus()
+        self.show_styled_message("Fields cleared", 4000, "#006600")
+
+    def on_row_selected(self, current, previous):
+        if not current.isValid():
+            return
+
+        row = current.row()
+        if row < 0 or row >= self.results.rowCount():
+            return
+
+        city  = self.results.item(row, 0).text() if self.results.item(row, 0) else ""
+        state = self.results.item(row, 1).text() if self.results.item(row, 1) else ""
+        grid  = self.results.item(row, 2).text() if self.results.item(row, 2) else ""
+
+        self.city_input.textChanged.disconnect(self.on_text_changed)
+        self.state_input.textChanged.disconnect(self.on_text_changed)
+        self.grid_input.textChanged.disconnect(self.on_text_changed)
+
+        self.city_input.setText(city)
+        self.state_input.setText(state)
+        self.grid_input.setText(grid)
+
+        self.city_input.textChanged.connect(self.on_text_changed)
+        self.state_input.textChanged.connect(self.on_text_changed)
+        self.grid_input.textChanged.connect(self.on_text_changed)
+
+        if grid.strip():
+            QApplication.clipboard().setText(grid)
+            self.grid_input.selectAll()
+            self.show_styled_message("Grid copied to the clipboard", 5000, "#006600")
+        else:
+            self.show_styled_message("No grid value in selected row", 8000, "#CC6600")
+
+    def show_table_context_menu(self, position):
+        if self.results.rowCount() == 0:
+            return
+        row = self.results.rowAt(position.y())
+        if row == -1:
+            return
+
+        menu = QMenu()
+        copy_grid_action = QAction("Copy Grid")
+        copy_grid_action.triggered.connect(lambda: self.copy_selected_grid(row))
+        menu.addAction(copy_grid_action)
+
+        copy_row_action = QAction("Copy Full Row")
+        copy_row_action.triggered.connect(lambda: self.copy_selected_row(row))
+        menu.addAction(copy_row_action)
+
+        menu.exec_(self.results.viewport().mapToGlobal(position))
+
+    def copy_selected_grid(self, row):
+        grid = self.results.item(row, 2).text()
+        QApplication.clipboard().setText(grid)
+        self.show_styled_message(f"Copied grid: {grid}", 5000, "#000000")
+
+    def copy_selected_row(self, row):
+        city = self.results.item(row, 0).text()
+        state = self.results.item(row, 1).text()
+        grid = self.results.item(row, 2).text()
+        full = f"{city}, {state}, {grid}"
+        QApplication.clipboard().setText(full)
+        self.show_styled_message(f"Copied: {full}", 5000, "#000000")
 
     def show_styled_message(self, text, timeout, color):
         self.statusBar.setStyleSheet(f"""
             QStatusBar {{
                 background: #D6E4FF;
                 border: 1px solid {AppTheme.COLORS['border']};
-                font-family: Arial, sans-serif;
+                font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
                 font-size: 11pt;
                 font-weight: bold;
                 color: {color};
             }}
         """)
-        self.statusBar.setToolTip(text)
         self.statusBar.showMessage(text, timeout)
-        print(f"Status message: {text}, color: {color}")  # Debug
 
     def _create_status_context_menu(self, position):
         menu = QMenu()
@@ -337,131 +348,69 @@ class GridFinderApp(QMainWindow):
         message = self.statusBar.currentMessage()
         if message:
             clipboard.setText(message)
-            self.show_styled_message("Status message copied to clipboard", 8000, "#000000")
+            self.show_styled_message("Status message copied", 8000, "#000000")
         else:
             self.show_styled_message("No status message to copy", 8000, "#CC0000")
 
-    def eventFilter(self, source, event):
-        if event.type() == QEvent.FocusIn:
-            if source == self.state_input:
-                print("State input gained focus")  # Debug
-            elif source == self.grid_input:
-                print("Grid input gained focus")  # Debug
-        return super().eventFilter(source, event)
-
     def on_text_changed(self, text):
-        print(f"Text changed: City={self.city_input.text()}, State={self.state_input.text()}, Grid={self.grid_input.text()}")  # Debug
         self.debounce_timer.start(self.debounce_delay)
 
     def validate_inputs(self):
-        def set_input_style(input_widget, valid, tooltip=""):
-            if valid:
-                input_widget.setStyleSheet(f"""
-                    QLineEdit {{
-                        background-color: {AppTheme.COLORS['primary']};
-                        color: {AppTheme.COLORS['text']};
-                        font-family: Arial, sans-serif;
-                        font-size: 11pt;
-                        font-weight: bold;
-                        border: 3px solid {AppTheme.COLORS['border']};
-                        padding: 2px 8px;
-                        border-radius: 5px;
-                    }}
-                    QLineEdit:hover {{
-                        background-color: {AppTheme.COLORS['primary_hover']};
-                    }}
-                    QLineEdit:focus {{
-                        border: 3px solid #388E3C;
-                        background-color: {AppTheme.COLORS['primary']};
-                    }}
-                    QLineEdit::placeholder {{
-                        color: {AppTheme.COLORS['placeholder']};
-                        font-weight: normal;
-                    }}
-                """)
-                input_widget.setToolTip(tooltip)
-            else:
-                input_widget.setStyleSheet(f"""
-                    QLineEdit {{
-                        background-color: {AppTheme.COLORS['primary']};
-                        color: {AppTheme.COLORS['text']};
-                        font-family: Arial, sans-serif;
-                        font-size: 11pt;
-                        font-weight: bold;
-                        border: 3px solid {AppTheme.COLORS['flash_red']};
-                        padding: 2px 8px;
-                        border-radius: 5px;
-                    }}
-                    QLineEdit:hover {{
-                        background-color: {AppTheme.COLORS['primary_hover']};
-                    }}
-                    QLineEdit:focus {{
-                        border: 3px solid #388E3C;
-                        background-color: {AppTheme.COLORS['primary']};
-                    }}
-                    QLineEdit::placeholder {{
-                        color: {AppTheme.COLORS['placeholder']};
-                        font-weight: normal;
-                    }}
-                """)
-                input_widget.setToolTip(tooltip)
+        def set_input_style(widget, valid, tooltip=""):
+            border_color = AppTheme.COLORS['border'] if valid else AppTheme.COLORS['flash_red']
+            widget.setStyleSheet(f"""
+                QLineEdit {{
+                    background-color: {AppTheme.COLORS['primary']};
+                    color: {AppTheme.COLORS['text']};
+                    font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
+                    font-size: 11pt;
+                    font-weight: bold;
+                    border: 3px solid {border_color};
+                    padding: 2px 8px;
+                    border-radius: 5px;
+                }}
+                QLineEdit:hover {{
+                    background-color: {AppTheme.COLORS['primary_hover']};
+                }}
+                QLineEdit:focus {{
+                    border: 5px solid #1B5E20;
+                    background-color: #A5D6A7;
+                    color: #000000;
+                }}
+                QLineEdit::placeholder {{
+                    color: {AppTheme.COLORS['placeholder']};
+                    font-weight: normal;
+                }}
+            """)
+            if tooltip:
+                widget.setToolTip(tooltip)
 
-        state_text = self.state_input.text()
-        if state_text and len(state_text) != 2:
-            set_input_style(self.state_input, False, "State must be 2 letters (case-insensitive).")
-        else:
-            set_input_style(self.state_input, True, "Enter 2-letter state code (case-insensitive)")
+        set_input_style(self.city_input, True)
+        set_input_style(self.state_input, True)
 
-        grid_text = self.grid_input.text()
-        if grid_text and len(grid_text) > 6:
-            set_input_style(self.grid_input, False, "Grid must be 6 or fewer characters (case-insensitive, partial matches allowed).")
-        else:
-            set_input_style(self.grid_input, True, "Enter grid code (partial or full, up to 6 characters, case-insensitive)")
+        grid_text = self.grid_input.text().strip()
+        set_input_style(self.grid_input, len(grid_text) <= 6)
 
     def filter_data(self):
-        self.show_styled_message("Filtering...", 8000, "#000000")
-        city_query = self.city_input.text().strip()
-        state_query = self.state_input.text().strip().upper()
-        grid_query = self.grid_input.text().strip().upper()
-        print(f"Filtering with: City={city_query}, State={state_query}, Grid={grid_query}")  # Debug
+        self.show_styled_message("Filtering...", 2000, "#000000")
 
-        # Validate State before filtering
-        if state_query and len(state_query) != 2:
-            self.show_styled_message("Invalid State: Must be exactly 2 letters", 10000, "#CC0000")
-            self.display_results(pd.DataFrame())
-            return
-        # Validate Grid length
-        if grid_query and len(grid_query) > 6:
-            self.show_styled_message("Invalid Grid: Must be 6 or fewer characters", 10000, "#CC0000")
-            self.display_results(pd.DataFrame())
-            return
+        city_query  = self.city_input.text().strip().lower()
+        state_query = self.state_input.text().strip().lower()
+        grid_query  = self.grid_input.text().strip().lower()
 
         if not any([city_query, state_query, grid_query]):
             self.display_results(pd.DataFrame())
             return
 
-        if self.data.empty:
-            self.show_styled_message("No data available. Check CSV file.", 15000, "#CC0000")
-            self.display_results(pd.DataFrame())
-            return
-
         filtered = self.data
-        print(f"Initial data rows: {len(filtered)}")  # Debug
-        if city_query:
-            filtered = filtered[filtered['City'].str.contains(city_query, case=False, na=False, regex=False)]
-            print(f"After City filter: {len(filtered)} rows")  # Debug
-        if state_query:
-            filtered = filtered[filtered['State'].str.upper() == state_query]
-            print(f"After State filter: {len(filtered)} rows")  # Debug
-        if grid_query:
-            filtered = filtered[filtered['MGrid'].str.contains(grid_query, case=False, na=False, regex=False)]
-            print(f"After Grid filter: {len(filtered)} rows")  # Debug
 
-        print(f"Filtered results: {len(filtered)} rows")  # Debug
-        if len(filtered) > 0:
-            print(f"Sample filtered data: {filtered[['City', 'State', 'MGrid']].head().to_dict('records')}")  # Debug
-            if grid_query:
-                print(f"Matched MGrid values: {filtered['MGrid'].unique().tolist()}")  # Debug
+        if city_query:
+            filtered = filtered[filtered['City_lower'].str.contains(city_query, na=False)]
+        if state_query:
+            filtered = filtered[filtered['State_lower'].str.contains(state_query, na=False)]
+        if grid_query:
+            filtered = filtered[filtered['MGrid_lower'].str.contains(grid_query, na=False)]
+
         self.display_results(filtered)
 
     def display_results(self, filtered):
@@ -481,12 +430,25 @@ class GridFinderApp(QMainWindow):
             self.results.setItem(i, 2, QTableWidgetItem(row['MGrid']))
 
         self.results.resizeColumnsToContents()
-        self.show_styled_message(f"Found {len(filtered)} results", 8000, "#000000")
+
+        # Ensure no row is selected after filtering
+        self.results.clearSelection()
+        self.results.setCurrentCell(-1, -1)
+
+        self.show_styled_message(
+            f"Found {len(filtered)} results. Click row to fill fields & copy grid.",
+            6000, "#000000"
+        )
 
 if __name__ == '__main__':
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+
     app = QApplication(sys.argv)
-    app.setStyle('Fusion')  # Ensure consistent rendering across platforms
-    app.setFont(QFont('Arial', 11))
+    app.setFont(QFont("DejaVu Sans, Helvetica, Arial, sans-serif", 11))
+    app.setStyle('Fusion')
+
     window = GridFinderApp()
     window.show()
+
     sys.exit(app.exec_())

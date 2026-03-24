@@ -96,7 +96,11 @@ FONT_FAMILY = "Arial"
 FONT_SIZE = 12
 WINDOW_WIDTH = 700
 WINDOW_HEIGHT = 580
+WINDOW_HEIGHT_EXPANDED = 700  # Height when Internet Only (expanded remarks)
 INTERNET_RIG = "INTERNET ONLY"
+REMARKS_MAX_RADIO = 60
+REMARKS_MAX_INTERNET = 300  # ~5 lines worth of text
+NEWLINE_PLACEHOLDER = "||"
 DATA_BACKGROUND = "#FFF5E1"   # matches little_gucci.py 'data_background'
 
 
@@ -149,12 +153,14 @@ class StatRepDialog(QDialog):
         tcp_pool: "TCPConnectionPool",
         connector_manager: "ConnectorManager",
         parent=None,
-        backbone_debug: bool = False
+        backbone_debug: bool = False,
+        panel_background: str = DATA_BACKGROUND
     ):
         super().__init__(parent)
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
         self.backbone_debug = backbone_debug  # Command line override for debug mode
+        self.panel_background = panel_background
 
         self.setWindowTitle("CommStat STATREP")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
@@ -221,6 +227,44 @@ class StatRepDialog(QDialog):
                 if state:
                     return state
         return ""
+
+    def _is_internet_only(self) -> bool:
+        """Check if the current rig selection is Internet Only."""
+        return hasattr(self, 'rig_combo') and self.rig_combo.currentText() == INTERNET_RIG
+
+    def _get_remarks_text(self) -> str:
+        """Get remarks text from whichever widget is currently active."""
+        if self._is_internet_only() and hasattr(self, 'remarks_expanded'):
+            return self.remarks_expanded.toPlainText().strip()
+        return self.remarks_field.text().strip()
+
+    def _set_remarks_text(self, text: str) -> None:
+        """Set remarks text on whichever widget is currently active."""
+        if self._is_internet_only() and hasattr(self, 'remarks_expanded'):
+            self.remarks_expanded.setPlainText(text)
+        else:
+            self.remarks_field.setText(text)
+
+    def _swap_remarks_widget(self, internet_only: bool) -> None:
+        """Swap between single-line and multi-line remarks field."""
+        if not hasattr(self, 'remarks_expanded'):
+            return
+
+        # Transfer text between widgets
+        if internet_only:
+            current_text = self.remarks_field.text().strip()
+            self.remarks_field.hide()
+            self.remarks_expanded.setPlainText(current_text)
+            self.remarks_expanded.show()
+            self.setFixedHeight(WINDOW_HEIGHT_EXPANDED)
+        else:
+            current_text = self.remarks_expanded.toPlainText().strip()
+            self.remarks_expanded.hide()
+            # Collapse multi-line to single line, truncate if needed
+            single_line = current_text.replace('\n', ' ').replace('\r', '')
+            self.remarks_field.setText(single_line[:REMARKS_MAX_RADIO])
+            self.remarks_field.show()
+            self.setFixedHeight(WINDOW_HEIGHT)
 
     def _get_all_groups_from_db(self) -> list:
         """Get all groups from the database."""
@@ -340,6 +384,9 @@ class StatRepDialog(QDialog):
                 self.delivery_combo.addItem("Limited Reach")
             self.delivery_combo.blockSignals(False)
 
+        # Swap remarks widget based on rig type
+        self._swap_remarks_widget(is_internet)
+
         if rig_name == INTERNET_RIG:
             callsign, grid, state = self._get_internet_user_settings()
             self.callsign = callsign
@@ -352,8 +399,8 @@ class StatRepDialog(QDialog):
             if hasattr(self, 'mode_combo'):
                 self.mode_combo.setEnabled(False)
                 self.mode_combo.setCurrentIndex(-1)
-            if hasattr(self, 'remarks_field') and state:
-                self.remarks_field.setText(state)
+            if state:
+                self._set_remarks_text(state)
             return
 
         # Re-enable mode combo for real rig
@@ -363,10 +410,9 @@ class StatRepDialog(QDialog):
                 self.mode_combo.setCurrentIndex(0)
 
         # Update remarks with state from connector
-        if hasattr(self, 'remarks_field'):
-            state = get_state_from_connector(self.connector_manager, rig_name)
-            if state:
-                self.remarks_field.setText(state)
+        state = get_state_from_connector(self.connector_manager, rig_name)
+        if state:
+            self._set_remarks_text(state)
 
         if not self.tcp_pool:
             print("[StatRep] No TCP pool available")
@@ -478,7 +524,7 @@ class StatRepDialog(QDialog):
                 self.grid_field.setText(grid)
             # Update remarks with state derived from grid
             if hasattr(self, 'remarks_field'):
-                self.remarks_field.setText(self._get_default_remarks())
+                self._set_remarks_text(self._get_default_remarks())
 
     def _on_frequency_received(self, rig_name: str, dial_freq: int) -> None:
         """Handle frequency received from JS8Call."""
@@ -513,7 +559,7 @@ class StatRepDialog(QDialog):
     def _setup_ui(self) -> None:
         """Build the user interface."""
         self.setStyleSheet(f"""
-            QDialog {{ background-color: {DATA_BACKGROUND}; }}
+            QDialog {{ background-color: {self.panel_background}; }}
             QLabel {{ color: #333333; }}
             QLineEdit {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
             QComboBox {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
@@ -700,14 +746,25 @@ class StatRepDialog(QDialog):
         remarks_layout = QtWidgets.QVBoxLayout()
         remarks_label = QtWidgets.QLabel("Remarks:")
         remarks_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+
+        # Single-line remarks (default, for radio)
         self.remarks_field = QtWidgets.QLineEdit()
         self.remarks_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
         self.remarks_field.setMinimumHeight(36)
-        self.remarks_field.setMaxLength(60)
-        self.remarks_field.setPlaceholderText("Optional - max 60 characters")
+        self.remarks_field.setMaxLength(REMARKS_MAX_RADIO)
+        self.remarks_field.setPlaceholderText(f"Optional - max {REMARKS_MAX_RADIO} characters")
         self.remarks_field.setText(self._get_default_remarks())
+
+        # Multi-line remarks (for Internet Only, hidden by default)
+        self.remarks_expanded = QtWidgets.QPlainTextEdit()
+        self.remarks_expanded.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.remarks_expanded.setFixedHeight(110)  # ~5 lines
+        self.remarks_expanded.setPlaceholderText(f"Optional - max {REMARKS_MAX_INTERNET} characters, multiple lines allowed")
+        self.remarks_expanded.hide()
+
         remarks_layout.addWidget(remarks_label)
         remarks_layout.addWidget(self.remarks_field)
+        remarks_layout.addWidget(self.remarks_expanded)
         layout.addLayout(remarks_layout)
 
         # Spacer
@@ -849,9 +906,10 @@ class StatRepDialog(QDialog):
             return False
 
         # Check remarks length
-        remarks = self.remarks_field.text().strip()
-        if len(remarks) > 60:
-            self._show_error("Remarks too long (max 60 characters)")
+        remarks = self._get_remarks_text()
+        max_len = REMARKS_MAX_INTERNET if self._is_internet_only() else REMARKS_MAX_RADIO
+        if len(remarks) > max_len:
+            self._show_error(f"Remarks too long (max {max_len} characters)")
             return False
 
         return True
@@ -883,10 +941,13 @@ class StatRepDialog(QDialog):
         """Build the StatRep message string for transmission."""
         values = self._get_status_values()
         scope_code = self.scope_combo.currentData()
-        remarks = self.remarks_field.text().strip().upper()
+        remarks = self._get_remarks_text().upper()
 
-        # Clean remarks - only alphanumeric, spaces, hyphens, asterisks
-        remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
+        # Replace newlines with || for storage/transmission
+        remarks = remarks.replace('\r\n', NEWLINE_PLACEHOLDER).replace('\n', NEWLINE_PLACEHOLDER).replace('\r', NEWLINE_PLACEHOLDER)
+
+        # Clean remarks - only alphanumeric, spaces, hyphens, asterisks, and pipe chars
+        remarks = re.sub(r"[^A-Za-z0-9*\-\s|]+", " ", remarks)
 
         # Build status string (all 12 values concatenated)
         status_str = "".join([
@@ -904,11 +965,9 @@ class StatRepDialog(QDialog):
             values["political"],
         ])
 
-        # TODO: REVERT LATER - Compression disabled for legacy compatibility with CommStatOne
-        # When enabled, this compresses all-green status (111111111111) to "+" to save bandwidth
-        # Uncomment these lines when Dan's users have upgraded to CommStat:
-        # if status_str == "111111111111":
-        #     status_str = "+"
+        # Compress all-green status to "+" to save bandwidth
+        if status_str == "111111111111":
+            status_str = "+"
 
         # Format: CALLSIGN: @GROUP ,GRID,SCOPE,ID,STATUSES,REMARKS,{&%}
         group = f"@{self.to_combo.currentText()}"
@@ -925,8 +984,11 @@ class StatRepDialog(QDialog):
         """
         values = self._get_status_values()
         scope_text = self.scope_combo.currentText()
-        remarks = self.remarks_field.text().strip()
-        remarks = re.sub(r"[^A-Za-z0-9*\-\s]+", " ", remarks)
+        remarks = self._get_remarks_text()
+
+        # Replace newlines with || for storage
+        remarks = remarks.replace('\r\n', NEWLINE_PLACEHOLDER).replace('\n', NEWLINE_PLACEHOLDER).replace('\r', NEWLINE_PLACEHOLDER)
+        remarks = re.sub(r"[^A-Za-z0-9*\-\s|]+", " ", remarks)
 
         now = QDateTime.currentDateTimeUtc()
         date = now.toString("yyyy-MM-dd HH:mm:ss")
