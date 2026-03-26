@@ -3,11 +3,11 @@
 # 0.9.1 allow the enter key to trigger the brevity search
 # 0.9.1 corrected 1 dropdown not reflecting file if brevity entered 
 # 0.9.1 #out a section preventing the "Y" code from being used in menu 5.
+# 0.9.1 #out a section preventing the "Y" code from being used in menu 5.
+# 1.0 Converted from Tkinter to PyQt5 for qt5ct theming support on Linux
 
 
-
-import tkinter as tk
-from tkinter import ttk, messagebox
+import sys
 import re
 import json
 import traceback
@@ -20,15 +20,13 @@ positions = {}
 updating_menus = False
 emergency_list_mapping = {}
 current_file = None
+gui_widgets = {}
 
 def show_status_message(message, timeout=5000):
     try:
-        status_bar.config(state="normal")
-        status_bar.delete("1.0", tk.END)
-        status_bar.insert(tk.END, message)
-        status_bar.config(state="disabled")
-        if timeout:
-            root.after(timeout, lambda: [status_bar.config(state="normal"), status_bar.delete("1.0", tk.END), status_bar.config(state="disabled")])
+        if 'status_bar' in globals():
+            status_bar = globals()['status_bar']
+            status_bar.showMessage(message, timeout)
     except NameError:
         logging.debug(f"Cannot show status message '{message}'")
     except Exception as e:
@@ -202,27 +200,24 @@ def load_selected_file(list_id):
         positions = data
         current_file = filename
         # Only update GUI elements if they are defined
-        if 'label_select' in globals():
+        if gui_widgets:
             gui_titles = positions.get("gui_titles", {})
-            label_select.config(text=gui_titles.get("select_list", "1. Select List:"))
-            label_emergency.config(text=gui_titles.get("emergency", "2. Event:"))
-            label_status.config(text=gui_titles.get("status", "3. Status/Target:"))
-            label_primary.config(text=gui_titles.get("primary", "4. Impact:"))
-            label_secondary.config(text=gui_titles.get("secondary", "5. Response:"))
-            label_severity.config(text=gui_titles.get("severity", "6. Station/Location:"))
-            list_var.set(filename)
-            emergency_var.set("Select Code")
-            status_var.set("Select Code")
-            primary_var.set("Select Code")
-            secondary_var.set("Select Code")
-            severity_var.set("Select Code")
-            output_text.delete("1.0", tk.END)
-            narrative_text.config(state="normal")
-            narrative_text.delete("1.0", tk.END)
-            narrative_text.config(state="disabled")
+            gui_widgets['label_select'].setText(gui_titles.get("select_list", "1. Select List:"))
+            gui_widgets['label_emergency'].setText(gui_titles.get("emergency", "2. Event:"))
+            gui_widgets['label_status'].setText(gui_titles.get("status", "3. Status/Target:"))
+            gui_widgets['label_primary'].setText(gui_titles.get("primary", "4. Impact:"))
+            gui_widgets['label_secondary'].setText(gui_titles.get("secondary", "5. Response:"))
+            gui_widgets['label_severity'].setText(gui_titles.get("severity", "6. Station/Location:"))
+            gui_widgets['list_combo'].setCurrentText(filename)
+            gui_widgets['emergency_combo'].setCurrentText("Select Code")
+            gui_widgets['status_combo'].setCurrentText("Select Code")
+            gui_widgets['primary_combo'].setCurrentText("Select Code")
+            gui_widgets['secondary_combo'].setCurrentText("Select Code")
+            gui_widgets['severity_combo'].setCurrentText("Select Code")
+            gui_widgets['output_text'].clear()
+            gui_widgets['narrative_text'].clear()
             first_emergency_code = sorted([k for k in positions["emergency_type"].keys() if not k.startswith("***")])[0] if positions["emergency_type"] else "A"
             update_menus(first_emergency_code)
-            root.update()
             show_status_message(f"Loaded {filename}", 5000)
     except FileNotFoundError:
         logging.error(f"File not found: {filename}")
@@ -236,40 +231,27 @@ def validate_code_input(new_value):
         return False
     return bool(re.match(r'^[0-9]?[A-Za-z]?[A-Za-z]?[A-Za-z]*$', new_value))
 
-def decode_code(event=None, decode_entry=None, output_text=None, narrative_text=None, list_var=None, emergency_var=None, status_var=None, primary_var=None, secondary_var=None, severity_var=None):
-    if decode_entry is None:
-        decode_entry = globals().get('decode_entry')
-    if output_text is None:
-        output_text = globals().get('output_text')
-    if narrative_text is None:
-        narrative_text = globals().get('narrative_text')
-    if list_var is None:
-        list_var = globals().get('list_var')
-    if emergency_var is None:
-        emergency_var = globals().get('emergency_var')
-    if status_var is None:
-        status_var = globals().get('status_var')
-    if primary_var is None:
-        primary_var = globals().get('primary_var')
-    if secondary_var is None:
-        secondary_var = globals().get('secondary_var')
-    if severity_var is None:
-        severity_var = globals().get('severity_var')
-    code = (decode_entry.get().strip().upper() if decode_entry else "").strip()
-    #if not re.match(r'^[0-9][A-Z]{5}$', code):
-    #    show_status_message(f"Invalid code: Use format #AAAAA", 10000)
-    #    logging.warning(f"Invalid code format: {code}")
-    #    return f"Invalid code: Use format #AAAAA"
+def decode_code(event=None):
+    """Decode a brevity code using PyQt5 widgets from gui_widgets dict"""
+    decode_entry = gui_widgets.get('decode_entry')
+    output_text = gui_widgets.get('output_text')
+    narrative_text = gui_widgets.get('narrative_text')
+    list_combo = gui_widgets.get('list_combo')
+    emergency_combo = gui_widgets.get('emergency_combo')
+    status_combo = gui_widgets.get('status_combo')
+    primary_combo = gui_widgets.get('primary_combo')
+    secondary_combo = gui_widgets.get('secondary_combo')
+    severity_combo = gui_widgets.get('severity_combo')
+    
+    code = (decode_entry.text().strip().upper() if decode_entry else "").strip()
     
     if not re.match(r'^[0-9][A-Z]{5}$', code):
         show_status_message(f"Invalid code: Use format #AAAAA", 10000)
         logging.warning(f"Invalid code format: {code}")
         if output_text:
-            output_text.delete("1.0", tk.END)
+            output_text.clear()
         if narrative_text:
-            narrative_text.config(state="normal")
-            narrative_text.delete("1.0", tk.END)
-            narrative_text.config(state="disabled")
+            narrative_text.clear()
         return f"Invalid code: Use format #AAAAA"
     
     list_id = code[0]
@@ -278,26 +260,26 @@ def decode_code(event=None, decode_entry=None, output_text=None, narrative_text=
     primary_code = code[3]
     secondary_code = code[4]
     severity_code = code[5]
+    
     if list_id not in emergency_list_mapping:
         show_status_message(f"Invalid list ID: {list_id}", 10000)
         logging.warning(f"Invalid list ID: {list_id}")
         return f"Invalid list ID: {list_id}"
-    current_file_selected = list_var.get() if list_var else ""
+    
+    current_file_selected = list_combo.currentText() if list_combo else ""
     expected_file = emergency_list_mapping[list_id]
     if current_file_selected != expected_file:
         logging.debug(f"Mismatch in selected file. Expected {expected_file}, loading")
         load_selected_file(list_id)
-    if list_var is not None:
-        list_var.set(expected_file)
-    if current_file_selected != expected_file:
-        logging.debug(f"Mismatch in selected file. Expected {expected_file}, loading")
-        load_selected_file(list_id)
+    if list_combo is not None:
+        list_combo.setCurrentText(expected_file)
+    
     if not positions:
         show_status_message("No event list loaded", 10000)
         logging.warning("No positions data loaded")
         return "No event list loaded"
+    
     try:
-        # Debug: Log positions state
         logging.debug(f"positions keys: {list(positions.keys())}")
         logging.debug(f"station_response: {positions.get('station_response', {})}")
         logging.debug(f"Checking severity_code: {severity_code}")
@@ -319,10 +301,12 @@ def decode_code(event=None, decode_entry=None, output_text=None, narrative_text=
             if emergency_code in positions["emergency_type"]:
                 emergency_data = positions["emergency_type"][emergency_code]
                 emergency_group = "Unknown"
+        
         if not emergency_data:
             show_status_message(f"Invalid Event Type code: {emergency_code}", 10000)
             logging.warning(f"Invalid Event Type code: {emergency_code}")
             return f"Invalid Event Type code: {emergency_code}"
+        
         impacts = positions.get("shared_impacts", {})
         valid_primary_code = False
         primary_impact_name = None
@@ -340,58 +324,56 @@ def decode_code(event=None, decode_entry=None, output_text=None, narrative_text=
                             primary_impact_name = impacts[primary_code]["name"]
                             impact_group = group
                             break
+        
         if not valid_primary_code:
             show_status_message(f"Invalid Impact code: {primary_code}", 10000)
             logging.warning(f"Invalid Impact code: {primary_code}")
             return f"Invalid Impact code: {primary_code}"
+        
         if secondary_code not in positions["public_reaction"]:
             show_status_message(f"Invalid Response code: {secondary_code}", 10000)
             logging.warning(f"Invalid Response code: {secondary_code}")
             return f"Invalid Response code: {secondary_code}"
-        #if secondary_code == "Y":
-        #    show_status_message("Invalid Response code: Y is reserved", 10000)
-        #    logging.warning("Invalid Response code: Y is reserved")
-        #    return "Invalid Response code: Y is reserved"
+        
         station_response = positions.get("station_response", {})
         valid_severity_code = False
         severity_name = "Unknown"
-        # Check standalone keys first (e.g., 'A' for Station Status)
         if severity_code in station_response and isinstance(station_response[severity_code], dict) and "name" in station_response[severity_code]:
             valid_severity_code = True
             severity_name = station_response[severity_code]["name"]
         else:
-            # Check groups for other codes
             for group, sub_response in station_response.items():
                 if isinstance(sub_response, dict) and "items" in sub_response:
                     if severity_code in sub_response["items"] and severity_code in station_response:
                         valid_severity_code = True
                         severity_name = station_response[severity_code].get("name", "Unknown")
                         break
+        
         if not valid_severity_code:
             show_status_message(f"Invalid Station Status code: {severity_code}", 10000)
             logging.warning(f"Invalid Station Status code: {severity_code}")
             return f"Invalid Station Status code: {severity_code}"
+        
         if status_code not in positions["status_codes"]:
             show_status_message(f"Invalid Status/Target code: {status_code}", 10000)
             logging.warning(f"Invalid Status/Target code: {status_code}")
             return f"Invalid Status/Target code: {status_code}"
-     
-        # Only update GUI elements if they are provided
-        if emergency_var is not None:
-            emergency_var.set(f"{emergency_code}-{emergency_data['name']}")
-            update_menus(emergency_code)
-        if primary_var is not None:
-            primary_var.set(f"{primary_code}-{primary_impact_name}")
-        if secondary_var is not None:
-            secondary_var.set(f"{secondary_code}-{positions['public_reaction'][secondary_code]['name']}")
-        if severity_var is not None:
-            severity_var.set(f"{severity_code}-{positions['station_response'].get(severity_code, {}).get('name', 'Unknown')}")
-        if status_var is not None:
-            status_var.set(f"{status_code}-{positions['status_codes'][status_code]['name']}")
-        # Only call root.update() if root is defined (i.e., in GUI mode)
-        if 'root' in globals():
-            globals()['root'].update()
-     
+        
+        def set_combo_by_code(combo, target_code):
+            if combo is None: return
+            for i in range(combo.count()):
+                text = combo.itemText(i).strip()
+                if text.startswith(f"{target_code}-"):
+                    combo.setCurrentIndex(i)
+                    return
+                    
+        # Set combos in exact cascading order so they override the resets
+        set_combo_by_code(emergency_combo, emergency_code)
+        set_combo_by_code(status_combo, status_code)
+        set_combo_by_code(primary_combo, primary_code)
+        set_combo_by_code(secondary_combo, secondary_code)
+        set_combo_by_code(severity_combo, severity_code)
+        
         description_parts = [
             emergency_data["name"] if emergency_code != "A" else None,
             primary_impact_name if primary_code != "A" else None,
@@ -401,46 +383,12 @@ def decode_code(event=None, decode_entry=None, output_text=None, narrative_text=
         ]
         description = generate_description(description_parts, severity_code, list_id, code, status_code, secondary_code, emergency_group, impact_group)
         narrative = generate_narrative(description_parts, emergency_code, primary_code, secondary_code, severity_code, status_code, code, list_id)
-     
+        
         if output_text:
-            output_text.delete("1.0", tk.END)
-            output_text.insert(tk.END, description)
-            output_lines = description.split('\n')
-            for i, line in enumerate(output_lines):
-                if line.startswith("Brevity Code:"):
-                    output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len('Brevity Code:')}")
-                    file_start = line.find("File:")
-                    if file_start != -1:
-                        output_text.tag_add("bold", f"{i+1}.{file_start}", f"{i+1}.{file_start + len('File:')}")
-                elif line.startswith(positions.get("gui_titles", {}).get('emergency', 'Event:')):
-                    output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('emergency', 'Event:'))}")
-                elif line.startswith(positions.get("gui_titles", {}).get('status', 'Status or Target:')):
-                    output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('status', 'Status or Target:'))}")
-                elif line.startswith(positions.get("gui_titles", {}).get('primary', 'Impact:')):
-                    output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('primary', 'Impact:'))}")
-                elif line.startswith(positions.get("gui_titles", {}).get('secondary', 'Response:')):
-                    output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('secondary', 'Response:'))}")
-                elif line.startswith(positions.get("gui_titles", {}).get('severity', 'Station Status:')):
-                    output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('severity', 'Station Status:'))}")
+            output_text.setPlainText(description)
         if narrative_text:
-            narrative_text.config(state="normal")
-            narrative_text.delete("1.0", tk.END)
-            narrative_text.insert(tk.END, f"{narrative}")
-            narrative_lines = narrative.split('\n')
-            for i, line in enumerate(narrative_lines):
-                if line.startswith("Brevity Code:"):
-                    narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len('Brevity Code:')}")
-                elif line.startswith(positions.get("gui_titles", {}).get('emergency', 'Event:').rstrip(':')):
-                    narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('emergency', 'Event:').rstrip(':'))}")
-                elif line.startswith(positions.get("gui_titles", {}).get('status', 'Status or Target:').rstrip(':')):
-                    narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('status', 'Status or Target:').rstrip(':'))}")
-                elif line.startswith(positions.get("gui_titles", {}).get('primary', 'Impact:').rstrip(':')):
-                    narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('primary', 'Impact:').rstrip(':'))}")
-                elif line.startswith(positions.get("gui_titles", {}).get('secondary', 'Response:').rstrip(':')):
-                    narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('secondary', 'Response:').rstrip(':'))}")
-                elif line.startswith(positions.get("gui_titles", {}).get('severity', 'Station Status:').rstrip(':')):
-                    narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('severity', 'Station Status:').rstrip(':'))}")
-            narrative_text.config(state="disabled")
+            narrative_text.setPlainText(narrative)
+        
         show_status_message("Brevity code generated", 5000)
         return description
     except Exception as e:
@@ -448,63 +396,90 @@ def decode_code(event=None, decode_entry=None, output_text=None, narrative_text=
         show_status_message(f"Error decoding code: {str(e)}", 10000)
         return f"Error decoding code: {str(e)}"
 
+
 def decode_to_report(code):
     """Decode a brevity code and return the Brevity Report as a string."""
-    global emergency_list_mapping, positions, current_file
+    global emergency_list_mapping, positions, current_file, gui_widgets
     emergency_list_mapping = get_json_files()
     if not emergency_list_mapping:
         return "Error: No valid JSON files found"
     code = code.strip().upper()
-    # Create a mock decode_entry object to pass the code
+    # Create a mock decode_entry object
     class MockEntry:
-        def get(self):
+        def text(self):
             return code
-    result = decode_code(
-        decode_entry=MockEntry(),
-        output_text=None,
-        narrative_text=None,
-        list_var=None,
-        emergency_var=None,
-        status_var=None,
-        primary_var=None,
-        secondary_var=None,
-        severity_var=None
-    )
+    # Temporarily replace gui_widgets
+    old_widgets = gui_widgets.copy() if gui_widgets else {}
+    gui_widgets['decode_entry'] = MockEntry()
+    gui_widgets['output_text'] = None
+    gui_widgets['narrative_text'] = None
+    gui_widgets['list_combo'] = None
+    gui_widgets['emergency_combo'] = None
+    gui_widgets['status_combo'] = None
+    gui_widgets['primary_combo'] = None
+    gui_widgets['secondary_combo'] = None
+    gui_widgets['severity_combo'] = None
+    
+    result = decode_code()
+    
+    # Restore gui_widgets
+    if old_widgets:
+        gui_widgets.update(old_widgets)
     return result
 
 def clear_fields():
     global updating_menus
     updating_menus = False
-    list_var.set("Select Emergency List")
-    emergency_var.set("Select Code")
-    status_var.set("Select Code")
-    primary_var.set("Select Code")
-    secondary_var.set("Select Code")
-    severity_var.set("Select Code")
-    output_text.delete("1.0", tk.END)
-    narrative_text.config(state="normal")
-    narrative_text.delete("1.0", tk.END)
-    narrative_text.config(state="disabled")
-    if 'decode_entry' in globals():
-        decode_entry.delete(0, tk.END)
+    gui_widgets['list_combo'].setCurrentText("Select Emergency List")
+    gui_widgets['emergency_combo'].setCurrentText("Select Code")
+    gui_widgets['status_combo'].setCurrentText("Select Code")
+    gui_widgets['primary_combo'].setCurrentText("Select Code")
+    gui_widgets['secondary_combo'].setCurrentText("Select Code")
+    gui_widgets['severity_combo'].setCurrentText("Select Code")
+    gui_widgets['output_text'].clear()
+    gui_widgets['narrative_text'].clear()
+    if 'decode_entry' in gui_widgets:
+        gui_widgets['decode_entry'].clear()
     show_status_message("Fields cleared", 5000)
     logging.debug("Cleared all fields and outputs")
 
-def populate_menu(menu, var, data, key, button, max_length=100, group_order=None, select_handler=None, emergency_code=None):
-    menu.delete(0, tk.END)
+def populate_combo(combo, data, key, max_length=100, group_order=None, emergency_code=None):
+    """Populate a QComboBox with data from JSON structure"""
+    current_text = combo.currentText().strip()
+    
+    combo.blockSignals(True)
+    combo.clear()
+    combo.addItem("Select Code")
+    
     if not data:
-        menu.add_command(label=f"No {key} Available".ljust(max_length), command=lambda: None)
+        combo.addItem(f"No {key} Available")
+        for i in range(combo.count()):
+            if combo.itemText(i).strip() == current_text:
+                combo.setCurrentIndex(i)
+                break
+        combo.blockSignals(False)
         return
+    
     if "A" in data and key != "status":
         val = f"A-{data['A'].get('name', 'Unknown')}"
-        menu.add_command(label=val.ljust(max_length),
-                        command=lambda v=val: [var.set(v), select_handler(var, key, menu, button, v[0], emergency_code)])
-        menu.add_separator()
+        combo.addItem(val)
+        combo.insertSeparator(combo.count())
+    
     has_groups = any(k.startswith("***") for k in data.keys())
     if has_groups and group_order:
         for group in group_order:
             if group in data:
-                menu.add_command(label=group, command=lambda: None, foreground="#00008B", font=("Arial", 10, "bold"))
+                combo.addItem(group)
+                # Disable group headers
+                model = combo.model()
+                item = model.item(combo.count() - 1)
+                item.setEnabled(False)
+                from PyQt5.QtGui import QFont, QColor
+                font = QFont()
+                font.setBold(True)
+                item.setFont(font)
+                item.setForeground(QColor("#00008B"))
+                
                 group_data = data[group]
                 codes_in_group = []
                 if "items" in group_data and isinstance(group_data["items"], list):
@@ -512,19 +487,26 @@ def populate_menu(menu, var, data, key, button, max_length=100, group_order=None
                 else:
                     codes_in_group = sorted([c for c in group_data.keys() if re.match(r'^[A-Z]$', c)])
                 for code in codes_in_group:
-                    name = data.get(code, {}).get('name', 'Unknown') if key == "impacts" else group_data[code].get('name', 'Unknown')
+                    name = data.get(code, {}).get('name', 'Unknown') if key == "impacts" else group_data.get(code, {}).get('name', 'Unknown')
                     val = f"{code}-{name}"
-                    menu.add_command(label=(" " + val).ljust(max_length),
-                                   command=lambda v=val, g=group: [var.set(v), select_handler(var, key, menu, button, v[0], emergency_code, g)])
-                menu.add_separator()
+                    combo.addItem(" " + val)
+                combo.insertSeparator(combo.count())
     else:
         for code in sorted(data.keys()):
             if code == "A" or code.startswith("***"): continue
             val = f"{code}-{data[code].get('name', 'Unknown')}"
-            menu.add_command(label=val.ljust(max_length),
-                           command=lambda v=val: [var.set(v), select_handler(var, key, menu, button, v[0], emergency_code)])
+            combo.addItem(val)
+    
+    for i in range(combo.count()):
+        if combo.itemText(i).strip() == current_text:
+            combo.setCurrentIndex(i)
+            break
+            
+    combo.blockSignals(False)
+
 
 def update_menus(emergency_code, primary_code=None):
+    """Update all combo boxes based on current selections"""
     global updating_menus
     if updating_menus:
         logging.debug("Skipping update_menus: already in progress")
@@ -533,72 +515,127 @@ def update_menus(emergency_code, primary_code=None):
     try:
         logging.debug(f"Updating menus for emergency_code={emergency_code}")
         max_length = 100
-        # Only update menus if GUI elements are defined
-        if 'emergency_menu' in globals():
-            emergency_menu.delete(0, tk.END)
+        
+        # Update emergency combo
+        if 'emergency_combo' in gui_widgets:
+            emergency_combo = gui_widgets['emergency_combo']
+            current_text = emergency_combo.currentText().strip()
+            emergency_combo.blockSignals(True)
+            emergency_combo.clear()
+            emergency_combo.addItem("Select Code")
             if not positions:
-                emergency_menu.add_command(label="No Event List Loaded".ljust(max_length), command=lambda: None)
+                emergency_combo.addItem("No Event List Loaded")
             else:
-                populate_menu(emergency_menu, emergency_var, positions["emergency_type"], "emergency_type",
-                             emergency_button, max_length, positions.get("emergency_group_order", []),
-                             handle_menu_select, emergency_code)
-        if 'primary_menu' in globals():
-            primary_menu.delete(0, tk.END)
-            populate_menu(primary_menu, primary_var, positions.get("shared_impacts", {}), "impacts",
-                         primary_button, max_length, positions.get("impact_group_order", []),
-                         handle_menu_select, emergency_code)
-        if 'secondary_menu' in globals():
-            secondary_menu.delete(0, tk.END)
+                populate_combo(emergency_combo, positions["emergency_type"], "emergency_type",
+                              max_length, positions.get("emergency_group_order", []),
+                              emergency_code)
+            for i in range(emergency_combo.count()):
+                if emergency_combo.itemText(i).strip() == current_text:
+                    emergency_combo.setCurrentIndex(i)
+                    break
+            emergency_combo.blockSignals(False)
+        
+        # Update primary combo
+        if 'primary_combo' in gui_widgets:
+            primary_combo = gui_widgets['primary_combo']
+            populate_combo(primary_combo, positions.get("shared_impacts", {}), "impacts",
+                          max_length, positions.get("impact_group_order", []),
+                          emergency_code)
+        
+        # Update secondary combo
+        if 'secondary_combo' in gui_widgets:
+            secondary_combo = gui_widgets['secondary_combo']
+            current_text = secondary_combo.currentText().strip()
+            secondary_combo.blockSignals(True)
+            secondary_combo.clear()
+            secondary_combo.addItem("Select Code")
             if not positions.get("public_reaction", {}):
-                secondary_menu.add_command(label="No Response Available".ljust(max_length), command=lambda: None)
+                secondary_combo.addItem("No Response Available")
             else:
                 if "A" in positions["public_reaction"]:
                     val = f"A-{positions['public_reaction']['A']['name']}"
-                    secondary_menu.add_command(label=val.ljust(max_length),
-                                            command=lambda v=val: [secondary_var.set(v), handle_menu_select(secondary_var, "public_reaction", secondary_menu, secondary_button, v[0])])
-                    secondary_menu.add_separator()
+                    secondary_combo.addItem(val)
+                    secondary_combo.insertSeparator(secondary_combo.count())
                 for group_name in sorted(positions["public_reaction"].keys(), key=lambda x: positions["public_reaction"][x].get("order", float("inf")) if isinstance(positions["public_reaction"][x], dict) and "order" in positions["public_reaction"][x] else float("inf")):
                     if not group_name.startswith("***"): continue
                     group = positions["public_reaction"][group_name]
-                    secondary_menu.add_command(label=group_name, command=lambda: None, foreground="#00008B", font=("Arial", 10, "bold"))
+                    secondary_combo.addItem(group_name)
+                    # Disable group headers
+                    model = secondary_combo.model()
+                    item = model.item(secondary_combo.count() - 1)
+                    item.setEnabled(False)
+                    from PyQt5.QtGui import QFont, QColor
+                    font = QFont()
+                    font.setBold(True)
+                    item.setFont(font)
+                    item.setForeground(QColor("#00008B"))
+                    
                     for code in sorted(group.get("items", [])):
                         if code in positions["public_reaction"]:
                             val = f"{code}-{positions['public_reaction'][code].get('name', 'Unknown')}"
-                            secondary_menu.add_command(label=(" " + val).ljust(max_length),
-                                                    command=lambda v=val, g=group_name: [secondary_var.set(v), handle_menu_select(secondary_var, "public_reaction", secondary_menu, secondary_button, v[0], None, g)])
-                    secondary_menu.add_separator()
+                            secondary_combo.addItem(" " + val)
+                    secondary_combo.insertSeparator(secondary_combo.count())
                 unmapped_items = [code for code in sorted(positions["public_reaction"].keys()) if code != "A" and code != "Y" and not code.startswith("***") and not any(code in group.get("items", []) for group in positions["public_reaction"].values() if isinstance(group, dict) and "items" in group)]
                 if unmapped_items:
-                    secondary_menu.add_separator()
+                    secondary_combo.insertSeparator(secondary_combo.count())
                     for code in sorted(unmapped_items):
                         val = f"{code}-{positions['public_reaction'][code].get('name', 'Unknown')}"
-                        secondary_menu.add_command(label=val.ljust(max_length),
-                                                command=lambda v=val: [secondary_var.set(v), handle_menu_select(secondary_var, "public_reaction", secondary_menu, secondary_button, v[0])])
-        if 'severity_menu' in globals():
-            severity_menu.delete(0, tk.END)
+                        secondary_combo.addItem(val)
+            for i in range(secondary_combo.count()):
+                if secondary_combo.itemText(i).strip() == current_text:
+                    secondary_combo.setCurrentIndex(i)
+                    break
+            secondary_combo.blockSignals(False)
+        
+        # Update severity combo
+        if 'severity_combo' in gui_widgets:
+            severity_combo = gui_widgets['severity_combo']
+            current_text = severity_combo.currentText().strip()
+            severity_combo.blockSignals(True)
+            severity_combo.clear()
+            severity_combo.addItem("Select Code")
             if not positions.get("station_response", {}):
-                severity_menu.add_command(label="No Station Status Available".ljust(max_length), command=lambda: None)
+                severity_combo.addItem("No Station Status Available")
             else:
                 if "A" in positions["station_response"] and not positions["station_response"]["A"].get("group"):
                     val = f"A-{positions['station_response']['A'].get('name', 'Unknown')}"
-                    severity_menu.add_command(label=val.ljust(max_length),
-                                           command=lambda v=val: [severity_var.set(v), handle_menu_select(severity_var, "station_response", severity_menu, severity_button, v[0])])
-                    severity_menu.add_separator()
+                    severity_combo.addItem(val)
+                    severity_combo.insertSeparator(severity_combo.count())
                 for group_name, group in sorted(positions["station_response"].items(), key=lambda x: x[1].get("order", float("inf")) if isinstance(x[1], dict) and "order" in x[1] else float("inf")):
                     if not group_name.startswith("***"): continue
-                    severity_menu.add_command(label=group_name, command=lambda: None, foreground="#00008B", font=("Arial", 10, "bold"))
+                    severity_combo.addItem(group_name)
+                    # Disable group headers
+                    model = severity_combo.model()
+                    item = model.item(severity_combo.count() - 1)
+                    item.setEnabled(False)
+                    from PyQt5.QtGui import QFont, QColor
+                    font = QFont()
+                    font.setBold(True)
+                    item.setFont(font)
+                    item.setForeground(QColor("#00008B"))
+                    
                     response_dict = positions["station_response"]
                     for code in sorted(group.get("items", [])):
                         if code in response_dict:
                             name = response_dict[code].get('name', 'Unknown')
                             val = f"{code}-{name}"
-                            severity_menu.add_command(label=(" " + val).ljust(max_length),
-                                                   command=lambda v=val, g=group_name: [severity_var.set(v), handle_menu_select(severity_var, "station_response", severity_menu, severity_button, v[0], None, g)])
-                    severity_menu.add_separator()
-        if 'status_menu' in globals():
-            status_menu.delete(0, tk.END)
+                            severity_combo.addItem(" " + val)
+                    severity_combo.insertSeparator(severity_combo.count())
+            for i in range(severity_combo.count()):
+                if severity_combo.itemText(i).strip() == current_text:
+                    severity_combo.setCurrentIndex(i)
+                    break
+            severity_combo.blockSignals(False)
+        
+        # Update status combo
+        if 'status_combo' in gui_widgets:
+            status_combo = gui_widgets['status_combo']
+            current_text = status_combo.currentText().strip()
+            status_combo.blockSignals(True)
+            status_combo.clear()
+            status_combo.addItem("Select Code")
             if not positions.get("status_codes"):
-                status_menu.add_command(label="No Status/Target List Loaded".ljust(max_length), command=lambda: None)
+                status_combo.addItem("No Status/Target List Loaded")
                 logging.debug("No valid status codes available, using default label")
             else:
                 status_group_order = sorted(
@@ -609,114 +646,151 @@ def update_menus(emergency_code, primary_code=None):
                 standalone_codes = [code for code in sorted(codes.keys()) if not any(code in group.get("items", []) for group in positions["status_codes"].values() if group.get("items"))]
                 for code in standalone_codes:
                     val = f"{code}-{codes[code].get('name', 'Unknown')}"
-                    status_menu.add_command(label=val.ljust(max_length),
-                                          command=lambda v=val: [status_var.set(v), handle_menu_select(status_var, "status", status_menu, status_button, v[0])])
+                    status_combo.addItem(val)
                 if standalone_codes:
-                    status_menu.add_separator()
+                    status_combo.insertSeparator(status_combo.count())
                 for group_name in status_group_order:
                     if group_name in positions["status_codes"]:
-                        status_menu.add_command(label=group_name, command=lambda: None, foreground="#00008B", font=("Arial", 10, "bold"))
+                        status_combo.addItem(group_name)
+                        # Disable group headers
+                        model = status_combo.model()
+                        item = model.item(status_combo.count() - 1)
+                        item.setEnabled(False)
+                        from PyQt5.QtGui import QFont, QColor
+                        font = QFont()
+                        font.setBold(True)
+                        item.setFont(font)
+                        item.setForeground(QColor("#00008B"))
+                        
                         for code in sorted(positions["status_codes"][group_name].get("items", [])):
                             if code in codes:
                                 val = f"{code}-{codes[code].get('name', 'Unknown')}"
-                                status_menu.add_command(label=(" " + val).ljust(max_length),
-                                                      command=lambda v=val, g=group_name: [status_var.set(v), handle_menu_select(status_var, "status", status_menu, status_button, v[0], None, g)])
+                                status_combo.addItem(" " + val)
+            for i in range(status_combo.count()):
+                if status_combo.itemText(i).strip() == current_text:
+                    status_combo.setCurrentIndex(i)
+                    break
+            status_combo.blockSignals(False)
     finally:
         updating_menus = False
-        if 'root' in globals():
-            globals()['root'].update()
 
-def handle_menu_select(var, key, menu, button, code, emergency_code=None, group=None):
-    if var.get() == "Select Code":
+
+
+def handle_menu_select(key, text):
+    """Handle combo box selection changes"""
+    if text == "Select Code" or text == "Select Emergency List":
         logging.debug(f"Ignoring 'Select Code' selection for key={key}")
         return
-    logging.debug(f"Handling menu selection: key={key}, code={code}")
+    
+    # Extract code from text (format: "X-Name")
+    code = text.split("-")[0].strip() if "-" in text else text
+    
+    logging.debug(f"Handling menu selection: key={key}, code={code}, text={text}")
+    
     if key == "list":
-        emergency_var.set("Select Code")
-        status_var.set("Select Code")
-        primary_var.set("Select Code")
-        secondary_var.set("Select Code")
-        severity_var.set("Select Code")
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        narrative_text.config(state="disabled")
+        gui_widgets['emergency_combo'].setCurrentText("Select Code")
+        gui_widgets['status_combo'].setCurrentText("Select Code")
+        gui_widgets['primary_combo'].setCurrentText("Select Code")
+        gui_widgets['secondary_combo'].setCurrentText("Select Code")
+        gui_widgets['severity_combo'].setCurrentText("Select Code")
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
+        
+        # Load the selected file
+        for list_id, filename in emergency_list_mapping.items():
+            if filename == text:
+                load_selected_file(list_id)
+                break
         update_menus("A")
-        if 'root' in globals():
-            globals()['root'].update()
-    elif key == "emergency_type":
-        status_var.set("Select Code")
-        primary_var.set("Select Code")
-        secondary_var.set("Select Code")
-        severity_var.set("Select Code")
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        narrative_text.config(state="disabled")
-        update_menus(code)
-        if 'root' in globals():
-            globals()['root'].update()
+    elif key == "emergency":
+        gui_widgets['status_combo'].setCurrentText("Select Code")
+        gui_widgets['primary_combo'].setCurrentText("Select Code")
+        gui_widgets['secondary_combo'].setCurrentText("Select Code")
+        gui_widgets['severity_combo'].setCurrentText("Select Code")
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
     elif key == "status":
-        primary_var.set("Select Code")
-        secondary_var.set("Select Code")
-        severity_var.set("Select Code")
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        group_description = positions["status_codes"].get(group, {}).get("description", "No group description available")
-        narrative_text.insert(tk.END, group_description)
-        narrative_text.config(state="disabled")
-        update_menus(emergency_var.get().split("-")[0] if emergency_var.get() != "Select Code" else "A")
-        if 'root' in globals():
-            globals()['root'].update()
-    elif key == "impacts":
-        secondary_var.set("Select Code")
-        severity_var.set("Select Code")
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        narrative_text.config(state="disabled")
-        update_menus(emergency_code)
-        if 'root' in globals():
-            globals()['root'].update()
-    elif key == "public_reaction":
-        severity_var.set("Select Code")
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        group_description = positions["public_reaction"].get(group, {}).get("description", "No response group description available" if code != "A" else "No group description for Unknown")
-        narrative_text.insert(tk.END, group_description)
-        narrative_text.config(state="disabled")
-        update_menus(emergency_var.get().split("-")[0] if emergency_var.get() != "Select Code" else "A")
-        if 'root' in globals():
-            globals()['root'].update()
-    elif key == "station_response":
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        group_description = positions["station_response"].get(group, {}).get("description", "No station status group description available" if code != "A" else "No group description for Unknown")
-        narrative_text.insert(tk.END, group_description)
-        narrative_text.config(state="disabled")
-        update_menus(emergency_var.get().split("-")[0] if emergency_var.get() != "Select Code" else "A")
-        if 'root' in globals():
-            globals()['root'].update()
+        gui_widgets['primary_combo'].setCurrentText("Select Code")
+        gui_widgets['secondary_combo'].setCurrentText("Select Code")
+        gui_widgets['severity_combo'].setCurrentText("Select Code")
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
+        
+        # Find group for status code
+        group = None
+        for group_name, group_data in positions["status_codes"].items():
+            if group_name.startswith("***") and isinstance(group_data, dict) and "items" in group_data:
+                if code in group_data.get("items", []):
+                    group = group_name
+                    break
+        
+        if group:
+            group_description = positions["status_codes"].get(group, {}).get("description", "No group description available")
+            gui_widgets['narrative_text'].setPlainText(group_description)
+        
+    elif key == "primary":
+        gui_widgets['secondary_combo'].setCurrentText("Select Code")
+        gui_widgets['severity_combo'].setCurrentText("Select Code")
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
+        
+    elif key == "secondary":
+        gui_widgets['severity_combo'].setCurrentText("Select Code")
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
+        
+        # Find group for secondary code
+        group = None
+        for group_name, group_data in positions["public_reaction"].items():
+            if group_name.startswith("***") and isinstance(group_data, dict) and "items" in group_data:
+                if code in group_data.get("items", []):
+                    group = group_name
+                    break
+        
+        if group:
+            group_description = positions["public_reaction"].get(group, {}).get("description", "No response group description available")
+            gui_widgets['narrative_text'].setPlainText(group_description)
+        elif code == "A":
+            gui_widgets['narrative_text'].setPlainText("No group description for Unknown")
+        
+    elif key == "severity":
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
+        
+        # Find group for severity code
+        group = None
+        for group_name, group_data in positions["station_response"].items():
+            if group_name.startswith("***") and isinstance(group_data, dict) and "items" in group_data:
+                if code in group_data.get("items", []):
+                    group = group_name
+                    break
+        
+        if group:
+            group_description = positions["station_response"].get(group, {}).get("description", "No station status group description available")
+            gui_widgets['narrative_text'].setPlainText(group_description)
+        elif code == "A":
+            gui_widgets['narrative_text'].setPlainText("No group description for Unknown")
+        
+    
     on_field_change()
 
 def copy_code_text(copy_full_description=False):
+    """Copy brevity code or full description to clipboard"""
     try:
-        first_line = output_text.get("1.0", "2.0").strip()
-        if not first_line.startswith("Brevity Code:"):
+        from PyQt5.QtWidgets import QApplication
+        text = gui_widgets['output_text'].toPlainText()
+        if not text or not text.startswith("Brevity Code:"):
             show_status_message("No brevity code available to copy", 10000)
             logging.debug("No brevity code available")
             return
+        first_line = text.split('\n')[0]
         code = first_line[13:].split("File:")[0].strip()
         if not code:
             show_status_message("No brevity code available to copy", 10000)
             logging.debug("Empty brevity code")
             return
-        text = output_text.get("1.0", tk.END).strip() if copy_full_description else code
-        root.clipboard_clear()
-        root.clipboard_append(text)
+        text_to_copy = text if copy_full_description else code
+        QApplication.clipboard().setText(text_to_copy)
         show_status_message("Code copied to clipboard", 5000)
         logging.debug(f"Copied {'full description' if copy_full_description else 'code'}")
     except Exception as e:
@@ -724,9 +798,11 @@ def copy_code_text(copy_full_description=False):
         logging.debug(f"Error copying code: {str(e)}")
 
 def copy_all():
+    """Copy both output and narrative to clipboard"""
     try:
-        output = output_text.get("1.0", tk.END).strip()
-        narrative = narrative_text.get("1.0", tk.END).strip()
+        from PyQt5.QtWidgets import QApplication
+        output = gui_widgets['output_text'].toPlainText()
+        narrative = gui_widgets['narrative_text'].toPlainText()
         if not output and not narrative:
             show_status_message("No output or narrative available to copy", 10000)
             logging.debug("No output or narrative available")
@@ -734,8 +810,7 @@ def copy_all():
         combined_text = output
         if narrative:
             combined_text += "\n\n" + narrative
-        root.clipboard_clear()
-        root.clipboard_append(combined_text)
+        QApplication.clipboard().setText(combined_text)
         show_status_message("Output and narrative copied to clipboard", 5000)
         logging.debug("Copied output and narrative")
     except Exception as e:
@@ -743,14 +818,15 @@ def copy_all():
         logging.debug(f"Error copying output and narrative: {str(e)}")
 
 def copy_sitrep():
+    """Copy situation report to clipboard"""
     try:
-        sitrep_text = output_text.get("1.0", tk.END).strip()
+        from PyQt5.QtWidgets import QApplication
+        sitrep_text = gui_widgets['output_text'].toPlainText()
         if not sitrep_text:
             show_status_message("No Situation Report available to copy", 10000)
             logging.debug("No Situation Report available")
             return
-        root.clipboard_clear()
-        root.clipboard_append(sitrep_text)
+        QApplication.clipboard().setText(sitrep_text)
         show_status_message("Situation Report copied to clipboard", 5000)
         logging.debug("Copied Situation Report")
     except Exception as e:
@@ -758,62 +834,63 @@ def copy_sitrep():
         logging.debug(f"Error copying Situation Report: {str(e)}")
 
 def toggle_narrative():
-    if narrative_var.get():
-        narrative_label.pack(fill=tk.X, padx=10, pady=2)
-        narrative_frame.pack(fill=tk.BOTH, padx=10, pady=10, expand=True)
+    """Toggle narrative section visibility"""
+    if gui_widgets['narrative_check'].isChecked():
+        gui_widgets['narrative_label'].show()
+        gui_widgets['narrative_frame'].show()
     else:
-        narrative_frame.pack_forget()
-        narrative_label.pack_forget()
-    if 'root' in globals():
-        globals()['root'].update()
+        gui_widgets['narrative_frame'].hide()
+        gui_widgets['narrative_label'].hide()
 
-def paste_into_decode(event=None):
+def paste_into_decode():
+    """Paste from clipboard into decode entry and decode"""
     try:
-        clipboard = root.clipboard_get()
-        decode_entry.delete(0, tk.END)
-        decode_entry.insert(0, clipboard)
+        from PyQt5.QtWidgets import QApplication
+        clipboard = QApplication.clipboard().text()
+        gui_widgets['decode_entry'].setText(clipboard)
         decode_code()
-        return "break"
-    except tk.TclError:
+    except Exception as e:
         show_status_message("Clipboard is empty or invalid", 5000)
-        return "break"
 
 def on_field_change(*args):
+    """Generate brevity code when all fields are selected"""
     if not positions:
         show_status_message("No event list loaded", 10000)
         logging.warning("No positions data loaded")
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        narrative_text.config(state="disabled")
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
         return
+    
     list_id = None
+    list_text = gui_widgets['list_combo'].currentText()
     for lid, fname in emergency_list_mapping.items():
-        if list_var.get() == fname:
+        if list_text == fname:
             list_id = lid
             break
-    if not list_id or list_var.get() == "Select Emergency List":
+    if not list_id or list_text == "Select Emergency List":
         show_status_message("No event list selected", 10000)
         logging.warning("No valid list_id or Select Emergency List selected")
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        narrative_text.config(state="disabled")
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
         return
-    emergency_val = emergency_var.get()
-    status_val = status_var.get()
-    primary_val = primary_var.get()
-    secondary_val = secondary_var.get()
-    severity_val = severity_var.get()
+    
+    emergency_val = gui_widgets['emergency_combo'].currentText()
+    status_val = gui_widgets['status_combo'].currentText()
+    primary_val = gui_widgets['primary_combo'].currentText()
+    secondary_val = gui_widgets['secondary_combo'].currentText()
+    severity_val = gui_widgets['severity_combo'].currentText()
+    
     if any(val == "Select Code" for val in [emergency_val, status_val, primary_val, secondary_val, severity_val]):
         logging.debug("Incomplete selection")
         return
+    
     try:
-        emergency_code = emergency_val.split("-")[0]
-        status_code = status_val.split("-")[0]
-        primary_code = primary_val.split("-")[0]
-        secondary_code = secondary_val.split("-")[0]
-        severity_code = severity_val.split("-")[0]
+        emergency_code = emergency_val.split("-")[0].strip()
+        status_code = status_val.split("-")[0].strip()
+        primary_code = primary_val.split("-")[0].strip()
+        secondary_code = secondary_val.split("-")[0].strip()
+        severity_code = severity_val.split("-")[0].strip()
+        
         emergency_data = None
         emergency_group = "Unknown"
         has_groups = any(k.startswith("***") for k in positions["emergency_type"].keys())
@@ -835,6 +912,7 @@ def on_field_change(*args):
             show_status_message(f"Invalid Event Type code: {emergency_code}", 10000)
             logging.warning(f"Invalid Event Type code: {emergency_code}")
             return
+        
         impacts = positions.get("shared_impacts", {})
         valid_primary_code = False
         primary_impact_name = "Unknown"
@@ -856,23 +934,19 @@ def on_field_change(*args):
             show_status_message(f"Invalid Impact code: {primary_code}", 10000)
             logging.warning(f"Invalid Impact code: {primary_code}")
             return
+        
         if secondary_code not in positions["public_reaction"]:
             show_status_message(f"Invalid Response code: {secondary_code}", 10000)
             logging.warning(f"Invalid Response code: {secondary_code}")
             return
-        #if secondary_code == "Y":
-        #    show_status_message("Invalid Response code: Y is reserved", 10000)
-        #    logging.warning("Invalid Response code: Y is reserved")
-        #    return
+        
         station_response = positions.get("station_response", {})
         valid_severity_code = False
         severity_name = "Unknown"
-        # Check standalone keys first (e.g., 'A' for Station Status)
         if severity_code in station_response and isinstance(station_response[severity_code], dict):
             valid_severity_code = True
             severity_name = station_response[severity_code].get("name", "Unknown")
         else:
-            # Check groups for other codes
             for group, sub_response in station_response.items():
                 if isinstance(sub_response, dict) and "items" in sub_response:
                     if severity_code in sub_response["items"]:
@@ -887,11 +961,13 @@ def on_field_change(*args):
         if not valid_severity_code:
             logging.warning(f"Invalid Station Status code: {severity_code}")
             show_status_message(f"Invalid Station Status code: {severity_code}", 10000)
-            return f"Invalid Station Status code: {severity_code}"
+            return
+        
         if status_code not in positions["status_codes"]:
             show_status_message(f"Invalid Status/Target code: {status_code}", 10000)
             logging.warning(f"Invalid Status/Target code: {status_code}")
             return
+        
         code = f"{list_id}{emergency_code}{status_code}{primary_code}{secondary_code}{severity_code}"
         description_parts = [
             emergency_data["name"] if emergency_code != "A" else None,
@@ -902,210 +978,378 @@ def on_field_change(*args):
         ]
         description = generate_description(description_parts, severity_code, list_id, code, status_code, secondary_code, emergency_group, impact_group)
         narrative = generate_narrative(description_parts, emergency_code, primary_code, secondary_code, severity_code, status_code, code, list_id)
-        output_text.delete("1.0", tk.END)
-        output_text.insert(tk.END, description)
-        output_lines = description.split('\n')
-        for i, line in enumerate(output_lines):
-            if line.startswith("Brevity Code:"):
-                output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len('Brevity Code:')}")
-                file_start = line.find("File:")
-                if file_start != -1:
-                    output_text.tag_add("bold", f"{i+1}.{file_start}", f"{i+1}.{file_start + len('File:')}")
-            elif line.startswith(positions.get("gui_titles", {}).get('emergency', 'Event:')):
-                output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('emergency', 'Event:'))}")
-            elif line.startswith(positions.get("gui_titles", {}).get('status', 'Status or Target:')):
-                output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('status', 'Status or Target:'))}")
-            elif line.startswith(positions.get("gui_titles", {}).get('primary', 'Impact:')):
-                output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('primary', 'Impact:'))}")
-            elif line.startswith(positions.get("gui_titles", {}).get('secondary', 'Response:')):
-                output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('secondary', 'Response:'))}")
-            elif line.startswith(positions.get("gui_titles", {}).get('severity', 'Station Status:')):
-                output_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('severity', 'Station Status:'))}")
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        narrative_text.insert(tk.END, f"{narrative}")
-        narrative_lines = narrative.split('\n')
-        for i, line in enumerate(narrative_lines):
-            if line.startswith("Brevity Code:"):
-                narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len('Brevity Code:')}")
-            elif line.startswith(positions.get("gui_titles", {}).get('emergency', 'Event:').rstrip(':')):
-                narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('emergency', 'Event:').rstrip(':'))}")
-            elif line.startswith(positions.get("gui_titles", {}).get('status', 'Status or Target:').rstrip(':')):
-                narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('status', 'Status or Target:').rstrip(':'))}")
-            elif line.startswith(positions.get("gui_titles", {}).get('primary', 'Impact:').rstrip(':')):
-                narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('primary', 'Impact:').rstrip(':'))}")
-            elif line.startswith(positions.get("gui_titles", {}).get('secondary', 'Response:').rstrip(':')):
-                narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('secondary', 'Response:').rstrip(':'))}")
-            elif line.startswith(positions.get("gui_titles", {}).get('severity', 'Station Status:').rstrip(':')):
-                narrative_text.tag_add("bold", f"{i+1}.0", f"{i+1}.{len(positions.get('gui_titles', {}).get('severity', 'Station Status:').rstrip(':'))}")
-        narrative_text.config(state="disabled")
+        
+        gui_widgets['output_text'].setPlainText(description)
+        gui_widgets['narrative_text'].setPlainText(narrative)
         show_status_message("Brevity code generated", 5000)
     except Exception as e:
         logging.error(f"Error generating code: {str(e)}")
-        output_text.delete("1.0", tk.END)
-        narrative_text.config(state="normal")
-        narrative_text.delete("1.0", tk.END)
-        narrative_text.config(state="disabled")
-        return f"Error decoding code: {str(e)}"
+        gui_widgets['output_text'].clear()
+        gui_widgets['narrative_text'].clear()
+
+
 
 if __name__ == "__main__":
     try:
-        root = tk.Tk()
-        root.title("Brevity1.0 by KD9DSS")
-        root.geometry("700x700")
-        root.configure(bg="#DCDCDC")
-        root.attributes("-topmost", False)
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TMenuButton.TMenubutton", font=("Arial", 10, "bold"), background="#28a745", foreground="white", padding=4, borderwidth=3, relief="solid", width=20)
-        style.map("TMenuButton.TMenubutton", background=[("active", "#34c759")], foreground=[("active", "white"), ("disabled", "#666666")])
-        style.configure("TActionButton.TButton", font=("Arial", 10, "bold"), background="#28a745", foreground="black", padding=4, borderwidth=3, relief="solid", width=20)
-        style.map("TActionButton.TButton", background=[("active", "#34c759"), ("disabled", "#CCCCCC")], foreground=[("disabled", "#666666")])
-        style.configure("TLabel", font=("Arial", 10, "bold"), background="#DCDCDC", foreground="black")
-        top_action_frame_outer = tk.Frame(root, bg="#DCDCDC")
-        top_action_frame_outer.pack(fill=tk.X, padx=10, pady=5)
-        decode_subframe = tk.Frame(top_action_frame_outer, bg="#DCDCDC")
-        decode_subframe.pack(anchor="center")
-        label_decode = ttk.Label(decode_subframe, text="Enter Brevity Code:")
-        label_decode.pack(anchor="center")
-        decode_inner_frame = tk.Frame(decode_subframe, bg="#DCDCDC")
-        decode_inner_frame.pack(anchor="center", pady=2)
-        validate_cmd = root.register(validate_code_input)
-        decode_entry = tk.Entry(decode_inner_frame, width=14, font=("Arial", 10), bg="#F8F7F2", fg="black", insertbackground="black", relief="solid", borderwidth=1, validate="key", validatecommand=(validate_cmd, "%P"), state="normal")
-        decode_entry.pack(side=tk.LEFT, padx=5)
-        decode_button = ttk.Button(decode_inner_frame, text="Decode", command=decode_code, style="TActionButton.TButton")
-        decode_button.pack(side=tk.LEFT, padx=5)
-        decode_entry.focus()
-        decode_entry.bind("<Control-v>", paste_into_decode)
-        #decode_entry.bind("<Return>", lambda event: decode_code() or "break")
-        decode_entry.bind("<Return>", lambda event: decode_code(event, decode_entry, output_text, narrative_text, list_var, emergency_var, status_var, primary_var, secondary_var, severity_var) or "break")
-        decode_entry.bind("<Button-3>", lambda event: paste_menu.post(event.x_root, event.y_root))
-        paste_menu = tk.Menu(decode_entry, tearoff=0)
-        paste_menu.add_command(label="Paste", command=paste_into_decode)
-        input_frame = tk.Frame(root, bg="#DCDCDC", bd=2, relief="groove", highlightbackground="#CCCCCC", highlightthickness=1)
-        input_frame.pack(fill=tk.X, padx=10, pady=10)
-        row1_frame = tk.Frame(input_frame, bg="#DCDCDC")
-        row1_frame.pack(fill=tk.X, pady=2)
-        select_list_subframe = tk.Frame(row1_frame, bg="#DCDCDC")
-        select_list_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        label_select = ttk.Label(select_list_subframe, text="1. Select List:")
-        label_select.pack(anchor="center")
-        list_var = tk.StringVar(value="Select Emergency List")
-        list_var.trace("w", lambda *args: load_selected_file(list_var.get()[0]) if list_var.get() != "Select Emergency List" and list_var.get() in emergency_list_mapping.values() else None)
-        list_menu = tk.Menu(root, tearoff=0, font=("Arial", 10), bg="#F8F7F2", fg="black")
-        max_length = 100
+        from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                                     QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, 
+                                     QFrame, QCheckBox, QStatusBar, QAction, QMenu, QListView)
+        from PyQt5.QtCore import Qt, QRegExp
+        from PyQt5.QtGui import QFont, QRegExpValidator, QIcon
+        from theme_manager import theme
+        
+        app = QApplication(sys.argv)
+        
+        # Set window icon if available
+        if os.path.exists("radiation-32.png"):
+            app.setWindowIcon(QIcon("radiation-32.png"))
+        
+        window = QMainWindow()
+        window.setWindowTitle("Brevity1.0 by KD9DSS")
+        window.resize(700, 750)
+        
+        # Apply theme colors
+        window.setStyleSheet(f"""
+            QMainWindow {{
+                background-color: {theme.color('window')};
+                color: {theme.color('windowtext')};
+            }}
+            QLabel {{
+                color: {theme.color('windowtext')};
+                font-weight: bold;
+                font-size: 10pt;
+            }}
+            QLineEdit {{
+                background-color: {theme.color('base')};
+                color: {theme.color('text')};
+                border: 1px solid {theme.color('mid')};
+                padding: 4px;
+                font-size: 10pt;
+            }}
+            QComboBox[hasSelection="false"] {{
+                background-color: #6c757d;
+                color: white;
+                border: 1px solid {theme.color('mid')};
+                padding: 4px;
+                font-weight: bold;
+                font-size: 10pt;
+                min-width: 200px;
+            }}
+            QComboBox[hasSelection="true"] {{
+                background-color: #28a745;
+                color: white;
+                border: 1px solid {theme.color('mid')};
+                padding: 4px;
+                font-weight: bold;
+                font-size: 10pt;
+                min-width: 200px;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+            }}
+            {theme.combo_list_style()}
+            QTextEdit {{
+                background-color: {theme.color('base')};
+                color: {theme.color('text')};
+                border: 1px solid {theme.color('mid')};
+                font-size: 12pt;
+            }}
+            QFrame {{
+                border: 1px solid {theme.color('mid')};
+            }}
+            QCheckBox {{
+                color: {theme.color('windowtext')};
+                font-weight: bold;
+                font-size: 10pt;
+            }}
+        """)
+        
+        # Create central widget and main layout
+        central_widget = QWidget()
+        window.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Top section - Decode area
+        decode_frame = QFrame()
+        decode_layout = QVBoxLayout(decode_frame)
+        decode_layout.setAlignment(Qt.AlignCenter)
+        
+        label_decode = QLabel("Enter Brevity Code:")
+        label_decode.setAlignment(Qt.AlignCenter)
+        decode_layout.addWidget(label_decode)
+        
+        decode_inner_layout = QHBoxLayout()
+        decode_inner_layout.setAlignment(Qt.AlignCenter)
+        
+        decode_entry = QLineEdit()
+        decode_entry.setMaxLength(6)
+        decode_entry.setFixedWidth(140)
+        validator = QRegExpValidator(QRegExp("[0-9]?[A-Za-z]{0,5}"))
+        decode_entry.setValidator(validator)
+        decode_inner_layout.addWidget(decode_entry)
+        
+        decode_button = QPushButton("Decode")
+        decode_button.setFixedWidth(100)
+        decode_button.setStyleSheet(theme.button_style("#28a745"))
+        decode_inner_layout.addWidget(decode_button)
+        
+        decode_layout.addLayout(decode_inner_layout)
+        main_layout.addWidget(decode_frame)
+        
+        # Input frame - 6 dropdowns in 2 rows
+        input_frame = QFrame()
+        input_frame.setFrameStyle(QFrame.Box | QFrame.Plain)
+        input_layout = QVBoxLayout(input_frame)
+        
+        # Row 1: List, Emergency, Status
+        row1_layout = QHBoxLayout()
+        row1_layout.setSpacing(10)
+        
+        # List selector
+        list_subframe = QWidget()
+        list_sublayout = QVBoxLayout(list_subframe)
+        list_sublayout.setContentsMargins(0, 0, 0, 0)
+        label_select = QLabel("1. Select List:")
+        label_select.setAlignment(Qt.AlignCenter)
+        list_sublayout.addWidget(label_select)
+        list_combo = QComboBox()
+        list_combo.setView(QListView())
+        list_combo.addItem("Select Emergency List")
+        list_sublayout.addWidget(list_combo)
+        row1_layout.addWidget(list_subframe)
+        
+        # Emergency selector
+        emergency_subframe = QWidget()
+        emergency_sublayout = QVBoxLayout(emergency_subframe)
+        emergency_sublayout.setContentsMargins(0, 0, 0, 0)
+        label_emergency = QLabel("2. Event:")
+        label_emergency.setAlignment(Qt.AlignCenter)
+        emergency_sublayout.addWidget(label_emergency)
+        emergency_combo = QComboBox()
+        emergency_combo.setView(QListView())
+        emergency_combo.addItem("Select Code")
+        emergency_sublayout.addWidget(emergency_combo)
+        row1_layout.addWidget(emergency_subframe)
+        
+        # Status selector
+        status_subframe = QWidget()
+        status_sublayout = QVBoxLayout(status_subframe)
+        status_sublayout.setContentsMargins(0, 0, 0, 0)
+        label_status = QLabel("3. Status/Target:")
+        label_status.setAlignment(Qt.AlignCenter)
+        status_sublayout.addWidget(label_status)
+        status_combo = QComboBox()
+        status_combo.setView(QListView())
+        status_combo.addItem("Select Code")
+        status_sublayout.addWidget(status_combo)
+        row1_layout.addWidget(status_subframe)
+        
+        input_layout.addLayout(row1_layout)
+        
+        # Row 2: Primary, Secondary, Severity
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(10)
+        
+        # Primary selector
+        primary_subframe = QWidget()
+        primary_sublayout = QVBoxLayout(primary_subframe)
+        primary_sublayout.setContentsMargins(0, 0, 0, 0)
+        label_primary = QLabel("4. Impact:")
+        label_primary.setAlignment(Qt.AlignCenter)
+        primary_sublayout.addWidget(label_primary)
+        primary_combo = QComboBox()
+        primary_combo.setView(QListView())
+        primary_combo.addItem("Select Code")
+        primary_sublayout.addWidget(primary_combo)
+        row2_layout.addWidget(primary_subframe)
+        
+        # Secondary selector
+        secondary_subframe = QWidget()
+        secondary_sublayout = QVBoxLayout(secondary_subframe)
+        secondary_sublayout.setContentsMargins(0, 0, 0, 0)
+        label_secondary = QLabel("5. Response:")
+        label_secondary.setAlignment(Qt.AlignCenter)
+        secondary_sublayout.addWidget(label_secondary)
+        secondary_combo = QComboBox()
+        secondary_combo.setView(QListView())
+        secondary_combo.addItem("Select Code")
+        secondary_sublayout.addWidget(secondary_combo)
+        row2_layout.addWidget(secondary_subframe)
+        
+        # Severity selector
+        severity_subframe = QWidget()
+        severity_sublayout = QVBoxLayout(severity_subframe)
+        severity_sublayout.setContentsMargins(0, 0, 0, 0)
+        label_severity = QLabel("6. Station/Location:")
+        label_severity.setAlignment(Qt.AlignCenter)
+        severity_sublayout.addWidget(label_severity)
+        severity_combo = QComboBox()
+        severity_combo.setView(QListView())
+        severity_combo.addItem("Select Code")
+        severity_sublayout.addWidget(severity_combo)
+        row2_layout.addWidget(severity_subframe)
+        
+        input_layout.addLayout(row2_layout)
+        main_layout.addWidget(input_frame)
+        
+        # Bottom action buttons
+        action_layout = QHBoxLayout()
+        action_layout.setSpacing(10)
+        
+        clear_button = QPushButton("Clear")
+        clear_button.setFixedWidth(120)
+        clear_button.setStyleSheet(theme.button_style("#dc3545"))
+        action_layout.addWidget(clear_button)
+        
+        copy_code_button = QPushButton("Copy Code")
+        copy_code_button.setFixedWidth(120)
+        copy_code_button.setStyleSheet(theme.button_style("#28a745"))
+        action_layout.addWidget(copy_code_button)
+        
+        copy_sitrep_button = QPushButton("Copy Report")
+        copy_sitrep_button.setFixedWidth(120)
+        copy_sitrep_button.setStyleSheet(theme.button_style("#17a2b8"))
+        action_layout.addWidget(copy_sitrep_button)
+        
+        copy_all_button = QPushButton("Copy All")
+        copy_all_button.setFixedWidth(120)
+        copy_all_button.setStyleSheet(theme.button_style("#007bff"))
+        action_layout.addWidget(copy_all_button)
+        
+        main_layout.addLayout(action_layout)
+        
+        # Output section
+        output_header_layout = QHBoxLayout()
+        output_label = QLabel("Brevity Report")
+        output_label.setFont(QFont(theme.font_family, 10, QFont.Bold))
+        output_header_layout.addWidget(output_label)
+        
+        output_header_layout.addStretch()
+        
+        narrative_check = QCheckBox("View Detailed Narrative")
+        output_header_layout.addWidget(narrative_check)
+        
+        main_layout.addLayout(output_header_layout)
+        
+        # Output text area
+        output_frame = QFrame()
+        output_frame.setFrameStyle(QFrame.Box | QFrame.Plain)
+        output_frame_layout = QVBoxLayout(output_frame)
+        output_frame_layout.setContentsMargins(0, 0, 0, 0)
+        
+        output_text = QTextEdit()
+        output_text.setMinimumHeight(150)
+        output_frame_layout.addWidget(output_text)
+        
+        main_layout.addWidget(output_frame)
+        
+        # Narrative section (initially hidden)
+        narrative_label = QLabel("Detailed Narrative")
+        narrative_label.setFont(QFont(theme.font_family, 10, QFont.Bold))
+        narrative_label.hide()
+        main_layout.addWidget(narrative_label)
+        
+        narrative_frame = QFrame()
+        narrative_frame.setFrameStyle(QFrame.Box | QFrame.Plain)
+        narrative_frame_layout = QVBoxLayout(narrative_frame)
+        narrative_frame_layout.setContentsMargins(0, 0, 0, 0)
+        
+        narrative_text = QTextEdit()
+        narrative_text.setMinimumHeight(200)
+        narrative_frame_layout.addWidget(narrative_text)
+        
+        narrative_frame.hide()
+        main_layout.addWidget(narrative_frame)
+        
+        # Status bar
+        status_bar = QStatusBar()
+        window.setStatusBar(status_bar)
+        
+        # Store widgets globally for access by library functions
+        gui_widgets = {
+            'decode_entry': decode_entry,
+            'decode_button': decode_button,
+            'list_combo': list_combo,
+            'emergency_combo': emergency_combo,
+            'status_combo': status_combo,
+            'primary_combo': primary_combo,
+            'secondary_combo': secondary_combo,
+            'severity_combo': severity_combo,
+            'clear_button': clear_button,
+            'copy_code_button': copy_code_button,
+            'copy_sitrep_button': copy_sitrep_button,
+            'copy_all_button': copy_all_button,
+            'output_text': output_text,
+            'narrative_text': narrative_text,
+            'narrative_check': narrative_check,
+            'narrative_label': narrative_label,
+            'narrative_frame': narrative_frame,
+            'label_select': label_select,
+            'label_emergency': label_emergency,
+            'label_status': label_status,
+            'label_primary': label_primary,
+            'label_secondary': label_secondary,
+            'label_severity': label_severity
+        }
+        
+        globals()['gui_widgets'] = gui_widgets
+        globals()['status_bar'] = status_bar
+        
+        # Connect signals
+        decode_button.clicked.connect(decode_code)
+        decode_entry.returnPressed.connect(decode_code)
+        
+        clear_button.clicked.connect(clear_fields)
+        copy_code_button.clicked.connect(copy_code_text)
+        copy_sitrep_button.clicked.connect(copy_sitrep)
+        copy_all_button.clicked.connect(copy_all)
+        
+        narrative_check.stateChanged.connect(toggle_narrative)
+        
+        def update_combo_bg(combo, text):
+            if not text or text.startswith("Select ") or text.startswith("No "):
+                combo.setProperty("hasSelection", "false")
+            else:
+                combo.setProperty("hasSelection", "true")
+            combo.style().unpolish(combo)
+            combo.style().polish(combo)
+
+        # Connect combo box signals
+        list_combo.currentTextChanged.connect(lambda text: handle_menu_select("list", text) if text != "Select Emergency List" else None)
+        emergency_combo.currentTextChanged.connect(lambda text: handle_menu_select("emergency", text))
+        status_combo.currentTextChanged.connect(lambda text: handle_menu_select("status", text))
+        primary_combo.currentTextChanged.connect(lambda text: handle_menu_select("primary", text))
+        secondary_combo.currentTextChanged.connect(lambda text: handle_menu_select("secondary", text))
+        severity_combo.currentTextChanged.connect(lambda text: handle_menu_select("severity", text))
+
+        for combo in [list_combo, emergency_combo, status_combo, primary_combo, secondary_combo, severity_combo]:
+            combo.currentTextChanged.connect(lambda text, c=combo: update_combo_bg(c, text))
+            update_combo_bg(combo, combo.currentText())
+        
+        # Context menu for paste
+        decode_entry.setContextMenuPolicy(Qt.CustomContextMenu)
+        decode_entry.customContextMenuRequested.connect(lambda pos: paste_into_decode())
+        
+        # Load JSON files and populate list combo
         emergency_list_mapping = get_json_files()
+        list_combo.blockSignals(True)
         for list_id, filename in sorted(emergency_list_mapping.items()):
-            padded_filename = filename.ljust(max_length)
-            list_menu.add_command(label=padded_filename, command=lambda f=filename: [list_var.set(f), load_selected_file(f[0])])
-        list_menu.add_command(label="Select Emergency List".ljust(max_length), command=lambda: list_var.set("Select Emergency List"))
-        list_button = ttk.Menubutton(select_list_subframe, textvariable=list_var, menu=list_menu, style="TMenuButton.TMenubutton")
-        list_button.pack(anchor="center")
-        emergency_subframe = tk.Frame(row1_frame, bg="#DCDCDC")
-        emergency_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        label_emergency = ttk.Label(emergency_subframe, text="2. Event:")
-        label_emergency.pack(anchor="center")
-        emergency_var = tk.StringVar(value="Select Code")
-        emergency_var.trace("w", lambda *args: on_field_change())
-        emergency_menu = tk.Menu(root, tearoff=0, font=("Arial", 10), bg="#F8F7F2", fg="black")
-        emergency_menu.add_command(label="Select Code".ljust(max_length), command=lambda: emergency_var.set("Select Code"))
-        emergency_button = ttk.Menubutton(emergency_subframe, textvariable=emergency_var, menu=emergency_menu, style="TMenuButton.TMenubutton")
-        emergency_button.pack(anchor="center")
-        status_subframe = tk.Frame(row1_frame, bg="#DCDCDC")
-        status_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        label_status = ttk.Label(status_subframe, text="3. Status/Target:")
-        label_status.pack(anchor="center")
-        status_var = tk.StringVar(value="Select Code")
-        status_var.trace("w", lambda *args: on_field_change())
-        status_menu = tk.Menu(root, tearoff=0, font=("Arial", 10), bg="#F8F7F2", fg="black")
-        status_menu.add_command(label="Select Code".ljust(max_length), command=lambda: status_var.set("Select Code"))
-        status_button = ttk.Menubutton(status_subframe, textvariable=status_var, menu=status_menu, style="TMenuButton.TMenubutton")
-        status_button.pack(anchor="center")
-        row2_frame = tk.Frame(input_frame, bg="#DCDCDC")
-        row2_frame.pack(fill=tk.X, pady=2)
-        primary_subframe = tk.Frame(row2_frame, bg="#DCDCDC")
-        primary_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        label_primary = ttk.Label(primary_subframe, text="4. Impact:")
-        label_primary.pack(anchor="center")
-        primary_var = tk.StringVar(value="Select Code")
-        primary_var.trace("w", lambda *args: on_field_change())
-        primary_menu = tk.Menu(root, tearoff=0, font=("Arial", 10), bg="#F8F7F2", fg="black")
-        primary_menu.add_command(label="Select Code".ljust(max_length), command=lambda: primary_var.set("Select Code"))
-        primary_button = ttk.Menubutton(primary_subframe, textvariable=primary_var, menu=primary_menu, style="TMenuButton.TMenubutton")
-        primary_button.pack(anchor="center")
-        secondary_subframe = tk.Frame(row2_frame, bg="#DCDCDC")
-        secondary_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        label_secondary = ttk.Label(secondary_subframe, text="5. Response:")
-        label_secondary.pack(anchor="center")
-        secondary_var = tk.StringVar(value="Select Code")
-        secondary_var.trace("w", lambda *args: on_field_change())
-        secondary_menu = tk.Menu(root, tearoff=0, font=("Arial", 10), bg="#F8F7F2", fg="black")
-        secondary_menu.add_command(label="Select Code".ljust(max_length), command=lambda: secondary_var.set("Select Code"))
-        secondary_button = ttk.Menubutton(secondary_subframe, textvariable=secondary_var, menu=secondary_menu, style="TMenuButton.TMenubutton")
-        secondary_button.pack(anchor="center")
-        severity_subframe = tk.Frame(row2_frame, bg="#DCDCDC")
-        severity_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        label_severity = ttk.Label(severity_subframe, text="6. Station/Location:")
-        label_severity.pack(anchor="center")
-        severity_var = tk.StringVar(value="Select Code")
-        severity_var.trace("w", lambda *args: on_field_change())
-        severity_menu = tk.Menu(root, tearoff=0, font=("Arial", 10), bg="#F8F7F2", fg="black")
-        severity_menu.add_command(label="Select Code".ljust(max_length), command=lambda: severity_var.set("Select Code"))
-        severity_button = ttk.Menubutton(severity_subframe, textvariable=severity_var, menu=severity_menu, style="TMenuButton.TMenubutton")
-        severity_button.pack(anchor="center")
-        bottom_action_frame_outer = tk.Frame(root, bg="#DCDCDC")
-        bottom_action_frame_outer.pack(fill=tk.X, padx=10, pady=5)
-        bottom_action_subframe = tk.Frame(bottom_action_frame_outer, bg="#DCDCDC")
-        bottom_action_subframe.pack(fill=tk.X)
-        clear_button_subframe = tk.Frame(bottom_action_subframe, bg="#DCDCDC")
-        clear_button_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        clear_button = ttk.Button(clear_button_subframe, text="Clear", command=clear_fields, style="TActionButton.TButton")
-        clear_button.pack(anchor="center")
-        copy_code_button_subframe = tk.Frame(bottom_action_subframe, bg="#DCDCDC")
-        copy_code_button_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        copy_code_button = ttk.Button(copy_code_button_subframe, text="Copy Code", command=copy_code_text, style="TActionButton.TButton")
-        copy_code_button.pack(anchor="center")
-        copy_sitrep_button_subframe = tk.Frame(bottom_action_subframe, bg="#DCDCDC")
-        copy_sitrep_button_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        copy_sitrep_button = ttk.Button(copy_sitrep_button_subframe, text="Copy Report", command=copy_sitrep, style="TActionButton.TButton")
-        copy_sitrep_button.pack(anchor="center")
-        copy_all_button_subframe = tk.Frame(bottom_action_subframe, bg="#DCDCDC")
-        copy_all_button_subframe.pack(side=tk.LEFT, padx=10, expand=True)
-        copy_all_button = ttk.Button(copy_all_button_subframe, text="Copy All", command=copy_all, style="TActionButton.TButton")
-        copy_all_button.pack(anchor="center")
-        output_label_frame = tk.Frame(root, bg="#DCDCDC")
-        output_label_frame.pack(fill=tk.X, padx=10, pady=2)
-        narrative_var = tk.BooleanVar(value=False)
-        narrative_check = tk.Checkbutton(output_label_frame, text="View Detailed Narrative", variable=narrative_var, command=toggle_narrative, font=("Arial", 10, "bold"), bg="#DCDCDC", fg="black")
-        narrative_check.pack(side=tk.RIGHT, padx=20)
-        output_label = ttk.Label(output_label_frame, text="Brevity Report", font=("Arial", 10, "bold"), background="#DCDCDC")
-        output_label.pack(side=tk.LEFT, padx=10)
-        output_frame = tk.Frame(root, bg="#DCDCDC", bd=2, relief="groove", highlightbackground="#CCCCCC", highlightthickness=1)
-        output_frame.pack(fill=tk.BOTH, padx=10, pady=10, expand=True)
-        output_scrollbar = tk.Scrollbar(output_frame)
-        output_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        output_text = tk.Text(output_frame, height=7, font=("Arial", 12), bg="#F8F7F2", fg="black", yscrollcommand=output_scrollbar.set, wrap=tk.WORD, relief="solid", borderwidth=1)
-        output_text.pack(fill=tk.BOTH, expand=True)
-        output_scrollbar.config(command=output_text.yview)
-        output_text.tag_configure("bold", font=("Arial", 12, "bold"))
-        narrative_label = ttk.Label(root, text="Detailed Narrative", font=("Arial", 10, "bold"), background="#DCDCDC")
-        narrative_frame = tk.Frame(root, bg="#DCDCDC", bd=2, relief="groove", highlightbackground="#CCCCCC", highlightthickness=1)
-        narrative_scrollbar = tk.Scrollbar(narrative_frame)
-        narrative_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        narrative_text = tk.Text(narrative_frame, height=10, font=("Arial", 12), bg="#F8F7F2", fg="black", yscrollcommand=narrative_scrollbar.set, wrap=tk.WORD, relief="solid", borderwidth=1, state="disabled")
-        narrative_text.pack(fill=tk.BOTH, expand=True)
-        narrative_scrollbar.config(command=narrative_text.yview)
-        narrative_text.tag_configure("bold", font=("Arial", 12, "bold"))
-        toggle_narrative()
-        status_bar = tk.Text(root, height=1, font=("Arial", 10), bg="#DCDCDC", fg="black", relief="flat", state="disabled")
-        status_bar.pack(fill=tk.X, padx=10, pady=5)
+            list_combo.addItem(filename)
+        list_combo.blockSignals(False)
+        
+        # Load first file if available
         if emergency_list_mapping:
             first_list_id = sorted(emergency_list_mapping.keys())[0]
             load_selected_file(first_list_id)
+            list_combo.setCurrentText(emergency_list_mapping[first_list_id])
         else:
             show_status_message("No valid JSON files found", 10000)
             logging.warning("No valid JSON files found")
-        root.mainloop()
+        
+        window.show()
+        sys.exit(app.exec_())
     except Exception as e:
         logging.error(f"Exception in main: {str(e)}")
         traceback.print_exc()
