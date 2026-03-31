@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
     QStatusBar, QCompleter, QPushButton, QMessageBox
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
 
 FONT_FAMILY = "Arial"
@@ -24,15 +24,18 @@ def format_grid(grid: str) -> str:
 
 
 class GridFinderApp(QMainWindow):
+    grid_selected = pyqtSignal(str)
+
     def __init__(self, panel_bg: str = "#f5f5f5", panel_fg: str = "#333333",
-                 data_bg: str = "#FFF5E1", data_fg: str = "#333333"):
-        super().__init__()
+                 data_bg: str = "#FFF5E1", data_fg: str = "#333333", parent=None):
+        super().__init__(parent)
         self.panel_bg = panel_bg
         self.panel_fg = panel_fg
         self.data_bg = data_bg
         self.data_fg = data_fg
 
         self.setWindowTitle("Grid Finder")
+        self.setWindowFlags(Qt.Window | Qt.WindowCloseButtonHint)
         self.resize(620, 500)
         self.setMinimumSize(500, 420)
 
@@ -268,7 +271,7 @@ class GridFinderApp(QMainWindow):
         for i, (_, row) in enumerate(df.iterrows()):
             self.table.setItem(i, 0, QTableWidgetItem(row['City']))
             self.table.setItem(i, 1, QTableWidgetItem(row['State']))
-            self.table.setItem(i, 2, QTableWidgetItem(row['MGrid']))
+            self.table.setItem(i, 2, QTableWidgetItem(format_grid(row['MGrid'])))
 
         self.table.setSortingEnabled(True)
         self.table.resizeColumnsToContents()
@@ -300,6 +303,7 @@ class GridFinderApp(QMainWindow):
         grid = self.grid_input.text().strip()
         if grid:
             QApplication.clipboard().setText(grid)
+            self.grid_selected.emit(grid)
             self.status_bar.showMessage(f"Copied: {grid}", 5000)
         else:
             self.status_bar.showMessage("No grid to copy.", 5000)
