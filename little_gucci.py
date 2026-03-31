@@ -2,6 +2,15 @@
 # This file is part of CommStat.
 # Licensed under the GNU General Public License v3.0.
 # AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
+#
+# In the beginning was the word.
+# and the word was with God.
+# and the word was God.
+# And the Word was made flesh, and dwelt among us, and we beheld his glory.
+#
+# The truth is not hard to find,
+# it's hard to embrace.
+
 
 """
 CommStat v2.5.1 - Rebuilt with best practices
@@ -55,6 +64,7 @@ from groups import GroupsDialog
 from debug_features import DebugFeatures
 from js8mail import JS8MailDialog
 from js8sms import JS8SMSDialog
+from direct_message import DirectMessageDialog
 from message import Ui_FormMessage
 from alert import Ui_FormAlert
 from statrep import StatRepDialog
@@ -99,13 +109,55 @@ NEWSFEED_TYPE_INTERVAL_MS = 60    # ms per character during type-on
 NEWSFEED_PAUSE_MS = 20000         # ms to hold when window is full
 NEWSFEED_SCROLL_DURATION_MS = 1000  # total ms for the scroll-off phase
 
+# Solar/radio image dialogs: (menu_label, image_url, link_html, loading_text, error_prefix)
+SOLAR_IMAGE_DIALOGS = [
+    ("Band Conditions", "https://www.hamqsl.com/solar101pic.php",
+     '<a href="https://www.hamqsl.com/solar.html">Solar-Terrestrial Data provided by N0NBH</a>',
+     "Loading band conditions...", "Failed to load band conditions"),
+    ("Solar Flux", "https://www.hamqsl.com/marston.php",
+     '<a href="https://www.hamqsl.com/solar.html">Solar-Terrestrial Data provided by N0NBH</a>',
+     "Loading solar flux data...", "Failed to load solar flux data"),
+    ("World Map", "https://www.hamqsl.com/solarmuf.php",
+     '<a href="https://www.hamqsl.com/solar.html">View more at hamqsl.com</a>',
+     "Loading solar conditions...", "Failed to load solar data"),
+]
 
-class ConsoleColors:
-    """ANSI color codes for console output."""
-    SUCCESS = "\033[92m"  # Green
-    WARNING = "\033[93m"  # Yellow
-    ERROR = "\033[91m"    # Red
-    RESET = "\033[0m"
+# Default color scheme for UI elements
+# These colors can be customized via config.ini in the future
+DEFAULT_COLORS: Dict[str, str] = {
+    # Main window colors
+    'program_background': '#A52A2A',	# Maroon
+    'program_foreground': '#FFFFFF',
+    'menu_background': '#3050CC',       # Blue
+    'menu_foreground': '#FFFFFF',
+    'title_bar_background': '#F07800',  # Orange
+    'title_bar_foreground': '#FFFFFF',
+    # News feed marquee colors
+    'newsfeed_background': '#242424',   # Dark gray
+    'newsfeed_foreground': '#00FF00',   # Green text
+    # Clock display colors
+    'time_background': '#282864',       # Navy blue
+    'time_foreground': '#FFFF00',       # Light blue was #88CCFF, was #AACCEE
+    # StatRep condition indicator colors (traffic light system)
+    'condition_green': '#28A745',       # Good normal status        was #108010
+    'condition_yellow': '#FFFF77',      # Caution/degraded status
+    'condition_red': '#DC3534',         # Critical/emergency status was #BB0000
+    'condition_gray': '#6C757D',        # Unknown/no data           was #808080
+    # Data table colors
+    'data_background': '#F8F6F4',	# Cream was #FFF5E1
+    'data_foreground': '#000000',
+    # Live feed display colors
+    'feed_background': '#000000',
+    'feed_foreground': '#FFFFFF',
+    # Panel colors for secondary UI elements (dropdown menus, sub-panels)
+    'panel_background': '#DDDDDD',
+    'panel_foreground': '#000000',
+}
+
+
+def hz_to_mhz(freq_hz: float, offset: float = 0) -> float:
+    """Convert frequency in Hz to MHz, optionally subtracting an offset first."""
+    return (freq_hz - offset) / 1000000 if freq_hz else 0.0
 
 
 def check_internet() -> bool:
@@ -486,34 +538,13 @@ STATREP_HEADERS = [
     "Crime", "Civil", "Pol", "Remarks"
 ]
 
-# Default color scheme for UI elements
-# These colors can be customized via config.ini in the future
-DEFAULT_COLORS: Dict[str, str] = {
-    # Main window colors
-    'program_background': '#A52A2A',   # Brown/maroon
-    'program_foreground': '#FFFFFF',
-    'menu_background': '#3050CC',       # Blue
-    'menu_foreground': '#FFFFFF',
-    'title_bar_background': '#F07800',  # Orange
-    'title_bar_foreground': '#FFFFFF',
-    # News feed marquee colors
-    'newsfeed_background': '#242424',   # Dark gray
-    'newsfeed_foreground': '#00FF00',   # Green text
-    # Clock display colors
-    'time_background': '#282864',       # Navy blue
-    'time_foreground': '#88CCFF',       # Light blue
-    # StatRep condition indicator colors (traffic light system)
-    'condition_green': '#108010',       # Good/normal status
-    'condition_yellow': '#FFFF77',      # Caution/degraded status
-    'condition_red': '#BB0000',         # Critical/emergency status
-    'condition_gray': '#808080',        # Unknown/no data
-    # Data table colors
-    'data_background': '#FFF5E1',
-    'data_foreground': '#000000',
-    # Live feed display colors
-    'feed_background': '#000000',
-    'feed_foreground': '#FFFFFF',
-}
+class ConsoleColors:
+    """ANSI color codes for console output."""
+    SUCCESS = "\033[92m"  # Green
+    WARNING = "\033[93m"  # Yellow
+    ERROR = "\033[91m"    # Red
+    RESET = "\033[0m"
+
 
 # Default RSS news feeds
 DEFAULT_RSS_FEEDS: Dict[str, str] = {
@@ -526,7 +557,7 @@ DEFAULT_RSS_FEEDS: Dict[str, str] = {
 
 
 # =============================================================================
-# Helper Functions
+# Helper Functionsn
 # =============================================================================
 
 def create_insecure_ssl_context():
@@ -610,16 +641,41 @@ class CustomWebEnginePage(QWebEnginePage):
                 self.parent_widget._on_video_skip()
             return False  # Prevent navigation
 
-        # Handle statrep links
+        # Handle statrep links from map popups: /statrep/{id}/{callsign}
         if url.path().startswith("/statrep/"):
-            srid = url.path().replace("/statrep/", "").strip()
-            if srid:
-                try:
-                    view_statrep_path = os.path.join(os.getcwd(), "view_statrep.py")
-                    subprocess.Popen([sys.executable, view_statrep_path, srid])
-                    print(f"Launched view_statrep.py with SRid: {srid}")
-                except Exception as e:
-                    print(f"Failed to launch view_statrep.py: {e}")
+            parts = url.path().strip("/").split("/")
+            if len(parts) >= 3:
+                sr_id = parts[1]
+                callsign = parts[2]
+                mw = self.parent_widget
+                if sr_id and callsign and mw:
+                    try:
+                        from qrz_lookup import StatRepDetailDialog
+                        dlg = StatRepDetailDialog(
+                            sr_id, callsign, mw._internet_available,
+                            backbone_url=_BACKBONE,
+                            panel_background=mw.config.get_color('panel_background'),
+                            panel_foreground=mw.config.get_color('panel_foreground'),
+                            title_bar_background=mw.config.get_color('title_bar_background'),
+                            title_bar_foreground=mw.config.get_color('title_bar_foreground'),
+                            data_background=mw.config.get_color('data_background'),
+                            program_background=mw.config.get_color('program_background'),
+                            program_foreground=mw.config.get_color('program_foreground'),
+                            condition_green=mw.config.get_color('condition_green'),
+                            condition_yellow=mw.config.get_color('condition_yellow'),
+                            condition_red=mw.config.get_color('condition_red'),
+                            condition_gray=mw.config.get_color('condition_gray'),
+                            tcp_pool=mw.tcp_pool,
+                            connector_manager=mw.connector_manager,
+                            backbone_debug=mw.backbone_debug,
+                            parent=mw
+                        )
+                        dlg.pin_changed.connect(
+                            lambda _: mw._save_map_position(callback=mw._load_map)
+                        )
+                        dlg.exec_()
+                    except Exception as e:
+                        print(f"[Map popup] Failed to open StatRepDetailDialog: {e}")
             return False  # Prevent navigation
         return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
 
@@ -991,7 +1047,7 @@ class DatabaseManager:
                                power, water, med, telecom, travel, internet,
                                fuel, food, crime, civil, political, comments, source, id
                         FROM statrep
-                        WHERE {date_condition}
+                        WHERE {date_condition} OR pinned = 1
                     """
                     params = date_params
                 else:
@@ -1003,7 +1059,7 @@ class DatabaseManager:
                                power, water, med, telecom, travel, internet,
                                fuel, food, crime, civil, political, comments, source, id
                         FROM statrep
-                        WHERE target IN ({placeholders}) AND {date_condition}
+                        WHERE target IN ({placeholders}) AND ({date_condition} OR pinned = 1)
                     """
                     params = groups_with_at + date_params
 
@@ -1289,6 +1345,35 @@ class DatabaseManager:
             return cursor.rowcount > 0
         return self._execute(op, False)
 
+    def get_alert_count(self) -> int:
+        """Get the total number of alerts in the database."""
+        def op(cursor, conn):
+            cursor.execute("SELECT COUNT(*) FROM alerts")
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        return self._execute(op, 0)
+
+    def get_alert_at_offset(self, offset: int) -> Optional[Tuple[str, str, int, str, str, str]]:
+        """Get an alert at the specified offset from most recent.
+
+        Args:
+            offset: 0 for most recent, 1 for second most recent, etc.
+
+        Returns:
+            Tuple of (title, message, color, datetime, from_callsign, group) or None.
+        """
+        def op(cursor, conn):
+            cursor.execute(
+                "SELECT title, message, color, datetime, from_callsign, target "
+                "FROM alerts ORDER BY datetime DESC LIMIT 1 OFFSET ?",
+                (offset,)
+            )
+            result = cursor.fetchone()
+            if result:
+                return (result[0], result[1], result[2], result[3], result[4] or "", result[5] or "")
+            return None
+        return self._execute(op, None)
+
 
 # =============================================================================
 # MainWindow - Main application window
@@ -1532,10 +1617,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menubar.setCornerWidget(None, Qt.TopRightCorner)
         menu_bg = self.config.get_color('menu_background')
         menu_fg = self.config.get_color('menu_foreground')
+        panel_bg = self.config.get_color('panel_background')
+        panel_fg = self.config.get_color('panel_foreground')
         self.menubar.setStyleSheet(f"""
             QMenuBar {{
                 background-color: {menu_bg};
                 color: {menu_fg};
+                font-size: 11pt;
+                font-weight: bold;
             }}
             QMenuBar::item {{
                 padding: 4px 8px;
@@ -1544,11 +1633,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {menu_bg};
             }}
             QMenu {{
-                background-color: {menu_bg};
-                color: {menu_fg};
+                background-color: {panel_bg};
+                color: {panel_fg};
             }}
             QMenu::item:selected {{
                 background-color: {menu_bg};
+                color: {menu_fg};
             }}
         """)
 
@@ -1607,6 +1697,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("statrep", "Status Report", self._on_statrep),
             ("group_alert", "Group Alert", self._on_group_alert),
             ("send_message", "Group Message", self._on_send_message),
+            ("direct_message", "Direct Message", self._on_direct_message),
             ("js8email", "JS8 Email", self._on_js8email),
             ("js8sms", "JS8 SMS", self._on_js8sms),
         ]
@@ -1622,11 +1713,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Helper to create styled menu checkboxes
         def create_menu_checkbox(menu, label, is_checked, handler):
-            menu_bg = self.config.get_color('menu_background')
-            menu_fg = self.config.get_color('menu_foreground')
+            panel_bg = self.config.get_color('panel_background')
+            panel_fg = self.config.get_color('panel_foreground')
             checkbox = QtWidgets.QCheckBox(label)
             checkbox.setChecked(is_checked)
-            checkbox.setStyleSheet(f"QCheckBox {{ padding: 4px 8px; background-color: {menu_bg}; color: {menu_fg}; }}")
+            checkbox.setStyleSheet(f"QCheckBox {{ padding: 4px 8px; background-color: {panel_bg}; color: {panel_fg}; }}")
             checkbox.stateChanged.connect(lambda state: handler(state == Qt.Checked))
             action = QtWidgets.QWidgetAction(self)
             action.setDefaultWidget(checkbox)
@@ -1638,33 +1729,15 @@ class MainWindow(QtWidgets.QMainWindow):
         date_filter_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(date_filter_label)
 
-        reset_midnight = QtWidgets.QAction("Reset to Midnight", self)
-        reset_midnight.triggered.connect(lambda: self._reset_filter_date(0))
-        self.filter_menu.addAction(reset_midnight)
-
-        reset_1day = QtWidgets.QAction("Reset to 1 day ago", self)
-        reset_1day.triggered.connect(lambda: self._reset_filter_date(1))
-        self.filter_menu.addAction(reset_1day)
-
-        reset_1week = QtWidgets.QAction("Reset to 1 week ago", self)
-        reset_1week.triggered.connect(lambda: self._reset_filter_date(7))
-        self.filter_menu.addAction(reset_1week)
-
-        reset_1month = QtWidgets.QAction("Reset to 1 month ago", self)
-        reset_1month.triggered.connect(lambda: self._reset_filter_date(30))
-        self.filter_menu.addAction(reset_1month)
-
-        reset_3months = QtWidgets.QAction("Reset to 3 months ago", self)
-        reset_3months.triggered.connect(lambda: self._reset_filter_date(90))
-        self.filter_menu.addAction(reset_3months)
-
-        reset_6months = QtWidgets.QAction("Reset to 6 months ago", self)
-        reset_6months.triggered.connect(lambda: self._reset_filter_date(180))
-        self.filter_menu.addAction(reset_6months)
-
-        reset_1year = QtWidgets.QAction("Reset to 1 year ago", self)
-        reset_1year.triggered.connect(lambda: self._reset_filter_date(365))
-        self.filter_menu.addAction(reset_1year)
+        for label, days in [
+            ("Reset to Midnight", 0), ("Reset to 1 day ago", 1),
+            ("Reset to 1 week ago", 7), ("Reset to 1 month ago", 30),
+            ("Reset to 3 months ago", 90), ("Reset to 6 months ago", 180),
+            ("Reset to 1 year ago", 365),
+        ]:
+            action = QtWidgets.QAction(label, self)
+            action.triggered.connect(lambda checked, d=days: self._reset_filter_date(d))
+            self.filter_menu.addAction(action)
 
         custom_date_action = QtWidgets.QAction("Custom Date Range...", self)
         custom_date_action.triggered.connect(self._on_filter)
@@ -1718,13 +1791,20 @@ class MainWindow(QtWidgets.QMainWindow):
             menu.addAction(action)
             self.actions[key] = action
 
-        # Tools menu items
-        create_action(self.tools_menu, "Band Conditions", "band_conditions", self._on_band_conditions)
-        create_action(self.tools_menu, "Solar Flux", "solar_flux", self._on_solar_flux)
-        create_action(self.tools_menu, "World Map", "world_map", self._on_world_map)
+        # Tools menu items - solar/radio image dialogs
+        for menu_label, url, link, load_text, err_prefix in SOLAR_IMAGE_DIALOGS:
+            create_action(
+                self.tools_menu, menu_label, menu_label.lower().replace(" ", "_"),
+                lambda checked=False, t=menu_label, u=url, l=link, lt=load_text, ep=err_prefix:
+                    self._show_image_dialog(title=t, image_url=u, link_html=l, loading_text=lt, error_prefix=ep)
+            )
+
+        # QRZ Lookup
+        self.tools_menu.addSeparator()
+        create_action(self.tools_menu, "Grid Finder", "grid_finder", self._on_grid_finder)
+        create_action(self.tools_menu, "QRZ Lookup", "qrz_lookup", self._on_qrz_lookup)
 
         # Menubar items
-        create_action(self.menubar, "About", "about", self._on_about)
         create_action(self.menubar, "Exit", "exit", qApp.quit)
 
         # Debug menu (right of Exit, only visible in debug mode)
@@ -1875,23 +1955,18 @@ class MainWindow(QtWidgets.QMainWindow):
         # Add header to main layout (row 1, spans all columns)
         self.main_layout.addWidget(self.header_widget, 1, 0, 1, 2)
 
-    def _setup_statrep_table(self) -> None:
-        """Create the StatRep data table."""
-        self.statrep_table = QtWidgets.QTableWidget(self.central_widget)
-        self.statrep_table.setObjectName("statrepTable")
-        self.statrep_table.setColumnCount(21)
-        self.statrep_table.setRowCount(0)
-
-        # Apply styling
+    def _setup_table_widget(self, table: QtWidgets.QTableWidget, headers: list) -> None:
+        """Apply common styling and header configuration to a table widget."""
         title_bg = self.config.get_color('title_bar_background')
         title_fg = self.config.get_color('title_bar_foreground')
         data_bg = self.config.get_color('data_background')
         data_fg = self.config.get_color('data_foreground')
 
-        self.statrep_table.setStyleSheet(f"""
+        table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: {data_bg};
                 color: {data_fg};
+                font-size: 10pt;
             }}
             QTableWidget QHeaderView::section {{
                 background-color: {title_bg};
@@ -1907,8 +1982,7 @@ class MainWindow(QtWidgets.QMainWindow):
             }}
         """)
 
-        # Explicitly style the horizontal header
-        self.statrep_table.horizontalHeader().setStyleSheet(f"""
+        table.horizontalHeader().setStyleSheet(f"""
             QHeaderView::section {{
                 background-color: {title_bg};
                 color: {title_fg};
@@ -1918,17 +1992,24 @@ class MainWindow(QtWidgets.QMainWindow):
             }}
         """)
 
-        # Set headers
-        self.statrep_table.setHorizontalHeaderLabels(STATREP_HEADERS)
+        table.setHorizontalHeaderLabels(headers)
 
-        # Configure header behavior
-        header = self.statrep_table.horizontalHeader()
+        header = table.horizontalHeader()
         header.setMinimumSectionSize(10)
         header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
         header.resizeSection(0, 10)
         header.setStretchLastSection(True)
-        self.statrep_table.verticalHeader().setVisible(False)
+        table.verticalHeader().setVisible(False)
+
+    def _setup_statrep_table(self) -> None:
+        """Create the StatRep data table."""
+        self.statrep_table = QtWidgets.QTableWidget(self.central_widget)
+        self.statrep_table.setObjectName("statrepTable")
+        self.statrep_table.setColumnCount(21)
+        self.statrep_table.setRowCount(0)
+
+        self._setup_table_widget(self.statrep_table, STATREP_HEADERS)
 
         # Connect click handler
         self.statrep_table.itemClicked.connect(self._on_statrep_click)
@@ -2048,7 +2129,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.alert_prev_btn = QtWidgets.QPushButton("<")
         self.alert_prev_btn.setFixedSize(40, 30)
         self.alert_prev_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; }")
-        self.alert_prev_btn.clicked.connect(self._alert_show_newer)
+        self.alert_prev_btn.clicked.connect(lambda: self._alert_navigate(-1))
         nav_layout.addWidget(self.alert_prev_btn)
 
         nav_layout.addSpacing(20)
@@ -2056,7 +2137,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.alert_next_btn = QtWidgets.QPushButton(">")
         self.alert_next_btn.setFixedSize(40, 30)
         self.alert_next_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; }")
-        self.alert_next_btn.clicked.connect(self._alert_show_older)
+        self.alert_next_btn.clicked.connect(lambda: self._alert_navigate(1))
         nav_layout.addWidget(self.alert_next_btn)
 
         alert_layout.addLayout(nav_layout)
@@ -2080,8 +2161,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_alert_display(self) -> None:
         """Show the alert display with the current alert from database."""
         # Get total alert count and fetch alert at current index
-        alert_count = self._get_alert_count()
-        alert = self._get_alert_at_offset(self.alert_index)
+        alert_count = self.db.get_alert_count()
+        alert = self.db.get_alert_at_offset(self.alert_index)
 
         # Update navigation button states
         self.alert_prev_btn.setEnabled(self.alert_index > 0)
@@ -2091,10 +2172,7 @@ class MainWindow(QtWidgets.QMainWindow):
             title, message, color, date_received, from_callsign, group = alert
 
             # Apply text normalization to message field only if enabled
-            apply_normalization = self.config.get_apply_text_normalization()
-            if apply_normalization:
-                abbreviations = self.db.get_abbreviations()
-                message = smart_title_case(message, abbreviations, apply_normalization)
+            message = self._normalize_text(message)
 
             # Set colors based on alert color - all alerts use red
             color_map = {
@@ -2147,53 +2225,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.alert_display.show()
 
-    def _alert_show_newer(self) -> None:
-        """Show the next newer alert."""
-        if self.alert_index > 0:
-            self.alert_index -= 1
+    def _alert_navigate(self, direction: int) -> None:
+        """Navigate alerts by direction (-1 for newer, +1 for older)."""
+        new_index = self.alert_index + direction
+        if direction < 0 and new_index >= 0:
+            self.alert_index = new_index
             self._show_alert_display()
-
-    def _alert_show_older(self) -> None:
-        """Show the next older alert."""
-        alert_count = self._get_alert_count()
-        if self.alert_index < alert_count - 1:
-            self.alert_index += 1
+        elif direction > 0 and new_index < self.db.get_alert_count():
+            self.alert_index = new_index
             self._show_alert_display()
-
-    def _get_alert_count(self) -> int:
-        """Get the total number of alerts in the database."""
-        try:
-            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM alerts")
-                result = cursor.fetchone()
-                return result[0] if result else 0
-        except sqlite3.Error as e:
-            print(f"Error getting alert count: {e}")
-        return 0
-
-    def _get_alert_at_offset(self, offset: int) -> Optional[Tuple[str, str, int, str, str, str]]:
-        """Get an alert at the specified offset from most recent.
-
-        Args:
-            offset: 0 for most recent, 1 for second most recent, etc.
-
-        Returns:
-            Tuple of (title, message, color, datetime, from_callsign, group) or None if not found.
-        """
-        try:
-            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT title, message, color, datetime, from_callsign, target FROM alerts ORDER BY datetime DESC LIMIT 1 OFFSET ?",
-                    (offset,)
-                )
-                result = cursor.fetchone()
-                if result:
-                    return (result[0], result[1], result[2], result[3], result[4] or "", result[5] or "")
-        except sqlite3.Error as e:
-            print(f"Error fetching alert at offset {offset}: {e}")
-        return None
 
     def _fetch_backbone_content(self) -> Optional[str]:
         """Fetch and extract content from backbone server.
@@ -2625,7 +2665,7 @@ class MainWindow(QtWidgets.QMainWindow):
             status_digits = digits[1:]  # Skip scope digit
 
         # F!304/F!301 messages don't contain grid data — resolve via callsign lookup
-        # _lookup_grid_for_callsign checks qrz_cache first, then QRZ API (caches result)
+        # _lookup_grid_for_callsign checks qrz table first, then QRZ API (caches result)
         fcode_grid = self._lookup_grid_for_callsign(from_callsign) or ""
         grid_found = bool(fcode_grid and len(fcode_grid) >= 4)
 
@@ -2722,9 +2762,24 @@ class MainWindow(QtWidgets.QMainWindow):
                 if data_id > last_data_id:
                     last_data_id = data_id
 
+                # Handle delete directive
+                delete_match = re.match(r'^::STATREP-DELETE::(\d+)$', data)
+                if delete_match:
+                    gid = int(delete_match.group(1))
+                    self.db._execute(
+                        lambda cursor, conn, g=gid: (
+                            cursor.execute("DELETE FROM statrep WHERE global_id = ?", (g,)),
+                            conn.commit()
+                        ),
+                        None
+                    )
+                    continue
+
                 # Parse the data line: date time freq_hz unused snr callsign: message
                 # Example: 2026-02-06 18:32:32    14118000    0    30    N0DDK: @MAGNET ,EM83CV,3,T31,321311111331,GA,{&%}
                 # Fields: date(0) time(1) freq_hz(2) unused/0(3) snr/db(4) callsign:message(5)
+                if data.startswith("DM:"):
+                    data = data[3:]
                 parts = data.split(None, 5)  # Split on whitespace, max 6 parts
                 if len(parts) < 6:
                     print(f"Skipping malformed data line (ID {data_id}): insufficient fields")
@@ -2970,8 +3025,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Feed text area
         self.feed_text = QtWidgets.QPlainTextEdit(self.central_widget)
         self.feed_text.setObjectName("feedText")
-        mono_font = QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont)
-        mono_font.setPointSize(10)
+        mono_font = QtGui.QFont("Kode Mono", 10)
         self.feed_text.setFont(mono_font)
         self.feed_text.setStyleSheet(
             f"background-color: {self.config.get_color('feed_background')};"
@@ -3030,57 +3084,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.message_table.setColumnCount(7)
         self.message_table.setRowCount(0)
 
-        # Apply styling
-        title_bg = self.config.get_color('title_bar_background')
-        title_fg = self.config.get_color('title_bar_foreground')
-        data_bg = self.config.get_color('data_background')
-        data_fg = self.config.get_color('data_foreground')
-
-        self.message_table.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {data_bg};
-                color: {data_fg};
-            }}
-            QTableWidget QHeaderView::section {{
-                background-color: {title_bg};
-                color: {title_fg};
-                font-weight: bold;
-                padding: 4px;
-                border: 1px solid {title_bg};
-            }}
-            QToolTip {{
-                background-color: #FFFFE1;
-                color: black;
-                border: 1px solid black;
-            }}
-        """)
-
-        # Explicitly style the horizontal header
-        self.message_table.horizontalHeader().setStyleSheet(f"""
-            QHeaderView::section {{
-                background-color: {title_bg};
-                color: {title_fg};
-                font-weight: bold;
-                font-size: 10pt;
-                padding: 4px;
-            }}
-        """)
-
-        # Set headers
-        self.message_table.setHorizontalHeaderLabels([
+        self._setup_table_widget(self.message_table, [
             "", "Date Time", "Freq", "From", "To", "ID", "Message"
         ])
-
-        # Configure header behavior
-        header = self.message_table.horizontalHeader()
-        header.setMinimumSectionSize(10)
-        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
-        header.resizeSection(0, 10)
-        header.setStretchLastSection(True)
-        self.message_table.verticalHeader().setVisible(False)
         self.message_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.message_table.setFixedHeight(MAP_HEIGHT)
+
+        # Connect click handler
+        self.message_table.itemClicked.connect(self._on_message_click)
 
         # Add to layout (row 4, column 1)
         self.main_layout.addWidget(self.message_table, 4, 1, 1, 1)
@@ -3160,21 +3171,17 @@ class MainWindow(QtWidgets.QMainWindow):
                     gridlist.append(grid)
 
                     # Create popup HTML
-                    html = f'''<HTML>
-                        <BODY>
-                            <p style="color:blue;font-size:14px;">
-                                Callsign: {callsign}<br>
-                                StatRep ID: {srid}<br>
-                                <button onclick="window.location.href='http://localhost/statrep/{statrep_id}'"
-                                    style="color:#0000FF;font-family:Arial;font-size:12px;font-weight:bold;
-                                    cursor:pointer;border:1px solid #000;padding:2px 5px;">
-                                    View StatRep
-                                </button>
-                            </p>
+                    html = f'''<HTML style="height:100%;">
+                        <BODY style="margin:0;font-family:Arial;text-align:center;
+                                     height:100%;display:flex;flex-direction:column;
+                                     justify-content:center;align-items:center;">
+                            <p style="font-size:11pt;font-weight:bold;margin:0 0 4px 0;">{callsign}</p>
+                            <a href="http://localhost/statrep/{statrep_id}/{callsign}"
+                               style="font-size:11pt;color:#0000EE;">Details</a>
                         </BODY>
                     </HTML>'''
-                    iframe = folium.IFrame(html, width=160, height=100)
-                    popup = folium.Popup(iframe, min_width=100, max_width=160)
+                    iframe = folium.IFrame(html, width=120, height=65)
+                    popup = folium.Popup(iframe, min_width=80, max_width=120)
 
                     # Determine pin color and size
                     if status == "1":
@@ -3274,11 +3281,99 @@ class MainWindow(QtWidgets.QMainWindow):
         self._populate_table(self.statrep_table, data, status_colors)
 
     def _on_statrep_click(self, item: QTableWidgetItem) -> None:
-        """Handle click on StatRep table row."""
+        """Handle click on StatRep table row — open detail view."""
         row = item.row()
-        sr_id = self.statrep_table.item(row, 5)  # Column 5 is the ID
-        if sr_id:
-            print(f"StatRep clicked: ID = {sr_id.text()}")
+        callsign_item = self.statrep_table.item(row, 3)  # from_callsign column
+        if callsign_item:
+            callsign  = callsign_item.text().strip()
+            record_id = callsign_item.data(QtCore.Qt.UserRole)
+            from qrz_lookup import StatRepDetailDialog
+            dlg = StatRepDetailDialog(
+                record_id, callsign, self._internet_available,
+                backbone_url=_BACKBONE,
+                panel_background=self.config.get_color('panel_background'),
+                panel_foreground=self.config.get_color('panel_foreground'),
+                title_bar_background=self.config.get_color('title_bar_background'),
+                title_bar_foreground=self.config.get_color('title_bar_foreground'),
+                data_background=self.config.get_color('data_background'),
+                program_background=self.config.get_color('program_background'),
+                program_foreground=self.config.get_color('program_foreground'),
+                condition_green=self.config.get_color('condition_green'),
+                condition_yellow=self.config.get_color('condition_yellow'),
+                condition_red=self.config.get_color('condition_red'),
+                condition_gray=self.config.get_color('condition_gray'),
+                tcp_pool=self.tcp_pool,
+                connector_manager=self.connector_manager,
+                backbone_debug=self.backbone_debug,
+                parent=self
+            )
+            dlg.pin_changed.connect(
+                lambda _: self._save_map_position(callback=self._load_map)
+            )
+            if dlg.exec_() == 1:  # QDialog.Accepted
+                self._load_statrep_data()
+
+    def _on_message_click(self, item: QTableWidgetItem) -> None:
+        """Handle click on Message table row — open detail view."""
+        row = item.row()
+        callsign_item = self.message_table.item(row, 3)  # from_callsign column
+        message_item = self.message_table.item(row, 6)   # message column
+        msg_id_item = self.message_table.item(row, 5)    # msg_id column
+        if callsign_item:
+            callsign = callsign_item.text().strip()
+            message_text = (message_item.data(QtCore.Qt.UserRole) or message_item.text()) if message_item else ""
+            msg_id = msg_id_item.text().strip() if msg_id_item else ""
+            from qrz_lookup import MessageDetailDialog
+            dlg = MessageDetailDialog(
+                callsign, message_text, self._internet_available,
+                panel_background=self.config.get_color('panel_background'),
+                panel_foreground=self.config.get_color('panel_foreground'),
+                data_background=self.config.get_color('data_background'),
+                program_background=self.config.get_color('program_background'),
+                program_foreground=self.config.get_color('program_foreground'),
+                msg_id=msg_id,
+                parent=self
+            )
+            if dlg.exec_() == 1:  # QDialog.Accepted
+                self._load_message_data()
+
+    def _on_grid_finder(self) -> None:
+        """Launch Grid Finder in a separate process."""
+        gridfinder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gridfinder.py")
+        if os.path.exists(gridfinder_path):
+            subprocess.Popen([
+                sys.executable, gridfinder_path,
+                self.config.get_color('panel_background'),
+                self.config.get_color('panel_foreground'),
+                self.config.get_color('data_background'),
+                self.config.get_color('data_foreground'),
+            ])
+        else:
+            QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find gridfinder.py")
+
+    def _on_brevity_generator(self) -> None:
+        """Launch the Brevity Code Generator in a separate process."""
+        brevity_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brevity.py")
+        if os.path.exists(brevity_path):
+            subprocess.Popen([
+                sys.executable, brevity_path,
+                self.config.get_color('panel_background'),
+                self.config.get_color('panel_foreground'),
+            ])
+        else:
+            QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find brevity.py")
+
+    def _on_qrz_lookup(self) -> None:
+        """Open standalone QRZ Lookup dialog (Tools menu)."""
+        from qrz_lookup import QRZLookupDialog
+        dlg = QRZLookupDialog(
+            panel_background=self.config.get_color('panel_background'),
+            panel_foreground=self.config.get_color('panel_foreground'),
+            program_background=self.config.get_color('program_background'),
+            program_foreground=self.config.get_color('program_foreground'),
+            parent=self
+        )
+        dlg.exec_()
 
     def _setup_timers(self) -> None:
         """Setup timers for clock, data refresh, and news feed animation."""
@@ -3560,7 +3655,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_statrep(self) -> None:
         """Open StatRep window."""
-        dialog = StatRepDialog(self.tcp_pool, self.connector_manager, self, backbone_debug=self.backbone_debug)
+        dialog = StatRepDialog(
+            self.tcp_pool, self.connector_manager, self,
+            backbone_debug=self.backbone_debug,
+            panel_background=self.config.get_color('panel_background'),
+            data_background=self.config.get_color('data_background')
+        )
         dialog.exec_()
 
     def _on_send_message(self) -> None:
@@ -3568,6 +3668,11 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog = QtWidgets.QDialog(self)
         dialog.ui = Ui_FormMessage(self.tcp_pool, self.connector_manager, self._load_message_data)
         dialog.ui.setupUi(dialog)
+        dialog.exec_()
+
+    def _on_direct_message(self) -> None:
+        """Open Direct Message window."""
+        dialog = DirectMessageDialog(self.tcp_pool, self.connector_manager, parent=self)
         dialog.exec_()
 
     def _on_group_alert(self) -> None:
@@ -3708,8 +3813,7 @@ class MainWindow(QtWidgets.QMainWindow):
         is_statrep_table = (table == self.statrep_table)
 
         # Get abbreviations and normalization setting for text processing
-        apply_normalization = self.config.get_apply_text_normalization()
-        abbreviations = self.db.get_abbreviations() if apply_normalization else None
+        apply_normalization, abbreviations = self._get_normalization_settings()
 
         for row_num, row_data in enumerate(data):
             table.insertRow(row_num)
@@ -3723,12 +3827,26 @@ class MainWindow(QtWidgets.QMainWindow):
             for col_num, value in enumerate(row_data):
                 display_value = str(value) if value is not None else ""
 
+                # Decode || newline placeholders in statrep remarks and messages
+                raw_message = None
+                if is_statrep_table and col_num == 20 and "||" in display_value:
+                    decoded_remarks = display_value.replace("||", "\n")
+                    display_value = display_value.replace("||", " ")
+                elif is_message_table and col_num == 6 and "||" in display_value:
+                    raw_message = display_value          # preserve for detail dialog
+                    display_value = display_value.replace("||", " ")
+                    decoded_remarks = None
+                else:
+                    decoded_remarks = None
+
                 # Apply text normalization to message/comment fields only if enabled
                 if apply_normalization and display_value:
-                    # For statrep table: col 19=comments only
-                    # For message table: col 5=message only
+                    # For statrep table: col 20=comments only
+                    # For message table: col 6=message only
                     if is_statrep_table and col_num == 20:
                         display_value = smart_title_case(display_value, abbreviations, apply_normalization)
+                        if decoded_remarks:
+                            decoded_remarks = smart_title_case(decoded_remarks, abbreviations, apply_normalization)
                     elif is_message_table and col_num == 6:
                         display_value = smart_title_case(display_value, abbreviations, apply_normalization)
 
@@ -3784,13 +3902,20 @@ class MainWindow(QtWidgets.QMainWindow):
                 # Format frequency column (column 2) - convert Hz to MHz
                 if (is_message_table or is_statrep_table) and col_num == 2:
                     try:
-                        freq_hz = float(value) if value else 0
-                        freq_mhz = freq_hz / 1000000
+                        freq_mhz = hz_to_mhz(float(value) if value else 0)
                         display_value = f"{freq_mhz:.3f}"  # Show as 7.110
                     except (ValueError, TypeError):
                         pass
 
                 item = QTableWidgetItem(display_value)
+
+                # Add tooltip for multi-line remarks
+                if decoded_remarks:
+                    item.setToolTip(decoded_remarks)
+
+                # Store raw message text (with ||) so detail dialog can show newlines
+                if raw_message is not None and is_message_table and col_num == 6:
+                    item.setData(QtCore.Qt.UserRole, raw_message)
 
                 # Bold From and To columns (3 and 4) if direct message
                 if bold_row and col_num in (3, 4):
@@ -3805,9 +3930,30 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 table.setItem(row_num, col_num, item)
 
+            # Store database id on the callsign cell for statrep rows
+            if is_statrep_table and len(row_data) > 22:
+                cs_item = table.item(row_num, 3)
+                if cs_item:
+                    cs_item.setData(QtCore.Qt.UserRole, row_data[22])
+
         # Sort by datetime column (column 1 for both statrep and message tables)
         sort_column = 1 if (is_statrep_table or is_message_table) else 0
         table.sortItems(sort_column, QtCore.Qt.DescendingOrder)
+
+    def _get_normalization_settings(self) -> Tuple[bool, Optional[Dict[str, str]]]:
+        """Get text normalization flag and abbreviations dict.
+
+        Returns:
+            (apply_normalization, abbreviations) where abbreviations is None if disabled.
+        """
+        apply = self.config.get_apply_text_normalization()
+        abbrevs = self.db.get_abbreviations() if apply else None
+        return apply, abbrevs
+
+    def _normalize_text(self, text: str) -> str:
+        """Apply smart title case with abbreviation expansion if normalization is enabled."""
+        apply, abbrevs = self._get_normalization_settings()
+        return smart_title_case(text, abbrevs, apply) if apply else text
 
     def _refresh_all_data(self) -> None:
         """Refresh all data views (statrep, messages, and map)."""
@@ -3923,9 +4069,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.groups_menu.addAction(title_action)
 
         # Add groups alphabetically with checkboxes (menu stays open when clicked)
-        menu_bg = self.config.get_color('menu_background')
-        menu_fg = self.config.get_color('menu_foreground')
-        checkbox_style = f"QCheckBox {{ padding: 4px 8px; background-color: {menu_bg}; color: {menu_fg}; }}"
+        panel_bg = self.config.get_color('panel_background')
+        panel_fg = self.config.get_color('panel_foreground')
+        checkbox_style = f"QCheckBox {{ padding: 4px 8px; background-color: {panel_bg}; color: {panel_fg}; }}"
         groups = self.db.get_all_groups_with_status()
         for name, is_active in groups:  # Already sorted by name from DB
             checkbox = QtWidgets.QCheckBox(name)
@@ -4025,27 +4171,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.rig_status_logged.add(rig_name)
 
     def _handle_status_message(self, rig_name: str, message: str) -> None:
-        """
-        Handle status message from TCP client (for live feed display).
-
-        Args:
-            rig_name: Name of the rig.
-            message: Status message to display.
-        """
-        from datetime import datetime, timezone
-
-        # Format timestamp with 3 spaces between date and time (matches RX.DIRECTED format)
+        """Handle status message from TCP client (for live feed display)."""
         utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
-        timestamped_message = f"{utc_str}\t{message}"
-
-        # Insert at beginning (newest first)
-        self.feed_messages.insert(0, timestamped_message)
-
-        # Trim buffer if needed
-        if len(self.feed_messages) > self.max_feed_messages:
-            self.feed_messages = self.feed_messages[:self.max_feed_messages]
-
-        self._update_feed_display()
+        self._add_to_feed(f"{utc_str}\t{message}", rig_name)
 
     def _handle_tcp_message(self, rig_name: str, message: dict) -> None:
         """
@@ -4079,7 +4207,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Format feed line to match DIRECTED.TXT format:
             # DATETIME    FREQ_MHZ    OFFSET    SNR    CALLSIGN: MESSAGE
             # FREQ from JS8Call is dial + offset, so subtract offset to get dial frequency
-            dial_freq_mhz = (freq - offset) / 1000000 if freq else 0
+            dial_freq_mhz = hz_to_mhz(freq, offset)
             feed_line = f"{utc_display}\t{dial_freq_mhz:.3f}\t{offset}\t{snr:+03d}\t{from_call}: {value}"
 
             # Add to feed buffer (newest first)
@@ -4115,7 +4243,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if value and from_call:
                 utc_dt = datetime.fromtimestamp(utc_ms / 1000, tz=timezone.utc)
                 utc_str = utc_dt.strftime("%Y-%m-%d   %H:%M:%S")
-                dial_freq_mhz = (freq - offset) / 1000000 if freq else 0
+                dial_freq_mhz = hz_to_mhz(freq, offset)
                 feed_line = f"{utc_str}\t{dial_freq_mhz:.3f}\t{offset}\t{snr:+03d}\t{from_call}: {value}"
                 self._add_to_feed(feed_line, rig_name)
 
@@ -4272,7 +4400,7 @@ class MainWindow(QtWidgets.QMainWindow):
             origin_call = fields[-1].strip() if len(fields) > 4 else ""
             # Comments are between SRCODE and origin
             comments_raw = ",".join(fields[4:-1]).strip() if len(fields) > 5 else ""
-            comments = format_statrep_comments(comments_raw, self.db.get_abbreviations(), self.config.get_apply_text_normalization())
+            comments = sanitize_ascii(comments_raw)
             # Append forwarded info
             if origin_call:
                 fwd_suffix = f" FORWARDED BY: {from_callsign}"
@@ -4282,7 +4410,7 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             # Standard statrep comments
             comments_raw = ",".join([f for f in fields[4:] if f.strip()]).strip() if len(fields) > 4 else ""
-            comments = format_statrep_comments(comments_raw, self.db.get_abbreviations(), self.config.get_apply_text_normalization())
+            comments = sanitize_ascii(comments_raw)
 
         # Map scope
         SCOPE_MAP = {
@@ -4937,36 +5065,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         dialog.exec_()
 
-    def _on_band_conditions(self) -> None:
-        """Show Band Conditions dialog with N0NBH solar-terrestrial data."""
-        self._show_image_dialog(
-            title="Band Conditions",
-            image_url="https://www.hamqsl.com/solar101pic.php",
-            link_html='<a href="https://www.hamqsl.com/solar.html">Solar-Terrestrial Data provided by N0NBH</a>',
-            loading_text="Loading band conditions...",
-            error_prefix="Failed to load band conditions"
-        )
-
-    def _on_solar_flux(self) -> None:
-        """Show Solar Flux dialog with N0NBH solar flux chart."""
-        self._show_image_dialog(
-            title="Solar Flux",
-            image_url="https://www.hamqsl.com/marston.php",
-            link_html='<a href="https://www.hamqsl.com/solar.html">Solar-Terrestrial Data provided by N0NBH</a>',
-            loading_text="Loading solar flux data...",
-            error_prefix="Failed to load solar flux data"
-        )
-
-    def _on_world_map(self) -> None:
-        """Show World Map dialog with current solar conditions."""
-        self._show_image_dialog(
-            title="World Map",
-            image_url="https://www.hamqsl.com/solarmuf.php",
-            link_html='<a href="https://www.hamqsl.com/solar.html">View more at hamqsl.com</a>',
-            loading_text="Loading solar conditions...",
-            error_prefix="Failed to load solar data"
-        )
-
     def _on_about(self) -> None:
         """Open About window."""
         dialog = QtWidgets.QDialog()
@@ -5032,7 +5130,10 @@ def main() -> None:
         'Roboto-Bold.ttf',
         'RobotoSlab-Regular.ttf',
         'RobotoSlab-Bold.ttf',
-        'RobotoSlab-Black.ttf'
+        'RobotoSlab-Black.ttf',
+        'KodeMono-Regular.ttf',
+        'KodeMono-Medium.ttf',
+        'KodeMono-Bold.ttf',
     ]
 
     for font_file in fonts_to_load:
