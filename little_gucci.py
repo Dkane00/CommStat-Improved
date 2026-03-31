@@ -1635,6 +1635,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenu {{
                 background-color: {panel_bg};
                 color: {panel_fg};
+                font-size: 10pt;
             }}
             QMenu::item:selected {{
                 background-color: {menu_bg};
@@ -1731,9 +1732,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         for label, days in [
             ("Reset to Midnight", 0), ("Reset to 1 day ago", 1),
+            ("Reset to 2 days ago", 2), ("Reset to 3 days ago", 3),
             ("Reset to 1 week ago", 7), ("Reset to 1 month ago", 30),
-            ("Reset to 3 months ago", 90), ("Reset to 6 months ago", 180),
-            ("Reset to 1 year ago", 365),
         ]:
             action = QtWidgets.QAction(label, self)
             action.triggered.connect(lambda checked, d=days: self._reset_filter_date(d))
@@ -3341,12 +3341,14 @@ class MainWindow(QtWidgets.QMainWindow):
         """Launch Grid Finder in a separate process."""
         gridfinder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gridfinder.py")
         if os.path.exists(gridfinder_path):
+            geo = self.geometry()
             subprocess.Popen([
                 sys.executable, gridfinder_path,
                 self.config.get_color('panel_background'),
                 self.config.get_color('panel_foreground'),
                 self.config.get_color('data_background'),
                 self.config.get_color('data_foreground'),
+                str(geo.x()), str(geo.y()), str(geo.width()), str(geo.height()),
             ])
         else:
             QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find gridfinder.py")

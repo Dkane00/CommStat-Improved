@@ -327,4 +327,12 @@ if __name__ == '__main__':
     window = GridFinderApp(panel_bg, panel_fg, data_bg, data_fg)
     window.show()
 
+    if len(sys.argv) >= 9:
+        try:
+            px, py, pw, ph = int(sys.argv[5]), int(sys.argv[6]), int(sys.argv[7]), int(sys.argv[8])
+            ww, wh = window.width(), window.height()
+            window.move(px + (pw - ww) // 2, py + (ph - wh) // 2)
+        except ValueError:
+            pass
+
     sys.exit(app.exec_())
