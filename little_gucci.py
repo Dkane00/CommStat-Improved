@@ -4540,12 +4540,20 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             return ("", None)
 
-        # Filter alerts: only save if directed to one of our active groups
-        if alert_target.startswith("@"):
-            group_name = alert_target[1:].upper()  # Remove @ and normalize
+        # Filter alerts by target
+        if not alert_target.startswith("@"):
+            # No @ prefix — target is a callsign; only accept if it matches our callsign
+            local_callsign, _, __ = self.db.get_user_settings()
+            if alert_target.upper() != local_callsign.upper():
+                return ("", None)
+        elif alert_target.upper() == "@GLOBAL":
+            # @GLOBAL is a broadcast to everyone — store as @ALLCALL
+            alert_target = "@ALLCALL"
+        else:
+            # Standard @GROUP — only save if we're a member of that group
+            group_name = alert_target[1:].upper()
             active_groups = self.db.get_active_groups()
             if group_name not in active_groups:
-                # Skip alerts to inactive or non-member groups
                 return ("", None)
 
         # Build data dict for insertion

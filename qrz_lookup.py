@@ -22,8 +22,8 @@ from typing import Dict, Optional
 import folium
 import maidenhead as mh
 from PyQt5 import QtGui
-from PyQt5.QtCore import Qt, QThread, QUrl, pyqtSignal
-from PyQt5.QtGui import QColor, QCursor, QDesktopServices, QFont, QPainter, QPixmap
+from PyQt5.QtCore import QBuffer, QByteArray, Qt, QThread, QUrl, pyqtSignal
+from PyQt5.QtGui import QColor, QCursor, QDesktopServices, QFont, QMovie, QPainter, QPixmap
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import (
     QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -157,6 +157,7 @@ def _hsep() -> QFrame:
 class _ImageLoader(QThread):
     """Downloads and scales a QRZ profile image in the background."""
     image_loaded = pyqtSignal(QPixmap)
+    gif_loaded   = pyqtSignal(bytes)
 
     def __init__(self, url: str):
         super().__init__()
@@ -166,6 +167,9 @@ class _ImageLoader(QThread):
         try:
             with urllib.request.urlopen(self.url, timeout=10) as resp:
                 data = resp.read()
+            if self.url.lower().split("?")[0].endswith(".gif"):
+                self.gif_loaded.emit(data)
+                return
             px = QPixmap()
             px.loadFromData(data)
             if not px.isNull():
@@ -309,6 +313,7 @@ class _QRZInfoSection(QWidget):
     def __init__(self, hdr_bg: str = "", hdr_fg: str = "", parent=None):
         super().__init__(parent)
         self._img_loader: Optional[_ImageLoader] = None
+        self._gif_movie: Optional[QMovie] = None
         self._hdr_bg = hdr_bg
         self._hdr_fg = hdr_fg
         self._build()
@@ -500,6 +505,7 @@ class _QRZInfoSection(QWidget):
             self.lbl_image.set_url(d["image"])
             self._img_loader = _ImageLoader(d["image"])
             self._img_loader.image_loaded.connect(self._on_image_loaded)
+            self._img_loader.gif_loaded.connect(self._on_gif_loaded)
             self._img_loader.start()
         else:
             px = QPixmap("little-duck.png")
@@ -510,7 +516,28 @@ class _QRZInfoSection(QWidget):
         self.lbl_image.setPixmap(px)
         self.image_width_ready.emit(px.width())
 
+    def _on_gif_loaded(self, data: bytes) -> None:
+        buf = QBuffer()
+        buf.setData(QByteArray(data))
+        buf.open(QBuffer.ReadOnly)
+        self._gif_movie = QMovie()
+        self._gif_movie.setDevice(buf)
+        # Keep buffer alive as long as movie is alive
+        self._gif_movie._buf = buf
+        self._gif_movie.jumpToFrame(0)
+        size = self._gif_movie.currentPixmap().size()
+        target_h = 166 if size.width() < size.height() * 1.6 else 126
+        self._gif_movie.setScaledSize(
+            self._gif_movie.currentPixmap().scaledToHeight(target_h, Qt.SmoothTransformation).size()
+        )
+        self.lbl_image.setMovie(self._gif_movie)
+        self._gif_movie.start()
+        self.image_width_ready.emit(self._gif_movie.scaledSize().width())
+
     def clear(self) -> None:
+        if self._gif_movie:
+            self._gif_movie.stop()
+            self._gif_movie = None
         for w in (self.lbl_call, self.lbl_name, self.lbl_addr1, self.lbl_addr2,
                   self.lbl_county, self.lbl_country, self.lbl_license, self.lbl_born,
                   self.lbl_grid, self.lbl_lat, self.lbl_lon, self.lbl_email,
