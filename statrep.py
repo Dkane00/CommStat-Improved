@@ -40,9 +40,6 @@ DATABASE_FILE = "traffic.db3"
 _BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
 _DATAFEED = _BACKBONE + "/datafeed-808585.php"
 
-# Debug mode via --debug-mode command line flag
-_DEBUG_MODE = "--debug-mode" in sys.argv
-
 # Status codes
 STATUS_GREEN = "1"
 STATUS_YELLOW = "2"
@@ -154,14 +151,12 @@ class StatRepDialog(QDialog):
         tcp_pool: "TCPConnectionPool",
         connector_manager: "ConnectorManager",
         parent=None,
-        backbone_debug: bool = False,
         panel_background: str = DATA_BACKGROUND,
         data_background: str = DATA_BACKGROUND
     ):
         super().__init__(parent)
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
-        self.backbone_debug = backbone_debug  # Command line override for debug mode
         self.panel_background = panel_background
         self.data_background = data_background
 
@@ -299,7 +294,6 @@ class StatRepDialog(QDialog):
         callsign = self.callsign
         message = self._pending_message
         now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
-        debug = _DEBUG_MODE or self.backbone_debug
 
         def submit_thread():
             """Background thread that performs the HTTP POST."""
@@ -318,17 +312,14 @@ class StatRepDialog(QDialog):
                 with urllib.request.urlopen(req, timeout=10) as response:
                     result = response.read().decode('utf-8').strip()
 
-                # Check server response: "1" = success, other = failure (only log in debug mode)
-                if debug:
-                    if result == "1":
-                        print(f"[Backbone] Statrep submitted successfully (response: {result})")
-                    else:
-                        print(f"[Backbone] Statrep submission failed - server returned: {result}")
+                # Check server response: "1" = success, other = failure
+                if result == "1":
+                    print(f"[Backbone] Statrep submitted successfully (response: {result})")
+                else:
+                    print(f"[Backbone] Statrep submission failed - server returned: {result}")
 
             except Exception as e:
-                # Silent failure - only log to terminal in debug mode
-                if debug:
-                    print(f"[Backbone] Failed to submit statrep: {e}")
+                print(f"[Backbone] Failed to submit statrep: {e}")
 
         # Start daemon thread (won't block app shutdown)
         thread = threading.Thread(target=submit_thread, daemon=True)
@@ -402,7 +393,7 @@ class StatRepDialog(QDialog):
             if hasattr(self, 'mode_combo'):
                 self.mode_combo.setEnabled(False)
                 self.mode_combo.setCurrentIndex(-1)
-            if state:
+            if state and not getattr(self, '_forward_origin', None):
                 self._set_remarks_text(state)
             return
 
@@ -412,9 +403,9 @@ class StatRepDialog(QDialog):
             if self.mode_combo.currentIndex() == -1:
                 self.mode_combo.setCurrentIndex(0)
 
-        # Update remarks with state from connector
+        # Update remarks with state from connector (skip if forwarding - preserve forwarded remarks)
         state = get_state_from_connector(self.connector_manager, rig_name)
-        if state:
+        if state and not getattr(self, '_forward_origin', None):
             self._set_remarks_text(state)
 
         if not self.tcp_pool:

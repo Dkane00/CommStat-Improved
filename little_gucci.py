@@ -51,7 +51,7 @@ except ImportError:
     ENCHANT_AVAILABLE = False
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QDesktopServices
 from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtCore import QBuffer, QIODevice, QTimer, QDateTime, Qt, QUrl
 from PyQt5.QtWidgets import qApp
@@ -166,9 +166,9 @@ def check_internet() -> bool:
     Returns:
         True if internet is available, False otherwise.
     """
-    for host in ("8.8.8.8", "1.1.1.1"):
+    for host, port in (("www.google.com", 80), ("www.cloudflare.com", 443), ("8.8.8.8", 443)):
         try:
-            sock = socket.create_connection((host, 53), timeout=3)
+            sock = socket.create_connection((host, port), timeout=3)
             sock.close()
             return True
         except (socket.timeout, socket.error):
@@ -706,7 +706,6 @@ class CustomWebEnginePage(QWebEnginePage):
                                 condition_gray=mw.config.get_color('condition_gray'),
                                 tcp_pool=mw.tcp_pool,
                                 connector_manager=mw.connector_manager,
-                                backbone_debug=mw.backbone_debug,
                                 parent=mw
                             )
                             dlg.pin_changed.connect(
@@ -1422,7 +1421,7 @@ class DatabaseManager:
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window for CommStat."""
 
-    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False, backbone_debug: bool = False, demo_mode: bool = False, demo_version: int = 1, demo_duration: int = 60):
+    def __init__(self, config: ConfigManager, db: DatabaseManager, debug_mode: bool = False, demo_mode: bool = False, demo_version: int = 1, demo_duration: int = 60):
         """
         Initialize the main window.
 
@@ -1430,7 +1429,6 @@ class MainWindow(QtWidgets.QMainWindow):
             config: ConfigManager instance with loaded settings
             db: DatabaseManager instance for database operations
             debug_mode: Enable debug features when True
-            backbone_debug: Enable backbone StatRep submission debug logging
             demo_mode: Enable demo mode with simulated disaster data
             demo_version: Demo scenario version (1, 2, 3, etc.)
             demo_duration: Demo playback duration in seconds (default 60)
@@ -1439,7 +1437,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config = config
         self.db = db
         self.debug_mode = debug_mode
-        self.backbone_debug = backbone_debug
         self.demo_mode = demo_mode
         self.demo_version = demo_version
         self.demo_duration = demo_duration
@@ -1834,6 +1831,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 lambda checked=False, t=menu_label, u=url, l=link, lt=load_text, ep=err_prefix:
                     self._show_image_dialog(title=t, image_url=u, link_html=l, loading_text=lt, error_prefix=ep)
             )
+
+        create_action(self.tools_menu, "Artemis II Tracker", "artemis_tracker", self._on_artemis_tracker)
 
         # QRZ Lookup
         self.tools_menu.addSeparator()
@@ -3356,7 +3355,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 condition_gray=self.config.get_color('condition_gray'),
                 tcp_pool=self.tcp_pool,
                 connector_manager=self.connector_manager,
-                backbone_debug=self.backbone_debug,
                 parent=self
             )
             dlg.pin_changed.connect(
@@ -3711,7 +3709,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """Open StatRep window."""
         dialog = StatRepDialog(
             self.tcp_pool, self.connector_manager, self,
-            backbone_debug=self.backbone_debug,
             panel_background=self.config.get_color('panel_background'),
             data_background=self.config.get_color('data_background')
         )
@@ -3827,6 +3824,10 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.config.get_hide_map():
                 self.map_disabled_label.show()
                 self._start_slideshow()
+
+    def _on_artemis_tracker(self) -> None:
+        """Open the Artemis II Tracker YouTube feed in the system default browser."""
+        QDesktopServices.openUrl(QUrl("https://www.youtube.com/watch?v=M8m9YdxgJ5g"))
 
     def _on_large_map(self) -> None:
         """Open or raise the large map breakout window."""
@@ -5154,9 +5155,6 @@ def main() -> None:
     # Check for debug mode
     debug_mode = "--debug" in sys.argv
 
-    # Check for backbone debug mode
-    backbone_debug = "--debug-mode" in sys.argv
-
     # Check for demo mode with version number and optional duration
     # Usage: --demo-mode [version] [duration_seconds]
     demo_mode = False
@@ -5244,13 +5242,11 @@ def main() -> None:
     db = DatabaseManager()
 
     # Create and show main window
-    window = MainWindow(config, db, debug_mode=debug_mode, backbone_debug=backbone_debug, demo_mode=demo_mode, demo_version=demo_version, demo_duration=demo_duration)
+    window = MainWindow(config, db, debug_mode=debug_mode, demo_mode=demo_mode, demo_version=demo_version, demo_duration=demo_duration)
     window.show()
 
     if debug_mode:
         print("Debug mode enabled")
-    if backbone_debug:
-        print("Backbone debug mode enabled")
     if demo_mode:
         print(f"Demo mode enabled - Version {demo_version} - {demo_duration} second disaster simulation")
 

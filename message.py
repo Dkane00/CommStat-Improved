@@ -43,9 +43,6 @@ CONFIG_FILE = "config.ini"
 _BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
 _DATAFEED = _BACKBONE + "/datafeed-808585.php"
 
-# Debug mode via --debug-mode command line flag
-_DEBUG_MODE = "--debug-mode" in sys.argv
-
 INTERNET_RIG = "INTERNET ONLY"
 DATA_BACKGROUND = "#FFF5E1"   # matches little_gucci.py 'data_background'
 
@@ -640,16 +637,14 @@ class Ui_FormMessage:
                 with urllib.request.urlopen(req, timeout=10) as response:
                     result = response.read().decode('utf-8').strip()
 
-                # Check server response: "1" = success, other = failure (only log in debug mode)
-                if _DEBUG_MODE:
-                    if result == "1":
-                        print(f"[Backbone] Message submitted successfully (response: {result})")
-                    else:
-                        print(f"[Backbone] Message submission failed - server returned: {result}")
+                # Check server response: "1" = success, other = failure
+                if result == "1":
+                    print(f"[Backbone] Message submitted successfully (response: {result})")
+                else:
+                    print(f"[Backbone] Message submission failed - server returned: {result}")
 
             except Exception as e:
-                if _DEBUG_MODE:
-                    print(f"[Backbone] Error submitting message: {e}")
+                print(f"[Backbone] Error submitting message: {e}")
 
         # Start background thread
         thread = threading.Thread(target=submit_thread, daemon=True)

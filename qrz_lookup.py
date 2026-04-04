@@ -689,7 +689,6 @@ class StatRepDetailDialog(QDialog):
                  condition_gray: str = "",
                  tcp_pool=None,
                  connector_manager=None,
-                 backbone_debug: bool = False,
                  parent=None):
         super().__init__(parent)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
@@ -712,7 +711,6 @@ class StatRepDetailDialog(QDialog):
         }
         self._tcp_pool = tcp_pool
         self._connector_manager = connector_manager
-        self._backbone_debug = backbone_debug
         self._thread: Optional[_QRZThread] = None
         self._rc_thread: Optional[_ReadCountThread] = None
         self._map_loaded = False
@@ -985,7 +983,6 @@ class StatRepDetailDialog(QDialog):
         from statrep import StatRepDialog
         dlg = StatRepDialog(
             self._tcp_pool, self._connector_manager, self,
-            backbone_debug=self._backbone_debug,
             panel_background=self._panel_bg,
         )
         dlg.prefill(self._row_data)

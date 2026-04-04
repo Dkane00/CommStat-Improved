@@ -96,7 +96,8 @@ def get_qrz_cached(callsign: str) -> Optional[Dict]:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM qrz WHERE callsign = ?", (callsign.upper(),))
+            cs = max(callsign.upper().split('/'), key=len) if '/' in callsign else callsign.upper()
+            cursor.execute("SELECT * FROM qrz WHERE callsign = ?", (cs,))
             row = cursor.fetchone()
             if row:
                 cached_date = datetime.fromisoformat(row["insert_date"])
@@ -445,6 +446,8 @@ class QRZClient:
             Dict with callsign data or None if not found
         """
         callsign = callsign.upper().strip()
+        if '/' in callsign:
+            callsign = max(callsign.split('/'), key=len)
 
         # Check cache first (works even if QRZ is disabled)
         if use_cache:
