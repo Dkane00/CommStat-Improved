@@ -1468,6 +1468,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Live feed message buffer (stores messages from all TCP connections)
         self.feed_messages: List[str] = []
         self.max_feed_messages = 500  # Limit buffer size
+        self._hide_live_feed: bool = False  # Session-only; resets on restart
 
         # Initiate TCP connections (Connecting... messages come via status_message signal)
         self.tcp_pool.connect_all()
@@ -1786,6 +1787,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.hide_heartbeat_checkbox = create_menu_checkbox(
             self.filter_menu, "Hide CQ & Heartbeat",
             self.config.get_hide_heartbeat(), self._on_toggle_heartbeat)
+
+        self.hide_live_feed_checkbox = create_menu_checkbox(
+            self.filter_menu, "Hide Live Feed",
+            False, self._on_toggle_hide_live_feed)
 
         # STATREP & MESSAGES section
         self.filter_menu.addSeparator()
@@ -3097,18 +3102,28 @@ class MainWindow(QtWidgets.QMainWindow):
         if not hasattr(self, 'feed_text'):
             return
 
+        # Build config warnings — shown regardless of feed content
+        warnings = []
+
+        if not self.connector_manager.get_all_connectors():
+            warnings.append("⚠ No JS8Call connectors configured. Use Menu > JS8 Connectors to add a connection.")
+
+        qrz_username, _, _qrz_active = self.db.get_qrz_settings()
+        if not qrz_username:
+            warnings.append("⚠ No QRZ settings configured. Use Menu > QRZ Settings to add your QRZ credentials.")
+
+        user_callsign, _, __ = self.db.get_user_settings()
+        if not user_callsign:
+            warnings.append("⚠ No user settings configured. Use Menu > User Settings to set your callsign.")
+
+        if not self.db.get_all_groups():
+            warnings.append("⚠ No groups configured. Use Menu > Groups > Manage Groups to add a group.")
+
         if not self.feed_messages:
-            # Build startup messages for missing configuration
-            messages = []
-            messages.append("No JS8Call connectors configured.\n")
-            messages.append("Use Menu > JS8 CONNECTORS to add a connection.")
-
-            # Check for groups
-            if not self.db.get_all_groups():
-                messages.append("\n\nNo groups configured.\n")
-                messages.append("Use Menu > Groups > Manage Groups to add a group.")
-
-            self.feed_text.setPlainText(''.join(messages))
+            if warnings:
+                self.feed_text.setPlainText('\n'.join(warnings))
+            else:
+                self.feed_text.setPlainText("Waiting for JS8Call traffic...")
             return
 
         # Filter messages based on settings
@@ -3120,8 +3135,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 and '@ALLCALL CQ' not in msg.upper()
             ]
 
-        # Join messages (already in newest-first order)
-        self.feed_text.setPlainText('\n'.join(messages))
+        # Join messages (already in newest-first order), append any config warnings
+        feed_text = '\n'.join(messages)
+        if warnings:
+            feed_text += '\n\n' + '\n'.join(warnings)
+        self.feed_text.setPlainText(feed_text)
 
     def _setup_message_table(self) -> None:
         """Create the message data table."""
@@ -3770,6 +3788,16 @@ class MainWindow(QtWidgets.QMainWindow):
         """Toggle heartbeat message filtering in live feed."""
         self.config.set_hide_heartbeat(checked)
         self._load_live_feed()
+
+    def _on_toggle_hide_live_feed(self, checked: bool) -> None:
+        """Hide/show the live feed. Session-only — resets on restart."""
+        self._hide_live_feed = checked
+        if checked:
+            self.feed_text.hide()
+            self.main_layout.setRowStretch(3, 0)
+        else:
+            self.feed_text.show()
+            self.main_layout.setRowStretch(3, 1)
 
     def _on_toggle_hide_map(self, checked: bool) -> None:
         """Toggle between map and image slideshow."""
@@ -4936,7 +4964,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         username_input = QtWidgets.QLineEdit()
         username_input.setText(username)
-        username_input.setPlaceholderText("QRZ.com username")
+        username_input.setPlaceholderText("QRZ.com callsign")
         form_layout.addRow("Username:", username_input)
 
         password_input = QtWidgets.QLineEdit()
