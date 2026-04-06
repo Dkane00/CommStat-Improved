@@ -1600,12 +1600,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {panel_bg};
                 color: {panel_fg};
                 font-family: Roboto;
-                font-size: 11pt;
+                font-size: 15px;
             }}
             QMenu::item {{
                 font-family: Roboto;
-                font-size: 11pt;
-                padding: 3px 9px;
+                font-size: 15px;
+                padding: 3px 12px;
             }}
             QMenu::item:selected {{
                 background-color: {menu_bg};
@@ -1835,7 +1835,9 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         # Style the dropdown list view directly
         combo_view = QtWidgets.QListView()
-        combo_view.setFont(QtGui.QFont("Roboto", 11))
+        _combo_view_font = QtGui.QFont("Roboto", -1)
+        _combo_view_font.setPixelSize(15)
+        combo_view.setFont(_combo_view_font)
         combo_view.setStyleSheet(f"""
             QListView {{
                 background-color: {menu_bg};
@@ -1865,7 +1867,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # News ticker (scrolling text)
         self.newsfeed_label = QtWidgets.QLabel(self.header_widget)
         self.newsfeed_label.setFixedSize(740, 32)
-        self.newsfeed_label.setFont(QtGui.QFont("Roboto", 13))
+        _ticker_font = QtGui.QFont("Roboto", -1)
+        _ticker_font.setPixelSize(15)
+        self.newsfeed_label.setFont(_ticker_font)
         self.newsfeed_label.setStyleSheet(
             f"background-color: {self.config.get_color('newsfeed_background')};"
             f"color: {self.config.get_color('newsfeed_foreground')};"
@@ -2094,9 +2098,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.alert_date_label.setAlignment(Qt.AlignCenter)
         self.alert_date_label.setTextFormat(Qt.RichText)  # Enable HTML formatting
         # Date uses Roboto (clean sans-serif for readability)
-        date_font = QtGui.QFont("Roboto", 12)
+        date_font = QtGui.QFont("Roboto", -1)
+        date_font.setPixelSize(19)
         self.alert_date_label.setFont(date_font)
         alert_layout.addWidget(self.alert_date_label)
+        alert_layout.addSpacing(10)
 
         # Navigation buttons row
         nav_layout = QtWidgets.QHBoxLayout()
@@ -2104,7 +2110,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.alert_prev_btn = QtWidgets.QPushButton("<")
         self.alert_prev_btn.setFixedSize(40, 30)
-        self.alert_prev_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; }")
+        self.alert_prev_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; background-color: white; color: #000000; }")
         self.alert_prev_btn.clicked.connect(lambda: self._alert_navigate(-1))
         nav_layout.addWidget(self.alert_prev_btn)
 
@@ -2112,7 +2118,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.alert_next_btn = QtWidgets.QPushButton(">")
         self.alert_next_btn.setFixedSize(40, 30)
-        self.alert_next_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; }")
+        self.alert_next_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; background-color: white; color: #000000; }")
         self.alert_next_btn.clicked.connect(lambda: self._alert_navigate(1))
         nav_layout.addWidget(self.alert_next_btn)
 
@@ -2152,10 +2158,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Set colors based on alert color - all alerts use red
             color_map = {
-                1: ("#dc3545", "#ffffff"),  # Red (formerly Yellow)
-                2: ("#dc3545", "#ffffff"),  # Red (formerly Orange)
-                3: ("#dc3545", "#ffffff"),  # Red
-                4: ("#dc3545", "#ffffff"),  # Red (formerly Black)
+                1: ("#333333", "#ffffff"),  # was #dc3545 (formerly Yellow)
+                2: ("#333333", "#ffffff"),  # was #dc3545 (formerly Orange)
+                3: ("#333333", "#ffffff"),  # was #dc3545
+                4: ("#333333", "#ffffff"),  # was #dc3545 (formerly Black)
             }
             bg_color, text_color = color_map.get(color, ("#dc3545", "#ffffff"))
 
@@ -2175,12 +2181,12 @@ class MainWindow(QtWidgets.QMainWindow):
             if group:
                 # Show group + ALERT at top, then title in bold below (strip @ symbol)
                 group_display = group.lstrip('@')
-                formatted_title = f'<div style="font-family: \'Roboto Slab\'; font-size: 16pt; font-weight: normal; margin-top: -10px;">{group_display} - ALERT</div>'
+                formatted_title = f'<div style="font-family: \'Kode Mono\'; font-size: 22px; font-weight: bold; margin-top: -10px;">@{group_display} - ALERT</div>'
                 if title:
-                    formatted_title += f'<div style="font-family: \'Roboto Slab\'; font-size: 22pt; font-weight: 900; margin-top: 44px;">{title}</div>'
+                    formatted_title += f'<div style="font-family: \'Roboto Slab\'; font-size: 30px; font-weight: 900; margin-top: 44px;">{title}</div>'
             else:
                 # No group, just show title in bold
-                formatted_title = f'<div style="font-family: \'Roboto Slab\'; font-size: 22pt; font-weight: 900;">{title if title else ""}</div>'
+                formatted_title = f'<div style="font-family: \'Roboto Slab\'; font-size: 26px; font-weight: 900;">{title if title else ""}</div>'
 
             self.alert_display.setStyleSheet(f"background-color: {bg_color};")
             self.alert_title_label.setStyleSheet(f"color: {text_color};")
@@ -3023,7 +3029,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # No word wrap, always show scrollbars
         self.feed_text.setWordWrapMode(QtGui.QTextOption.NoWrap)
         self.feed_text.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.feed_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.feed_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # Add to layout (row 3, full width)
         self.main_layout.addWidget(self.feed_text, 3, 0, 1, 2)
@@ -3087,7 +3093,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_table_widget(self.message_table, [
             "", "Date Time", "Freq", "From", "To", "ID", "Message"
         ])
-        self.message_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.message_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.message_table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.message_table.setFixedHeight(MAP_HEIGHT)
 
         # Connect click handler
@@ -3176,10 +3183,10 @@ class MainWindow(QtWidgets.QMainWindow):
                         <BODY style="margin:0;font-family:Arial,sans-serif;text-align:center;
                                      height:100%;display:flex;flex-direction:column;
                                      justify-content:center;align-items:center;">
-                            <p style="font-size:11pt;font-weight:bold;margin:0 0 2px 0;">{callsign}</p>
-                            <p style="font-size:11pt;font-weight:normal;margin:0 0 4px 0;">{sr_date}</p>
+                            <p style="font-size:15px;font-weight:bold;margin:0 0 2px 0;">{callsign}</p>
+                            <p style="font-size:15px;font-weight:normal;margin:0 0 4px 0;">{sr_date}</p>
                             <a href="http://localhost/statrep/{statrep_id}/{callsign}"
-                               style="font-size:11pt;color:#0000EE;">Details</a>
+                               style="font-size:15px;color:#0000EE;">Details</a>
                         </BODY>
                     </HTML>'''
                     iframe = folium.IFrame(html, width=120, height=78)
@@ -3632,7 +3639,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Headlines list
         list_widget = QtWidgets.QListWidget()
-        list_widget.setFont(QtGui.QFont("Arial", 11))
+        _list_font = QtGui.QFont("Roboto", -1)
+        _list_font.setPixelSize(13)
+        list_widget.setFont(_list_font)
         list_widget.setAlternatingRowColors(True)
         for i, headline in enumerate(headlines[:20], 1):
             list_widget.addItem(f"{i}. {headline}")
@@ -3945,7 +3954,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 # Use Kode Mono for remarks/message text columns
                 if (is_statrep_table and col_num == 20) or (is_message_table and col_num == 6):
-                    item.setFont(QtGui.QFont("Kode Mono", 11))
+                    _mono_item_font = QtGui.QFont("Kode Mono", -1)
+                    _mono_item_font.setPixelSize(13)
+                    item.setFont(_mono_item_font)
 
                 # Add tooltip for multi-line remarks
                 if decoded_remarks:
@@ -4110,7 +4121,27 @@ class MainWindow(QtWidgets.QMainWindow):
         panel_fg = self.config.get_color('panel_foreground')
         checkbox = QtWidgets.QCheckBox(label)
         checkbox.setChecked(is_checked)
-        checkbox.setStyleSheet(f"QCheckBox {{ padding: 4px 8px; background-color: {panel_bg}; color: {panel_fg}; font-family: Roboto; font-size: 11pt; }}")
+        checkbox.setStyleSheet(f"""
+            QCheckBox {{
+                padding: 4px 8px;
+                background-color: {panel_bg};
+                color: {panel_fg};
+                font-family: Roboto;
+                font-size: 15px;
+            }}
+            QCheckBox::indicator {{
+                width: 14px;
+                height: 14px;
+                background-color: white;
+                border: 1px solid #555555;
+                border-radius: 2px;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: #000000;
+                border: 1px solid #000000;
+                border-radius: 2px;
+            }}
+        """)
         checkbox.stateChanged.connect(lambda state: handler(state == Qt.Checked))
         action = QtWidgets.QWidgetAction(self)
         action.setDefaultWidget(checkbox)

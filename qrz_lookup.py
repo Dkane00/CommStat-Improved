@@ -800,10 +800,12 @@ class StatRepDetailDialog(QDialog):
 
         self.comments = QTextEdit()
         self.comments.setReadOnly(True)
-        self.comments.setFont(QFont("Arial", fs(11)))
+        _comments_font = QFont("Kode Mono", -1)
+        _comments_font.setPixelSize(15)
+        self.comments.setFont(_comments_font)
         self.comments.setFixedSize(480, 270)
         self.comments.setStyleSheet(
-            f"background-color:{self._data_bg}; border:1px solid #ccc; border-radius:4px;"
+            f"background-color:{self._data_bg}; color:#000000; border:1px solid #ccc; border-radius:4px;"
         )
         lower.addWidget(self.comments)
         main.addLayout(lower)
@@ -1100,8 +1102,8 @@ def _text_to_html(text: str, bg: str) -> str:
     )
     lines = linked.replace("\n", "<br>")
     return (
-        f'<html><body style="background-color:{bg};color:#333333;'
-        f'font-family:Arial;font-size:11pt;">{lines}</body></html>'
+        f'<html><body style="background-color:{bg};color:#000000;'
+        f'font-family:\'Kode Mono\';font-size:15px;">{lines}</body></html>'
     )
 
 
@@ -1161,7 +1163,9 @@ class MessageDetailDialog(QDialog):
         lower.addWidget(self.map_view, alignment=Qt.AlignTop)
 
         self.msg_text = QTextBrowser()
-        self.msg_text.setFont(QFont("Arial", fs(11)))
+        _msg_font = QFont("Kode Mono", -1)
+        _msg_font.setPixelSize(15)
+        self.msg_text.setFont(_msg_font)
         self.msg_text.setFixedSize(480, 230)
         self.msg_text.setStyleSheet(
             f"background-color:{self._data_bg}; border:1px solid #ccc; border-radius:4px;"
