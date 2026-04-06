@@ -6,17 +6,14 @@
 commstat.py - CommStat Launcher
 
 Checks for pending updates before launching the main application.
-If an update zip file is present, asks the user before extracting it to overwrite program files.
+If an update zip file is present, extracts it to overwrite program files.
 """
 
 import os
 import sys
-import sqlite3
 import zipfile
 import subprocess
 import shutil
-import tkinter as tk
-from tkinter import messagebox
 from pathlib import Path
 
 # Constants
@@ -26,8 +23,6 @@ UPDATE_ZIP = UPDATE_FOLDER / "update.zip"
 MAIN_APP = SCRIPT_DIR / "little_gucci.py"
 DATABASE_FILE = SCRIPT_DIR / "traffic.db3"
 DATABASE_TEMPLATE = SCRIPT_DIR / "traffic.db3.template"
-DATABASE_JOURNAL = SCRIPT_DIR / "traffic.db3-journal"
-DATABASE_WAL = SCRIPT_DIR / "traffic.db3-wal"
 
 
 def apply_update() -> bool:
@@ -40,21 +35,7 @@ def apply_update() -> bool:
     if not UPDATE_ZIP.exists():
         return False
 
-    # Ask user before applying
-    root = tk.Tk()
-    root.withdraw()
-    answer = messagebox.askyesno(
-        "Update Available",
-        "A CommStat update is available. Would you like to install it now?"
-    )
-    root.update()
-    root.destroy()
-
-    if not answer:
-        print("Update skipped by user.")
-        return False
-
-    print("Applying update...")
+    print("Update found. Applying...")
 
     try:
         with zipfile.ZipFile(UPDATE_ZIP, 'r') as zf:
@@ -104,56 +85,6 @@ def setup_database() -> bool:
         return False
 
 
-def check_database() -> None:
-    """
-    Run integrity check and lock detection on traffic.db3.
-
-    Warns the user (via console + dialog) if any issues are found,
-    and offers to abort the launch.
-    """
-    if not DATABASE_FILE.exists():
-        return  # setup_database() already handled missing db
-
-    warnings = []
-
-    # Check for leftover journal/WAL files (unclean shutdown indicator)
-    for stale in (DATABASE_JOURNAL, DATABASE_WAL):
-        if stale.exists():
-            warnings.append(f"Stale file found (unclean shutdown?): {stale.name}")
-
-    # Integrity check + lock detection via Python sqlite3
-    try:
-        con = sqlite3.connect(str(DATABASE_FILE), timeout=1)
-        result = con.execute("PRAGMA integrity_check;").fetchall()
-        con.close()
-        flat = [row[0] for row in result]
-        if flat == ["ok"]:
-            print(f"{DATABASE_FILE.name}: ok")
-        else:
-            for msg in flat:
-                warnings.append(f"Integrity issue: {msg}")
-    except sqlite3.OperationalError as e:
-        if "locked" in str(e).lower():
-            warnings.append(f"{DATABASE_FILE.name} is locked — another instance may be running.")
-        else:
-            warnings.append(f"Database error: {e}")
-
-    if not warnings:
-        return
-
-    for w in warnings:
-        print(f"WARNING: {w}")
-
-    msg = "\n".join(warnings) + "\n\nLaunch CommStat anyway?"
-    root = tk.Tk()
-    root.withdraw()
-    proceed = messagebox.askyesno("Database Warning", msg, icon="warning")
-    root.update()
-    root.destroy()
-    if not proceed:
-        sys.exit(1)
-
-
 def launch_main_app() -> None:
     """Launch the main CommStat application."""
     if not MAIN_APP.exists():
@@ -177,7 +108,6 @@ def main() -> None:
 
     apply_update()
     setup_database()
-    check_database()
     launch_main_app()
 
 
