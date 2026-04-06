@@ -71,42 +71,17 @@ from connector_manager import ConnectorManager
 from js8_tcp_client import TCPConnectionPool
 from js8_connectors import JS8ConnectorsDialog
 from id_utils import generate_time_based_id
+from constants import *
 
 
 # =============================================================================
 # Constants
 # =============================================================================
 
-VERSION = "4.0.3"
-WINDOW_TITLE = f"CommStat (v{VERSION}) by N0DDK"
-WINDOW_SIZE = (1440, 832)
-CONFIG_FILE = "config.ini"
-ICON_FILE = "radiation-32.png"
-DATABASE_FILE = "traffic.db3"
-
-# Default filter date range
-DEFAULT_FILTER_START = "2023-01-01"
-
-# Group settings
-MAX_GROUP_NAME_LENGTH = 8
-
-# Map and layout dimensions
-MAP_WIDTH = 604
-MAP_HEIGHT = 340
-SLIDESHOW_INTERVAL = 5  # Minutes between image changes
-
 # Backbone server for remote announcements and slideshow images
 # This allows the developer to push messages/images to all CommStat users
 _BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
 _PING = _BACKBONE + "/heartbeat-808585.php"
-
-# Internet connectivity check interval (30 minutes in ms)
-INTERNET_CHECK_INTERVAL = 30 * 60 * 1000
-
-# News feed animation timing
-NEWSFEED_TYPE_INTERVAL_MS = 60    # ms per character during type-on
-NEWSFEED_PAUSE_MS = 20000         # ms to hold when window is full
-NEWSFEED_SCROLL_DURATION_MS = 1000  # total ms for the scroll-off phase
 
 # Solar/radio image dialogs: (menu_label, image_url, link_html, loading_text, error_prefix)
 SOLAR_IMAGE_DIALOGS = [
@@ -120,38 +95,6 @@ SOLAR_IMAGE_DIALOGS = [
      '<a href="https://www.hamqsl.com/solar.html">View more at hamqsl.com</a>',
      "Loading solar conditions...", "Failed to load solar data"),
 ]
-
-# Default color scheme for UI elements
-# These colors can be customized via config.ini in the future
-DEFAULT_COLORS: Dict[str, str] = {
-    # Main window colors
-    'program_background': '#A52A2A',	# Maroon
-    'program_foreground': '#FFFFFF',
-    'menu_background': '#3050CC',       # Blue
-    'menu_foreground': '#FFFFFF',
-    'title_bar_background': '#F07800',  # Orange
-    'title_bar_foreground': '#FFFFFF',
-    # News feed marquee colors
-    'newsfeed_background': '#242424',   # Dark gray
-    'newsfeed_foreground': '#00FF00',   # Green text
-    # Clock display colors
-    'time_background': '#282864',       # Navy blue
-    'time_foreground': '#FFFF00',       # Light blue was #88CCFF, was #AACCEE
-    # StatRep condition indicator colors (traffic light system)
-    'condition_green': '#28A745',       # Good normal status        was #108010
-    'condition_yellow': '#FFFF77',      # Caution/degraded status
-    'condition_red': '#DC3534',         # Critical/emergency status was #BB0000
-    'condition_gray': '#6C757D',        # Unknown/no data           was #808080
-    # Data table colors
-    'data_background': '#F8F6F4',	# Cream was #FFF5E1
-    'data_foreground': '#000000',
-    # Live feed display colors
-    'feed_background': '#000000',
-    'feed_foreground': '#FFFFFF',
-    # Panel colors for secondary UI elements (dropdown menus, sub-panels)
-    'panel_background': '#DDDDDD',
-    'panel_foreground': '#000000',
-}
 
 
 def hz_to_mhz(freq_hz: float, offset: float = 0) -> float:
@@ -529,30 +472,6 @@ def map_f301_digits_to_fields(digits: str) -> dict:
 
     return f304_fields
 
-
-# StatRep table column headers
-STATREP_HEADERS = [
-    "", "Date Time", "Freq", "From", "To", "ID", "Grid", "Scope", "Map",
-    "Powr", "H2O", "Med", "Comm", "Trvl", "Inet", "Fuel", "Food",
-    "Crime", "Civil", "Pol", "Remarks"
-]
-
-class ConsoleColors:
-    """ANSI color codes for console output."""
-    SUCCESS = "\033[92m"  # Green
-    WARNING = "\033[93m"  # Yellow
-    ERROR = "\033[91m"    # Red
-    RESET = "\033[0m"
-
-
-# Default RSS news feeds
-DEFAULT_RSS_FEEDS: Dict[str, str] = {
-    "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
-    "AP News": "https://feedx.net/rss/ap.xml",
-    "BBC World": "http://feeds.bbci.co.uk/news/world/rss.xml",
-    "Fox News": "https://moxie.foxnews.com/google-publisher/latest.xml",
-    "NPR News": "https://feeds.npr.org/1001/rss.xml",
-}
 
 
 # =============================================================================
@@ -1363,6 +1282,13 @@ class DatabaseManager:
             row = cursor.fetchone()
             return (row[0] or "", row[1] or "", row[2] or "") if row else ("", "", "")
         return self._execute(op, ("", "", ""))
+
+    def get_qrz_callsigns(self) -> set:
+        """Return set of all callsigns cached in the qrz table."""
+        def op(cursor, conn):
+            cursor.execute("SELECT callsign FROM qrz")
+            return {row[0].upper() for row in cursor.fetchall()}
+        return self._execute(op, set())
 
     def set_user_settings(self, callsign: str, grid: str, state: str) -> bool:
         """Save user callsign, grid square, and state to controls table."""
@@ -3077,7 +3003,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Feed text area
         self.feed_text = QtWidgets.QPlainTextEdit(self.central_widget)
         self.feed_text.setObjectName("feedText")
-        mono_font = QtGui.QFont("Kode Mono", 10)
+        mono_font = QtGui.QFont(FONT_MONO, 10, QtGui.QFont.Medium)
         self.feed_text.setFont(mono_font)
         self.feed_text.setStyleSheet(
             f"background-color: {self.config.get_color('feed_background')};"
@@ -3107,18 +3033,18 @@ class MainWindow(QtWidgets.QMainWindow):
         warnings = []
 
         if not self.connector_manager.get_all_connectors():
-            warnings.append("⚠ No JS8Call connectors configured. Use Menu > JS8 Connectors to add a connection.")
+            warnings.append("No JS8Call connectors configured. Use Menu > JS8 Connectors to add a connection.")
 
         qrz_username, _, _qrz_active = self.db.get_qrz_settings()
         if not qrz_username:
-            warnings.append("⚠ No QRZ settings configured. Use Menu > QRZ Settings to add your QRZ credentials.")
+            warnings.append("No QRZ settings configured. Use Menu > QRZ Settings to add your QRZ credentials.")
 
         user_callsign, _, __ = self.db.get_user_settings()
         if not user_callsign:
-            warnings.append("⚠ No user settings configured. Use Menu > User Settings to set your callsign.")
+            warnings.append("No user settings configured. Use Menu > User Settings to set your callsign.")
 
         if not self.db.get_all_groups():
-            warnings.append("⚠ No groups configured. Use Menu > Groups > Manage Groups to add a group.")
+            warnings.append("No groups configured. Use Menu > Groups > Manage Groups to add a group.")
 
         if not self.feed_messages:
             if warnings:
@@ -3906,6 +3832,11 @@ class MainWindow(QtWidgets.QMainWindow):
         is_message_table = (table == self.message_table)
         is_statrep_table = (table == self.statrep_table)
 
+        # Pre-fetch QRZ callsigns and user callsign for bold highlighting
+        qrz_callsigns = self.db.get_qrz_callsigns()
+        user_callsign, _, __ = self.db.get_user_settings()
+        user_callsign = user_callsign.upper() if user_callsign else ""
+
         # Get abbreviations and normalization setting for text processing
         apply_normalization, abbreviations = self._get_normalization_settings()
 
@@ -4015,11 +3946,20 @@ class MainWindow(QtWidgets.QMainWindow):
                 if raw_message is not None and is_message_table and col_num == 6:
                     item.setData(QtCore.Qt.UserRole, raw_message)
 
-                # Bold From and To columns (3 and 4) if direct message
-                if bold_row and col_num in (3, 4):
-                    font = item.font()
-                    font.setBold(True)
-                    item.setFont(font)
+                # Bold From callsign (col 3) if callsign is in QRZ cache
+                if col_num == 3:
+                    from_call = display_value.upper()
+                    if from_call in qrz_callsigns:
+                        font = item.font()
+                        font.setBold(True)
+                        item.setFont(font)
+                # Bold To callsign (col 4) if direct message OR matches user's callsign
+                elif col_num == 4:
+                    to_call = display_value.upper()
+                    if bold_row or (is_message_table and user_callsign and to_call == user_callsign):
+                        font = item.font()
+                        font.setBold(True)
+                        item.setFont(font)
 
                 if status_colors and value in status_colors:
                     color = QColor(self.config.get_color(status_colors[value]))
@@ -4938,7 +4878,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Determine if message is relevant (to group or to our callsign)
         is_to_group = to_call.startswith("@")
         user_callsign = self.get_callsign_for_rig(rig_name)
-        is_to_user = to_call == user_callsign if user_callsign else False
+        is_to_user = to_call.split("/")[0] == user_callsign if user_callsign else False
 
         # Only process if to group OR to our callsign
         if not (is_to_group or is_to_user):
