@@ -216,14 +216,14 @@ class Ui_FormMessage:
 
         self.lineEdit_2 = QtWidgets.QLineEdit(FormMessage)
         self.lineEdit_2.setGeometry(QtCore.QRect(190, 177, 530, 26))
-        self.lineEdit_2.setFont(font)
+        self.lineEdit_2.setFont(QtGui.QFont("Kode Mono", 12))
         self.lineEdit_2.setMaxLength(MAX_MESSAGE_LENGTH)
         self.lineEdit_2.setObjectName("lineEdit_2")
 
         # Multi-line message field for Internet Only (hidden by default)
         self.message_expanded = QtWidgets.QPlainTextEdit(FormMessage)
         self.message_expanded.setGeometry(QtCore.QRect(190, 177, 530, 100))
-        self.message_expanded.setFont(font)
+        self.message_expanded.setFont(QtGui.QFont("Kode Mono", 12))
         self.message_expanded.setStyleSheet(
             "background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px;"
         )

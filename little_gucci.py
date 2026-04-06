@@ -1087,6 +1087,7 @@ class DatabaseManager:
                                fuel, food, crime, civil, political, comments, source, id
                         FROM statrep
                         WHERE {date_condition} OR pinned = 1
+                        ORDER BY datetime DESC
                     """
                     params = date_params
                 else:
@@ -1099,6 +1100,7 @@ class DatabaseManager:
                                fuel, food, crime, civil, political, comments, source, id
                         FROM statrep
                         WHERE target IN ({placeholders}) AND ({date_condition} OR pinned = 1)
+                        ORDER BY datetime DESC
                     """
                     params = groups_with_at + date_params
 
@@ -1657,6 +1659,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenuBar {{
                 background-color: {menu_bg};
                 color: {menu_fg};
+                font-family: Roboto;
                 font-size: 11pt;
                 font-weight: bold;
             }}
@@ -1669,7 +1672,13 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenu {{
                 background-color: {panel_bg};
                 color: {panel_fg};
-                font-size: 10pt;
+                font-family: Roboto;
+                font-size: 11pt;
+            }}
+            QMenu::item {{
+                font-family: Roboto;
+                font-size: 11pt;
+                padding: 3px 9px;
             }}
             QMenu::item:selected {{
                 background-color: {menu_bg};
@@ -1747,17 +1756,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menubar.addMenu(self.filter_menu)
 
         # Helper to create styled menu checkboxes
-        def create_menu_checkbox(menu, label, is_checked, handler):
-            panel_bg = self.config.get_color('panel_background')
-            panel_fg = self.config.get_color('panel_foreground')
-            checkbox = QtWidgets.QCheckBox(label)
-            checkbox.setChecked(is_checked)
-            checkbox.setStyleSheet(f"QCheckBox {{ padding: 4px 8px; background-color: {panel_bg}; color: {panel_fg}; }}")
-            checkbox.stateChanged.connect(lambda state: handler(state == Qt.Checked))
-            action = QtWidgets.QWidgetAction(self)
-            action.setDefaultWidget(checkbox)
-            menu.addAction(action)
-            return checkbox
 
         # DATE FILTERING section
         date_filter_label = QtWidgets.QAction("DATE FILTERING", self)
@@ -1767,7 +1765,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for label, days in [
             ("Reset to Midnight", 0), ("Reset to 1 day ago", 1),
             ("Reset to 2 days ago", 2), ("Reset to 3 days ago", 3),
-            ("Reset to 1 week ago", 7), ("Reset to 1 month ago", 30),
+            ("Reset to 1 week ago", 7),
         ]:
             action = QtWidgets.QAction(label, self)
             action.triggered.connect(lambda checked, d=days: self._reset_filter_date(d))
@@ -1784,11 +1782,11 @@ class MainWindow(QtWidgets.QMainWindow):
         live_feed_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(live_feed_label)
 
-        self.hide_heartbeat_checkbox = create_menu_checkbox(
+        self.hide_heartbeat_checkbox = self._create_menu_checkbox(
             self.filter_menu, "Hide CQ & Heartbeat",
             self.config.get_hide_heartbeat(), self._on_toggle_heartbeat)
 
-        self.hide_live_feed_checkbox = create_menu_checkbox(
+        self.hide_live_feed_checkbox = self._create_menu_checkbox(
             self.filter_menu, "Hide Live Feed",
             False, self._on_toggle_hide_live_feed)
 
@@ -1798,10 +1796,10 @@ class MainWindow(QtWidgets.QMainWindow):
         statrep_messages_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(statrep_messages_label)
 
-        self.show_all_groups_checkbox = create_menu_checkbox(
+        self.show_all_groups_checkbox = self._create_menu_checkbox(
             self.filter_menu, "Show All My Groups",
             self.config.get_show_all_groups(), self._on_toggle_show_all_groups)
-        self.show_every_group_checkbox = create_menu_checkbox(
+        self.show_every_group_checkbox = self._create_menu_checkbox(
             self.filter_menu, "Show Every Group",
             self.config.get_show_every_group(), self._on_toggle_show_every_group)
 
@@ -1811,10 +1809,10 @@ class MainWindow(QtWidgets.QMainWindow):
         map_option_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(map_option_label)
 
-        self.hide_map_checkbox = create_menu_checkbox(
+        self.hide_map_checkbox = self._create_menu_checkbox(
             self.filter_menu, "Hide Map",
             self.config.get_hide_map(), self._on_toggle_hide_map)
-        self.show_alerts_checkbox = create_menu_checkbox(
+        self.show_alerts_checkbox = self._create_menu_checkbox(
             self.filter_menu, "Show Alerts",
             self.config.get_show_alerts(), self._on_toggle_show_alerts)
 
@@ -1881,7 +1879,7 @@ class MainWindow(QtWidgets.QMainWindow):
         fg_color = self.config.get_color('program_foreground')
         menu_bg = self.config.get_color('menu_background')
         menu_fg = self.config.get_color('menu_foreground')
-        font = QtGui.QFont("Arial", 13, QtGui.QFont.Bold)
+        font = QtGui.QFont("Roboto", 13, QtGui.QFont.Bold)
 
         # News label
         self.label_newsfeed = QtWidgets.QLabel(self.header_widget)
@@ -1893,7 +1891,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # RSS Feed selector dropdown
         self.feed_combo = QtWidgets.QComboBox(self.header_widget)
         self.feed_combo.setFixedSize(120, 28)
-        self.feed_combo.setFont(QtGui.QFont("Arial", 13))
+        self.feed_combo.setFont(QtGui.QFont("Roboto", 11))
         self.feed_combo.setStyleSheet(f"""
             QComboBox {{
                 background-color: {menu_bg};
@@ -1907,7 +1905,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         # Style the dropdown list view directly
         combo_view = QtWidgets.QListView()
-        combo_view.setFont(QtGui.QFont("Arial", 13))
+        combo_view.setFont(QtGui.QFont("Roboto", 11))
         combo_view.setStyleSheet(f"""
             QListView {{
                 background-color: {menu_bg};
@@ -1937,7 +1935,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # News ticker (scrolling text)
         self.newsfeed_label = QtWidgets.QLabel(self.header_widget)
         self.newsfeed_label.setFixedSize(740, 32)
-        self.newsfeed_label.setFont(QtGui.QFont("Arial", 13))
+        self.newsfeed_label.setFont(QtGui.QFont("Roboto", 13))
         self.newsfeed_label.setStyleSheet(
             f"background-color: {self.config.get_color('newsfeed_background')};"
             f"color: {self.config.get_color('newsfeed_foreground')};"
@@ -1947,7 +1945,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Last 20 button - shows last 20 news headlines
         self.last20_button = QtWidgets.QPushButton("Last 20", self.header_widget)
         self.last20_button.setFixedSize(80, 28)
-        self.last20_button.setFont(QtGui.QFont("Arial", 13))
+        self.last20_button.setFont(QtGui.QFont("Roboto", 13))
         self.last20_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {menu_bg};
@@ -1985,7 +1983,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Time display
         self.time_label = QtWidgets.QLabel(self.header_widget)
         self.time_label.setFixedSize(120, 32)
-        self.time_label.setFont(QtGui.QFont("Arial", 13))
+        self.time_label.setFont(QtGui.QFont("Kode Mono", 13))
         self.time_label.setStyleSheet(
             f"background-color: {self.config.get_color('time_background')};"
             f"color: {self.config.get_color('time_foreground')};"
@@ -2007,11 +2005,13 @@ class MainWindow(QtWidgets.QMainWindow):
             QTableWidget {{
                 background-color: {data_bg};
                 color: {data_fg};
+                font-family: Roboto;
                 font-size: 10pt;
             }}
             QTableWidget QHeaderView::section {{
                 background-color: {title_bg};
                 color: {title_fg};
+                font-family: Roboto;
                 font-weight: bold;
                 padding: 4px;
                 border: 1px solid {title_bg};
@@ -2027,8 +2027,9 @@ class MainWindow(QtWidgets.QMainWindow):
             QHeaderView::section {{
                 background-color: {title_bg};
                 color: {title_fg};
+                font-family: Roboto;
                 font-weight: bold;
-                font-size: 10pt;
+                font-size: 11pt;
                 padding: 4px;
             }}
         """)
@@ -3237,11 +3238,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     # Create popup HTML
                     sr_date = row[1][:10] if row[1] else ""
                     html = f'''<HTML style="height:100%;">
-                        <BODY style="margin:0;font-family:Arial;text-align:center;
+                        <BODY style="margin:0;font-family:Arial,sans-serif;text-align:center;
                                      height:100%;display:flex;flex-direction:column;
                                      justify-content:center;align-items:center;">
                             <p style="font-size:11pt;font-weight:bold;margin:0 0 2px 0;">{callsign}</p>
-                            <p style="font-size:9pt;font-weight:normal;margin:0 0 4px 0;">{sr_date}</p>
+                            <p style="font-size:11pt;font-weight:normal;margin:0 0 4px 0;">{sr_date}</p>
                             <a href="http://localhost/statrep/{statrep_id}/{callsign}"
                                style="font-size:11pt;color:#0000EE;">Details</a>
                         </BODY>
@@ -4002,6 +4003,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 item = QTableWidgetItem(display_value)
 
+                # Use Kode Mono for remarks/message text columns
+                if (is_statrep_table and col_num == 20) or (is_message_table and col_num == 6):
+                    item.setFont(QtGui.QFont("Kode Mono", 11))
+
                 # Add tooltip for multi-line remarks
                 if decoded_remarks:
                     item.setToolTip(decoded_remarks)
@@ -4029,9 +4034,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 if cs_item:
                     cs_item.setData(QtCore.Qt.UserRole, row_data[22])
 
-        # Sort by datetime column (column 1 for both statrep and message tables)
-        sort_column = 1 if (is_statrep_table or is_message_table) else 0
-        table.sortItems(sort_column, QtCore.Qt.DescendingOrder)
+        # Sort by datetime column for message and alert tables (statrep is sorted by SQL)
+        if is_message_table:
+            table.sortItems(1, QtCore.Qt.DescendingOrder)
+        elif not is_statrep_table:
+            table.sortItems(0, QtCore.Qt.DescendingOrder)
 
     def _get_normalization_settings(self) -> Tuple[bool, Optional[Dict[str, str]]]:
         """Get text normalization flag and abbreviations dict.
@@ -4148,6 +4155,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
         dialog.exec_()
 
+    def _create_menu_checkbox(self, menu, label: str, is_checked: bool, handler) -> QtWidgets.QCheckBox:
+        """Create a styled checkbox as a menu item and add it to the given menu."""
+        panel_bg = self.config.get_color('panel_background')
+        panel_fg = self.config.get_color('panel_foreground')
+        checkbox = QtWidgets.QCheckBox(label)
+        checkbox.setChecked(is_checked)
+        checkbox.setStyleSheet(f"QCheckBox {{ padding: 4px 8px; background-color: {panel_bg}; color: {panel_fg}; font-family: Roboto; font-size: 11pt; }}")
+        checkbox.stateChanged.connect(lambda state: handler(state == Qt.Checked))
+        action = QtWidgets.QWidgetAction(self)
+        action.setDefaultWidget(checkbox)
+        menu.addAction(action)
+        return checkbox
+
     def _populate_groups_menu(self) -> None:
         """Populate the Groups menu with checkable group items."""
         # Remove existing group actions (keep Manage Groups, Show Groups, separator, and title)
@@ -4162,18 +4182,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.groups_menu.addAction(title_action)
 
         # Add groups alphabetically with checkboxes (menu stays open when clicked)
-        panel_bg = self.config.get_color('panel_background')
-        panel_fg = self.config.get_color('panel_foreground')
-        checkbox_style = f"QCheckBox {{ padding: 4px 8px; background-color: {panel_bg}; color: {panel_fg}; }}"
         groups = self.db.get_all_groups_with_status()
         for name, is_active in groups:  # Already sorted by name from DB
-            checkbox = QtWidgets.QCheckBox(name)
-            checkbox.setChecked(is_active)
-            checkbox.setStyleSheet(checkbox_style)
-            checkbox.stateChanged.connect(lambda state, n=name: self._toggle_group(n, state == Qt.Checked))
-            widget_action = QtWidgets.QWidgetAction(self)
-            widget_action.setDefaultWidget(checkbox)
-            self.groups_menu.addAction(widget_action)
+            self._create_menu_checkbox(
+                self.groups_menu, name, is_active,
+                lambda checked, n=name: self._toggle_group(n, checked))
 
     def _toggle_group(self, group_name: str, active: bool) -> None:
         """Toggle a group's active status."""
@@ -4484,24 +4497,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Validate and get grid (use QRZ if invalid/missing)
         statrep_grid = self._resolve_grid(rig_name, statrep_grid, from_callsign, grid, "STATREP")
 
-        # Handle forwarded statrep
-        if is_forwarded and len(fields) > 4:
-            # Remove empty trailing fields
-            while fields and not fields[-1].strip():
-                fields.pop()
-            # Last field is original sender callsign
-            origin_call = fields[-1].strip() if len(fields) > 4 else ""
-            # Comments are between SRCODE and origin
-            comments_raw = ",".join(fields[4:-1]).strip() if len(fields) > 5 else ""
-            comments = sanitize_ascii(comments_raw)
-            # Append original sender info; from_callsign (forwarder) remains the sender
-            if origin_call:
-                orig_suffix = f" ORIGINALLY FROM: {origin_call}"
-                comments = (comments + orig_suffix) if comments else orig_suffix.lstrip()
-        else:
-            # Standard statrep comments
-            comments_raw = ",".join([f for f in fields[4:] if f.strip()]).strip() if len(fields) > 4 else ""
-            comments = sanitize_ascii(comments_raw)
+        # Comments — same parsing for both standard and forwarded
+        # ("Forwarded By:" is already embedded in the remarks text by the sender)
+        comments_raw = ",".join([f for f in fields[4:] if f.strip()]).strip() if len(fields) > 4 else ""
+        comments = sanitize_ascii(comments_raw)
 
         # Map scope
         SCOPE_MAP = {
@@ -4516,6 +4515,28 @@ class MainWindow(QtWidgets.QMainWindow):
         # Insert statrep
         sr_fields = list(srcode[:12])  # Use only first 12 digits
         date_only, _ = parse_message_datetime(utc)
+
+        # Backbone duplicate detection: if we already have this record, only update global_id
+        if source == 2:
+            try:
+                with sqlite3.connect(DATABASE_FILE, timeout=10) as _conn:
+                    _existing = _conn.execute(
+                        "SELECT id, global_id FROM statrep WHERE date = ? AND from_callsign = ? AND sr_id = ?",
+                        (date_only, from_callsign, sr_id)
+                    ).fetchone()
+                    if _existing:
+                        _ex_id, _ex_gid = _existing
+                        if global_id and not _ex_gid:
+                            _conn.execute(
+                                "UPDATE statrep SET global_id = ? WHERE id = ?",
+                                (global_id, _ex_id)
+                            )
+                            _conn.commit()
+            except sqlite3.Error:
+                _existing = None
+            if _existing:
+                print(f"[{rig_name}] Skipping duplicate STATREP from {from_callsign} (ID: {sr_id})")
+                return ("", None)
 
         # Build data dict for insertion
         data = {

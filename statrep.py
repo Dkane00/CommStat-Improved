@@ -180,7 +180,8 @@ class StatRepDialog(QDialog):
         self.selected_group = ""
         self.statrep_id = ""
         self._pending_frequency = 0  # For storing frequency during transmit
-        self._forwarder_callsign = ""  # Forwarder's callsign in forward mode
+        self._forwarder_callsign = ""       # Forwarder's callsign in forward mode
+        self._forward_original_remarks = "" # Original remarks before "Forwarded By:" is appended
 
         # Status combo boxes
         self.status_combos: Dict[str, QComboBox] = {}
@@ -381,6 +382,7 @@ class StatRepDialog(QDialog):
             callsign, grid, state = self._get_internet_user_settings()
             if getattr(self, '_forward_origin', None):
                 self._forwarder_callsign = callsign
+                self._update_forward_remarks_field(callsign)
             else:
                 self.grid = grid
                 self.callsign = callsign
@@ -506,6 +508,7 @@ class StatRepDialog(QDialog):
         if self.rig_combo.currentText() == rig_name:
             if getattr(self, '_forward_origin', None):
                 self._forwarder_callsign = callsign
+                self._update_forward_remarks_field(callsign)
             else:
                 self.callsign = callsign
                 if hasattr(self, 'from_field'):
@@ -745,7 +748,7 @@ class StatRepDialog(QDialog):
 
         # Single-line remarks (default, for radio)
         self.remarks_field = QtWidgets.QLineEdit()
-        self.remarks_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.remarks_field.setFont(QtGui.QFont("Kode Mono", FONT_SIZE))
         self.remarks_field.setMinimumHeight(36)
         self.remarks_field.setMaxLength(REMARKS_MAX_RADIO)
         self.remarks_field.setPlaceholderText(f"Optional - max {REMARKS_MAX_RADIO} characters")
@@ -753,7 +756,7 @@ class StatRepDialog(QDialog):
 
         # Multi-line remarks (for Internet Only, hidden by default)
         self.remarks_expanded = QtWidgets.QPlainTextEdit()
-        self.remarks_expanded.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.remarks_expanded.setFont(QtGui.QFont("Kode Mono", FONT_SIZE))
         self.remarks_expanded.setFixedHeight(110)  # ~5 lines
         self.remarks_expanded.setPlaceholderText(f"Optional - max {REMARKS_MAX_INTERNET} characters, multiple lines allowed")
         self.remarks_expanded.hide()
@@ -967,6 +970,7 @@ class StatRepDialog(QDialog):
             self.grid_field.setText(data["grid"])
 
         comments = (data.get("comments") or "").replace("||", "\n")
+        self._forward_original_remarks = comments
         self.remarks_field.setText(comments[:self.remarks_field.maxLength()])
         self.remarks_expanded.setPlainText(comments)
 
@@ -980,6 +984,30 @@ class StatRepDialog(QDialog):
                 self.from_field.setReadOnly(True)
             if hasattr(self, '_forward_mode_label'):
                 self._forward_mode_label.show()
+
+        # If a rig is already selected (e.g. Internet Only pre-selected at open),
+        # update remarks now since _on_rig_changed fired before prefill set _forward_origin.
+        if hasattr(self, 'rig_combo'):
+            current_rig = self.rig_combo.currentText()
+            if current_rig == INTERNET_RIG:
+                callsign, _, _ = self._get_internet_user_settings()
+                if callsign:
+                    self._forwarder_callsign = callsign
+                    self._update_forward_remarks_field(callsign)
+            elif self._forwarder_callsign:
+                self._update_forward_remarks_field(self._forwarder_callsign)
+
+    def _update_forward_remarks_field(self, callsign: str) -> None:
+        """Update the remarks fields to show 'original_remarks Forwarded By: {callsign}'."""
+        if not getattr(self, '_forward_origin', None) or not callsign:
+            return
+        base = getattr(self, '_forward_original_remarks', "")
+        suffix = f" -> Forwarded By: {callsign}"
+        full = (base + suffix) if base else suffix.lstrip()
+        if hasattr(self, 'remarks_field'):
+            self.remarks_field.setText(full[:self.remarks_field.maxLength()])
+        if hasattr(self, 'remarks_expanded'):
+            self.remarks_expanded.setPlainText(full)
 
     def _set_all_status(self, status_name: str) -> None:
         """Set all status dropdowns to the specified status."""
@@ -1071,8 +1099,7 @@ class StatRepDialog(QDialog):
         group = f"@{self.to_combo.currentText()}"
         if getattr(self, "_forward_origin", None):
             marker = "{F%}"
-            forwarder = getattr(self, '_forwarder_callsign', self.callsign).upper()
-            message = f"{self._forward_origin.upper()}: {group} ,{self.grid},{scope_code},{self.statrep_id},{status_str},{remarks},{forwarder},{marker}"
+            message = f"{self._forward_origin.upper()}: {group} ,{self.grid},{scope_code},{self.statrep_id},{status_str},{remarks},{marker}"
         else:
             marker = "{&%3}" if self.rig_combo.currentText() == INTERNET_RIG else "{&%}"
             message = f"{self.callsign.upper()}: {group} ,{self.grid},{scope_code},{self.statrep_id},{status_str},{remarks},{marker}"

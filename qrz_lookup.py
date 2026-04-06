@@ -12,6 +12,7 @@ Three modal dialog views:
 
 import io
 import os
+import platform
 import sqlite3
 import subprocess
 import sys
@@ -27,12 +28,22 @@ from PyQt5.QtGui import QColor, QCursor, QDesktopServices, QFont, QMovie, QPaint
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import (
     QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget,
+    QMessageBox, QPushButton, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from qrz_client import QRZClient, get_qrz_cached, load_qrz_config
 
 DB_PATH = "traffic.db3"
+
+# macOS renders pt-based fonts ~25% smaller than Windows (72 vs 96 DPI base).
+# fs() compensates by scaling font sizes up on Mac.
+_MAC_SCALE = 96 / 72  # ≈ 1.333
+
+def fs(size: int) -> int:
+    """Return a platform-adjusted font size (points)."""
+    if platform.system() == "Darwin":
+        return round(size * _MAC_SCALE)
+    return size
 
 # StatRep status field order: (display label, statrep row index)
 STATUS_FIELDS = [
@@ -336,26 +347,26 @@ class _QRZInfoSection(QWidget):
         grid.setColumnStretch(1, 1)
 
         self.hdr = QLabel("QRZ API Lookup For:")
-        self.hdr.setFont(QFont("Roboto Slab", 16, QFont.Black))
+        self.hdr.setFont(QFont("Roboto Slab", fs(16), QFont.Black))
         self.hdr.setStyleSheet(
             f"QLabel {{ background-color: {self._hdr_bg}; color: {self._hdr_fg}; padding-top: 9px; padding-bottom: 9px; }}"
             if self._hdr_bg else ""
         )
         self.hdr.setAlignment(Qt.AlignCenter)
-        self.lbl_call    = QLabel(); self.lbl_call.setFont(QFont("Arial", 14, QFont.Bold))
-        self.lbl_name    = QLabel(); self.lbl_name.setFont(QFont("Arial", 12, QFont.Bold))
-        self.lbl_addr1   = QLabel(); self.lbl_addr1.setFont(QFont("Arial", 11))
-        self.lbl_addr2   = QLabel(); self.lbl_addr2.setFont(QFont("Arial", 11))
-        self.lbl_county  = QLabel(); self.lbl_county.setFont(QFont("Arial", 11))
-        self.lbl_country = QLabel(); self.lbl_country.setFont(QFont("Arial", 11))
-        self.lbl_license = QLabel(); self.lbl_license.setFont(QFont("Arial", 11))
-        self.lbl_born    = QLabel(); self.lbl_born.setFont(QFont("Arial", 11))
-        self.lbl_grid    = QLabel(); self.lbl_grid.setFont(QFont("Arial", 11))
-        self.lbl_lat     = QLabel(); self.lbl_lat.setFont(QFont("Arial", 11))
-        self.lbl_lon     = QLabel(); self.lbl_lon.setFont(QFont("Arial", 11))
-        self.lbl_email   = QLabel(); self.lbl_email.setFont(QFont("Arial", 11))
+        self.lbl_call    = QLabel(); self.lbl_call.setFont(QFont("Arial", fs(14), QFont.Bold))
+        self.lbl_name    = QLabel(); self.lbl_name.setFont(QFont("Arial", fs(12), QFont.Bold))
+        self.lbl_addr1   = QLabel(); self.lbl_addr1.setFont(QFont("Arial", fs(11)))
+        self.lbl_addr2   = QLabel(); self.lbl_addr2.setFont(QFont("Arial", fs(11)))
+        self.lbl_county  = QLabel(); self.lbl_county.setFont(QFont("Arial", fs(11)))
+        self.lbl_country = QLabel(); self.lbl_country.setFont(QFont("Arial", fs(11)))
+        self.lbl_license = QLabel(); self.lbl_license.setFont(QFont("Arial", fs(11)))
+        self.lbl_born    = QLabel(); self.lbl_born.setFont(QFont("Arial", fs(11)))
+        self.lbl_grid    = QLabel(); self.lbl_grid.setFont(QFont("Arial", fs(11)))
+        self.lbl_lat     = QLabel(); self.lbl_lat.setFont(QFont("Arial", fs(11)))
+        self.lbl_lon     = QLabel(); self.lbl_lon.setFont(QFont("Arial", fs(11)))
+        self.lbl_email   = QLabel(); self.lbl_email.setFont(QFont("Arial", fs(11)))
         self.lbl_email.setOpenExternalLinks(True)
-        self.lbl_qrz_profile = QLabel(); self.lbl_qrz_profile.setFont(QFont("Arial", 11))
+        self.lbl_qrz_profile = QLabel(); self.lbl_qrz_profile.setFont(QFont("Arial", fs(11)))
         self.lbl_qrz_profile.setOpenExternalLinks(True)
 
         grid.addWidget(self.hdr,              0, 0, 1, 2)  # header spans both columns
@@ -383,7 +394,7 @@ class _QRZInfoSection(QWidget):
         self.lbl_image.setAlignment(Qt.AlignTop | Qt.AlignRight)
         self.lbl_image.setStyleSheet("border:none; padding:0px;")
         self.lbl_moddate = QLabel()
-        self.lbl_moddate.setFont(QFont("Arial", 10))
+        self.lbl_moddate.setFont(QFont("Arial", fs(10)))
         self.lbl_moddate.setAlignment(Qt.AlignRight)
         moddate_row = QHBoxLayout()
         moddate_row.addStretch()
@@ -417,16 +428,16 @@ class _QRZInfoSection(QWidget):
         sr_grid.setColumnStretch(1, 1)
 
         sr_hdr = QLabel("Status Report Details")
-        sr_hdr.setFont(QFont("Arial", 13, QFont.Bold))
+        sr_hdr.setFont(QFont("Arial", fs(13), QFont.Bold))
         sr_grid.addWidget(sr_hdr, 0, 0)
 
-        self.lbl_sr_source    = QLabel(); self.lbl_sr_source.setFont(QFont("Arial", 11))
-        self.lbl_sr_posted    = QLabel(); self.lbl_sr_posted.setFont(QFont("Arial", 11))
-        self.lbl_sr_global_id = QLabel(); self.lbl_sr_global_id.setFont(QFont("Arial", 11))
-        self.lbl_sr_group     = QLabel(); self.lbl_sr_group.setFont(QFont("Arial", 11))
-        self.lbl_sr_grid      = QLabel(); self.lbl_sr_grid.setFont(QFont("Arial", 11))
-        self.lbl_sr_freqid    = QLabel(); self.lbl_sr_freqid.setFont(QFont("Arial", 11))
-        self.lbl_sr_delivered = QLabel(); self.lbl_sr_delivered.setFont(QFont("Arial", 11))
+        self.lbl_sr_source    = QLabel(); self.lbl_sr_source.setFont(QFont("Arial", fs(11)))
+        self.lbl_sr_posted    = QLabel(); self.lbl_sr_posted.setFont(QFont("Arial", fs(11)))
+        self.lbl_sr_global_id = QLabel(); self.lbl_sr_global_id.setFont(QFont("Arial", fs(11)))
+        self.lbl_sr_group     = QLabel(); self.lbl_sr_group.setFont(QFont("Arial", fs(11)))
+        self.lbl_sr_grid      = QLabel(); self.lbl_sr_grid.setFont(QFont("Arial", fs(11)))
+        self.lbl_sr_freqid    = QLabel(); self.lbl_sr_freqid.setFont(QFont("Arial", fs(11)))
+        self.lbl_sr_delivered = QLabel(); self.lbl_sr_delivered.setFont(QFont("Arial", fs(11)))
 
         sr_grid.addWidget(self.lbl_sr_source,    0, 1)
         sr_grid.addWidget(self.lbl_sr_posted,    1, 0)
@@ -444,7 +455,7 @@ class _QRZInfoSection(QWidget):
             sr_right = QVBoxLayout()
             sr_right.setSpacing(2)
             memo_lbl = QLabel("Status Report Notes / Memo")
-            memo_lbl.setFont(QFont("Arial", 11, QFont.Bold))
+            memo_lbl.setFont(QFont("Arial", fs(11), QFont.Bold))
             sr_right.addWidget(memo_lbl)
             sr_right.addWidget(memo_widget)
             sr_row.addLayout(sr_right, 1)
@@ -744,7 +755,7 @@ class StatRepDetailDialog(QDialog):
         # QRZ info (top section) — lbl_moddate embedded below image in right column
         self.memo_edit = _MemoTextEdit()
         self.memo_edit.setPlaceholderText("Add notes…")
-        self.memo_edit.setFont(QFont("Arial", 11))
+        self.memo_edit.setFont(QFont("Arial", fs(11)))
         self.memo_edit.setStyleSheet(
             f"background-color:{self._data_bg}; border:1px solid #ccc; border-radius:4px;"
         )
@@ -764,7 +775,7 @@ class StatRepDetailDialog(QDialog):
         for col_idx, (label_text, _) in enumerate(STATUS_FIELDS):
             hdr = QLabel(label_text)
             hdr.setAlignment(Qt.AlignCenter)
-            hdr.setFont(QFont("Arial", 11, QFont.Bold))
+            hdr.setFont(QFont("Arial", fs(11), QFont.Bold))
             hdr.setStyleSheet(
                 f"background-color:{self._title_bg}; color:{self._title_fg};"
                 "border-right:1px solid #D2D0CF; border-bottom:1px solid #D2D0CF; padding: 5px 2px;"
@@ -789,7 +800,7 @@ class StatRepDetailDialog(QDialog):
 
         self.comments = QTextEdit()
         self.comments.setReadOnly(True)
-        self.comments.setFont(QFont("Arial", 11))
+        self.comments.setFont(QFont("Arial", fs(11)))
         self.comments.setFixedSize(480, 270)
         self.comments.setStyleSheet(
             f"background-color:{self._data_bg}; border:1px solid #ccc; border-radius:4px;"
@@ -800,7 +811,7 @@ class StatRepDetailDialog(QDialog):
         # Action buttons
         btn_row = QHBoxLayout()
         brevity_note = QLabel("<b>Brevity Note:</b> Highlight brevity code, then click Brevity button to decode")
-        brevity_note.setFont(QFont("Arial", 10))
+        brevity_note.setFont(QFont("Arial", fs(10)))
         btn_row.addWidget(brevity_note)
         btn_row.addStretch()
         self.btn_delete = QPushButton("Delete")
@@ -827,7 +838,7 @@ class StatRepDetailDialog(QDialog):
         self.pin_toggle = _ToggleSwitch()
         self.pin_toggle.toggled.connect(self._save_pinned)
         self.lbl_pin = QLabel("Pinned")
-        self.lbl_pin.setFont(QFont("Arial", 11))
+        self.lbl_pin.setFont(QFont("Arial", fs(11)))
         btn_row.addWidget(self.pin_toggle)
         btn_row.addWidget(self.lbl_pin)
         main.addLayout(btn_row)
@@ -1074,6 +1085,26 @@ class StatRepDetailDialog(QDialog):
 
 # ── Dialog 3: Message Detail ───────────────────────────────────────────────
 
+import html as _html_mod
+import re as _re
+
+_URL_RE = _re.compile(r'(https?://[^\s<>"\']+)', _re.IGNORECASE)
+
+
+def _text_to_html(text: str, bg: str) -> str:
+    """Convert plain text to HTML, turning URLs into clickable links."""
+    escaped = _html_mod.escape(text)
+    linked = _URL_RE.sub(
+        lambda m: f'<a href="{m.group(1)}" style="color:#0078d7;">{m.group(1)}</a>',
+        escaped
+    )
+    lines = linked.replace("\n", "<br>")
+    return (
+        f'<html><body style="background-color:{bg};color:#333333;'
+        f'font-family:Arial;font-size:11pt;">{lines}</body></html>'
+    )
+
+
 class MessageDetailDialog(QDialog):
     """Detail view for a Message row: QRZ info + map + message text."""
 
@@ -1129,14 +1160,15 @@ class MessageDetailDialog(QDialog):
         self.map_view.setFixedSize(480, 230)
         lower.addWidget(self.map_view, alignment=Qt.AlignTop)
 
-        self.msg_text = QTextEdit()
-        self.msg_text.setReadOnly(True)
-        self.msg_text.setFont(QFont("Arial", 11))
+        self.msg_text = QTextBrowser()
+        self.msg_text.setFont(QFont("Arial", fs(11)))
         self.msg_text.setFixedSize(480, 230)
         self.msg_text.setStyleSheet(
             f"background-color:{self._data_bg}; border:1px solid #ccc; border-radius:4px;"
         )
-        self.msg_text.setPlainText(self.message_text.replace("||", "\n"))
+        self.msg_text.setOpenLinks(False)
+        self.msg_text.anchorClicked.connect(lambda url: QDesktopServices.openUrl(url))
+        self.msg_text.setHtml(_text_to_html(self.message_text.replace("||", "\n"), self._data_bg))
         lower.addWidget(self.msg_text)
         main.addLayout(lower)
 

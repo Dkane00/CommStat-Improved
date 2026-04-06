@@ -464,7 +464,7 @@ class QRZClient:
 
         # Check if QRZ is active before making API calls
         if not self.is_active():
-            debug_print("QRZ: Lookups disabled")
+            qrz_log("QRZ disabled or QRZ not configured")
             return None
 
         # Need session key
