@@ -1587,11 +1587,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {menu_bg};
                 color: {menu_fg};
                 font-family: Roboto;
-                font-size: 16px;
+                font-size: 15px;
                 font-weight: bold;
             }}
             QMenuBar::item {{
-                padding: 2px 8px;
+                padding: 4px 8px;
             }}
             QMenuBar::item:selected {{
                 background-color: {menu_bg};
@@ -1806,7 +1806,8 @@ class MainWindow(QtWidgets.QMainWindow):
         fg_color = self.config.get_color('program_foreground')
         menu_bg = self.config.get_color('menu_background')
         menu_fg = self.config.get_color('menu_foreground')
-        font = QtGui.QFont("Roboto", 13, QtGui.QFont.Bold)
+        font = QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
+        font.setPixelSize(16)
 
         # News label
         self.label_newsfeed = QtWidgets.QLabel(self.header_widget)
@@ -1818,7 +1819,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # RSS Feed selector dropdown
         self.feed_combo = QtWidgets.QComboBox(self.header_widget)
         self.feed_combo.setFixedSize(120, 28)
-        self.feed_combo.setFont(QtGui.QFont("Roboto", 11))
+        _combo_font = QtGui.QFont("Roboto", -1)
+        _combo_font.setPixelSize(15)
+        self.feed_combo.setFont(_combo_font)
         self.feed_combo.setStyleSheet(f"""
             QComboBox {{
                 background-color: {menu_bg};
@@ -1872,7 +1875,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Last 20 button - shows last 20 news headlines
         self.last20_button = QtWidgets.QPushButton("Last 20", self.header_widget)
         self.last20_button.setFixedSize(80, 28)
-        self.last20_button.setFont(QtGui.QFont("Roboto", 13))
+        _btn_font = QtGui.QFont("Roboto", -1)
+        _btn_font.setPixelSize(15)
+        self.last20_button.setFont(_btn_font)
         self.last20_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {menu_bg};
@@ -1910,7 +1915,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Time display
         self.time_label = QtWidgets.QLabel(self.header_widget)
         self.time_label.setFixedSize(120, 32)
-        self.time_label.setFont(QtGui.QFont("Kode Mono", 13))
+        _time_font = QtGui.QFont("Kode Mono", -1)
+        _time_font.setPixelSize(16)
+        self.time_label.setFont(_time_font)
         self.time_label.setStyleSheet(
             f"background-color: {self.config.get_color('time_background')};"
             f"color: {self.config.get_color('time_foreground')};"
@@ -1933,7 +1940,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {data_bg};
                 color: {data_fg};
                 font-family: Roboto;
-                font-size: 10pt;
+                font-size: 13px;
             }}
             QTableWidget QHeaderView::section {{
                 background-color: {title_bg};
@@ -1956,7 +1963,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 color: {title_fg};
                 font-family: Roboto;
                 font-weight: bold;
-                font-size: 11pt;
+                font-size: 15px;
                 padding: 4px;
             }}
         """)
@@ -3004,7 +3011,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Feed text area
         self.feed_text = QtWidgets.QPlainTextEdit(self.central_widget)
         self.feed_text.setObjectName("feedText")
-        mono_font = QtGui.QFont(FONT_MONO, 10, QtGui.QFont.Medium)
+        mono_font = QtGui.QFont(FONT_MONO, -1, QtGui.QFont.Medium)
+        mono_font.setPixelSize(13)
         self.feed_text.setFont(mono_font)
         self.feed_text.setStyleSheet(
             f"background-color: {self.config.get_color('feed_background')};"
