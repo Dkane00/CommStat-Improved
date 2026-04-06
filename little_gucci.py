@@ -1574,6 +1574,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menubar.setNativeMenuBar(False)  # Use Qt menu bar, not native (fixes Linux)
         self.setMenuBar(self.menubar)  # Explicitly set as main window's menu bar
         self.menubar.setVisible(True)
+        self.menubar.setFixedHeight(30)
         # Clear corner widgets that may interfere with menu layout on Linux
         self.menubar.setCornerWidget(None, Qt.TopLeftCorner)
         self.menubar.setCornerWidget(None, Qt.TopRightCorner)
@@ -1586,11 +1587,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {menu_bg};
                 color: {menu_fg};
                 font-family: Roboto;
-                font-size: 11pt;
+                font-size: 16px;
                 font-weight: bold;
             }}
             QMenuBar::item {{
-                padding: 4px 8px;
+                padding: 2px 8px;
             }}
             QMenuBar::item:selected {{
                 background-color: {menu_bg};
