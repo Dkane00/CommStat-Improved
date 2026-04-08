@@ -206,7 +206,7 @@ class StatRepDialog(QDialog):
         try:
             with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT name FROM groups WHERE is_active = 1")
+                cursor.execute("SELECT name FROM groups ORDER BY name LIMIT 1")
                 result = cursor.fetchone()
                 if result:
                     return result[0]

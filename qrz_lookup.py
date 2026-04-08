@@ -10,6 +10,7 @@ Three modal dialog views:
   - MessageDetailDialog : detail view when clicking a Message row
 """
 
+import datetime
 import io
 import os
 import platform
@@ -730,6 +731,7 @@ class StatRepDetailDialog(QDialog):
         self._map_loaded = False
         self._global_id = 0
         self._row_data: dict = {}
+        self._sr_datetime: str = ""
         self._statrep_lat: Optional[float] = None
         self._statrep_lon: Optional[float] = None
         self._statrep_grid: str = ""
@@ -798,8 +800,7 @@ class StatRepDetailDialog(QDialog):
         self.map_view.setFixedSize(480, 270)
         lower.addWidget(self.map_view, alignment=Qt.AlignTop)
 
-        self.comments = QTextEdit()
-        self.comments.setReadOnly(True)
+        self.comments = QTextBrowser()
         _comments_font = QFont("Kode Mono", -1)
         _comments_font.setPixelSize(15)
         self.comments.setFont(_comments_font)
@@ -807,6 +808,8 @@ class StatRepDetailDialog(QDialog):
         self.comments.setStyleSheet(
             f"background-color:{self._data_bg}; color:#000000; border:1px solid #ccc; border-radius:4px;"
         )
+        self.comments.setOpenLinks(False)
+        self.comments.anchorClicked.connect(lambda url: QDesktopServices.openUrl(url))
         lower.addWidget(self.comments)
         main.addLayout(lower)
 
@@ -867,6 +870,9 @@ class StatRepDetailDialog(QDialog):
         if not row:
             return
 
+        # Store the report datetime for age check on forward
+        self._sr_datetime = row[0] or ""
+
         # Store row data for forwarding (indices 2–16)
         self._row_data = {
             "map": row[2], "power": row[3], "water": row[4],
@@ -925,8 +931,8 @@ class StatRepDetailDialog(QDialog):
             )
             sq.setToolTip(tip)
 
-        # Comments (index 14) — decode || newline placeholders
-        self.comments.setPlainText((row[14] or "").replace("||", "\n"))
+        # Comments (index 14) — decode || newline placeholders, render links
+        self.comments.setHtml(_text_to_html((row[14] or "").replace("||", "\n"), self._data_bg))
 
         # Memo (index 19) — user notes, auto-saved on focus-out
         self.memo_edit.blockSignals(True)
@@ -996,6 +1002,28 @@ class StatRepDetailDialog(QDialog):
     def _on_forward(self) -> None:
         if not self._tcp_pool or not self._connector_manager or not self._row_data:
             return
+
+        # Block forwarding if the report is more than 24 hours old
+        if self._sr_datetime:
+            try:
+                sr_dt_str = self._sr_datetime.replace(" UTC", "").strip()
+                sr_dt = datetime.datetime.strptime(sr_dt_str, "%Y-%m-%d %H:%M:%S")
+                sr_dt = sr_dt.replace(tzinfo=datetime.timezone.utc)
+                age = datetime.datetime.now(datetime.timezone.utc) - sr_dt
+                if age.total_seconds() > 86400:
+                    from PyQt5.QtWidgets import QMessageBox
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("Cannot Forward")
+                    msg.setText(
+                        "This Status Report cannot be forwarded because it is more than 24 hours old."
+                    )
+                    msg.setIcon(QMessageBox.Warning)
+                    msg.setStandardButtons(QMessageBox.Close)
+                    msg.exec_()
+                    return
+            except (ValueError, TypeError):
+                pass  # If we can't parse the date, allow forwarding
+
         from statrep import StatRepDialog
         dlg = StatRepDialog(
             self._tcp_pool, self._connector_manager, self,

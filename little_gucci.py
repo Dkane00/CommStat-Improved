@@ -711,12 +711,6 @@ class ConfigManager:
     def set_hide_heartbeat(self, value: bool) -> None:
         self._save_setting('hide_heartbeat', value)
 
-    def get_show_all_groups(self) -> bool:
-        return self.directed_config.get('show_all_groups', False)
-
-    def set_show_all_groups(self, value: bool) -> None:
-        self._save_setting('show_all_groups', value)
-
     def get_hide_map(self) -> bool:
         return self.directed_config.get('hide_map', False)
 
@@ -1723,11 +1717,8 @@ class MainWindow(QtWidgets.QMainWindow):
         statrep_messages_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(statrep_messages_label)
 
-        self.show_all_groups_checkbox = self._create_menu_checkbox(
-            self.filter_menu, "Show All My Groups",
-            self.config.get_show_all_groups(), self._on_toggle_show_all_groups)
         self.show_every_group_checkbox = self._create_menu_checkbox(
-            self.filter_menu, "Show Every Group",
+            self.filter_menu, "Show All Groups",
             self.config.get_show_every_group(), self._on_toggle_show_every_group)
 
         # MAP OPTION section
@@ -2152,9 +2143,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if alert:
             title, message, color, date_received, from_callsign, group = alert
-
-            # Apply text normalization to message field only if enabled
-            message = self._normalize_text(message)
 
             # Set colors based on alert color - all alerts use red
             color_map = {
@@ -2732,6 +2720,25 @@ class MainWindow(QtWidgets.QMainWindow):
                 if not line:
                     continue
 
+                # Catch ::DELIVERED:: lines regardless of whether they carry an ID prefix
+                if "::DELIVERED::" in line:
+                    print(f"[BACKBONE] ::DELIVERED:: raw line: {line!r}")
+                    # Strip optional leading ID prefix before the directive
+                    raw_payload = re.sub(r'^\d+:\s*', '', line)
+                    raw_payload = raw_payload[len("::DELIVERED::"):]
+                    if "," in raw_payload:
+                        callsign, msg_text = raw_payload.split(",", 1)
+                        print(f"[BACKBONE] Delivered — callsign={callsign.strip()!r}  msg={msg_text.strip()!r}")
+                        QtCore.QMetaObject.invokeMethod(
+                            self, "_show_delivered_popup",
+                            QtCore.Qt.QueuedConnection,
+                            QtCore.Q_ARG(str, callsign.strip()),
+                            QtCore.Q_ARG(str, msg_text.strip())
+                        )
+                    else:
+                        print(f"[BACKBONE] ::DELIVERED:: payload missing comma, skipping: {raw_payload!r}")
+                    continue
+
                 # Check if line starts with a number followed by colon
                 id_match = re.match(r'^(\d+):\s*(.+)$', line)
                 if not id_match:
@@ -2845,6 +2852,67 @@ class MainWindow(QtWidgets.QMainWindow):
             import traceback
             traceback.print_exc()
             return False
+
+    @QtCore.pyqtSlot(str, str)
+    def _show_delivered_popup(self, callsign: str, message: str) -> None:
+        """Show a delivery confirmation popup when the backbone confirms a message was delivered."""
+        print(f"[DELIVERED] Showing popup — callsign={callsign!r}  message={message!r}")
+        panel_bg = self.config.get_color('panel_background')
+
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle("CommStat Delivered")
+        dlg.setWindowFlags(
+            QtCore.Qt.Window | QtCore.Qt.CustomizeWindowHint |
+            QtCore.Qt.WindowTitleHint | QtCore.Qt.WindowCloseButtonHint |
+            QtCore.Qt.WindowStaysOnTopHint
+        )
+        dlg.setFixedSize(340, 160)
+        dlg.setStyleSheet(f"background-color: {panel_bg}; color: #000000;")
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "radiation-32.png")
+        if os.path.exists(icon_path):
+            dlg.setWindowIcon(QtGui.QIcon(icon_path))
+
+        layout = QtWidgets.QVBoxLayout(dlg)
+        layout.setContentsMargins(15, 22, 15, 12)
+        layout.setSpacing(4)
+
+        row1 = QtWidgets.QLabel(f"Your message to <b>{callsign}</b>")
+        row1_font = QtGui.QFont("Roboto")
+        row1_font.setPixelSize(15)
+        row1.setFont(row1_font)
+        row1.setStyleSheet("color: #000000; background: transparent;")
+        row1.setTextFormat(QtCore.Qt.RichText)
+        row1.setAlignment(QtCore.Qt.AlignHCenter)
+        layout.addWidget(row1)
+
+        row2 = QtWidgets.QLabel(message)
+        row2_font = QtGui.QFont("Kode Mono")
+        row2_font.setPixelSize(15)
+        row2.setFont(row2_font)
+        row2.setStyleSheet("color: #000000; background: transparent;")
+        row2.setWordWrap(True)
+        row2.setAlignment(QtCore.Qt.AlignHCenter)
+        layout.addWidget(row2)
+
+        row3 = QtWidgets.QLabel("was Delivered.")
+        row3_font = QtGui.QFont("Roboto")
+        row3_font.setPixelSize(15)
+        row3.setFont(row3_font)
+        row3.setStyleSheet("color: #000000; background: transparent;")
+        row3.setAlignment(QtCore.Qt.AlignHCenter)
+        layout.addWidget(row3)
+        layout.addStretch()
+
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.setFont(QtGui.QFont("Roboto", 11))
+        close_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(close_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        dlg.exec_()
 
     @QtCore.pyqtSlot(set)
     def _refresh_backbone_data(self, data_types: set) -> None:
@@ -2990,8 +3058,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._handle_program_update(content_stripped)
                 return
 
+            if "::DELIVERED::" in content_stripped:
+                print(f"[BACKBONE] ::DELIVERED:: detected in content: {content_stripped!r}")
+
             if (re.search(r'^\d+:\s+\d{4}-\d{2}-\d{2}', content_stripped, re.MULTILINE) or
-                    re.search(r'^\d+:\s+::STATREP-DELETE::', content_stripped, re.MULTILINE)):
+                    re.search(r'^\d+:\s+::STATREP-DELETE::', content_stripped, re.MULTILINE) or
+                    re.search(r'::DELIVERED::', content_stripped)):
                 self._handle_backbone_data_messages(content_stripped)
 
         except Exception as e:
@@ -3833,10 +3905,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         if self.config.get_show_every_group():
             return [], True
-        elif self.config.get_show_all_groups():
-            return self.db.get_all_groups(), False
-        else:
-            return self.db.get_active_groups(), False
+        return self.db.get_all_groups(), False
 
     def _populate_table(self, table, data, status_colors: dict = None) -> None:
         """Populate a table widget with data.
@@ -3854,9 +3923,6 @@ class MainWindow(QtWidgets.QMainWindow):
         qrz_callsigns = self.db.get_qrz_callsigns()
         user_callsign, _, __ = self.db.get_user_settings()
         user_callsign = user_callsign.upper() if user_callsign else ""
-
-        # Get abbreviations and normalization setting for text processing
-        apply_normalization, abbreviations = self._get_normalization_settings()
 
         for row_num, row_data in enumerate(data):
             table.insertRow(row_num)
@@ -3881,17 +3947,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     decoded_remarks = None
                 else:
                     decoded_remarks = None
-
-                # Apply text normalization to message/comment fields only if enabled
-                if apply_normalization and display_value:
-                    # For statrep table: col 20=comments only
-                    # For message table: col 6=message only
-                    if is_statrep_table and col_num == 20:
-                        display_value = smart_title_case(display_value, abbreviations, apply_normalization)
-                        if decoded_remarks:
-                            decoded_remarks = smart_title_case(decoded_remarks, abbreviations, apply_normalization)
-                    elif is_message_table and col_num == 6:
-                        display_value = smart_title_case(display_value, abbreviations, apply_normalization)
 
                 # Handle SNR (db) column (first column)
                 if (is_statrep_table or is_message_table) and col_num == 0:
@@ -3973,6 +4028,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         font = item.font()
                         font.setBold(True)
                         item.setFont(font)
+                        item.setToolTip("Exists in QRZ local cache")
                 # Bold To callsign (col 4) if direct message OR matches user's callsign
                 elif col_num == 4:
                     to_call = display_value.upper()
@@ -4021,20 +4077,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_message_data()
         self._save_map_position(callback=self._load_map)
 
-    def _on_toggle_show_all_groups(self, checked: bool) -> None:
-        """Toggle showing all groups data regardless of active groups."""
-        self.config.set_show_all_groups(checked)
-        self._refresh_all_data()
-
     def _on_toggle_show_every_group(self, checked: bool) -> None:
-        """Toggle showing every group's data (no filtering at all)."""
+        """Toggle showing all groups data (no group filtering)."""
         self.config.set_show_every_group(checked)
-
-        # When "Show Every Group" is checked, also check "Show All My Groups"
-        if checked:
-            self.show_all_groups_checkbox.setChecked(True)
-            self.config.set_show_all_groups(True)
-
         self._refresh_all_data()
 
     def _on_toggle_text_normalization(self, checked: bool) -> None:
@@ -4149,7 +4194,7 @@ class MainWindow(QtWidgets.QMainWindow):
         return checkbox
 
     def _populate_groups_menu(self) -> None:
-        """Populate the Groups menu with checkable group items."""
+        """Populate the Groups menu with a read-only group list."""
         # Remove existing group actions (keep Manage Groups, Show Groups, separator, and title)
         actions = self.groups_menu.actions()
         for action in actions[9:]:  # Skip Config items, GROUPS header, Manage Groups, Show Groups, separator, and title
@@ -4157,21 +4202,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Add section title if not already present
         if len(self.groups_menu.actions()) == 8:
-            title_action = QtWidgets.QAction("ACTIVE GROUPS", self)
+            title_action = QtWidgets.QAction("GROUP LIST", self)
             title_action.setEnabled(False)
             self.groups_menu.addAction(title_action)
 
-        # Add groups alphabetically with checkboxes (menu stays open when clicked)
-        groups = self.db.get_all_groups_with_status()
-        for name, is_active in groups:  # Already sorted by name from DB
-            self._create_menu_checkbox(
-                self.groups_menu, name, is_active,
-                lambda checked, n=name: self._toggle_group(n, checked))
-
-    def _toggle_group(self, group_name: str, active: bool) -> None:
-        """Toggle a group's active status."""
-        self.db.set_group_active(group_name, active)
-        self._refresh_all_data()
+        # Add groups alphabetically as read-only labels
+        for name in self.db.get_all_groups():
+            label_action = QtWidgets.QAction(name, self)
+            label_action.setEnabled(False)
+            self.groups_menu.addAction(label_action)
 
     def _on_js8_connectors(self) -> None:
         """Open JS8 Connectors management window."""

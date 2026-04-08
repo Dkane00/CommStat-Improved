@@ -203,7 +203,7 @@ class UI(QMainWindow):
         try:
             conn = sqlite3.connect("commstat.db")
             cursor = conn.cursor()
-            cursor.execute("SELECT name FROM groups WHERE is_active = 1")
+            cursor.execute("SELECT name FROM groups ORDER BY name LIMIT 1")
             result = cursor.fetchone()
             cursor.close()
             conn.close()
