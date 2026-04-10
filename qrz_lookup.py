@@ -1245,21 +1245,42 @@ class MessageDetailDialog(QDialog):
         main.addLayout(lower)
 
         # Action buttons
+        _bs = lambda c: (
+            f"QPushButton {{ background-color:{c}; color:white; border:none; "
+            f"padding:6px 14px; border-radius:4px; font-weight:bold; font-size:15px; }}"
+            f"QPushButton:hover {{ background-color:{c}; }}"
+        )
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self.btn_delete = QPushButton("Delete")
-        self.btn_delete.setStyleSheet(_btn_style("#dc3545"))
+        self.btn_delete.setStyleSheet(_bs("#dc3545"))
         self.btn_delete.clicked.connect(self._on_delete)
         btn_row.addWidget(self.btn_delete)
+        self.btn_reply = QPushButton("Reply")
+        self.btn_reply.setStyleSheet(_bs("#0078d7"))
+        self.btn_reply.clicked.connect(self._on_reply_clicked)
+        btn_row.addWidget(self.btn_reply)
         self.btn_message_msg = QPushButton("Message")
-        self.btn_message_msg.setStyleSheet(_btn_style("#0078d7"))
+        self.btn_message_msg.setStyleSheet(_bs("#0078d7"))
         self.btn_message_msg.clicked.connect(self._on_message_clicked)
         btn_row.addWidget(self.btn_message_msg)
+        self.btn_close = QPushButton("Close")
+        self.btn_close.setStyleSheet(_bs("#555555"))
+        self.btn_close.clicked.connect(self.reject)
+        btn_row.addWidget(self.btn_close)
         main.addLayout(btn_row)
 
     def _on_message_clicked(self) -> None:
         from direct_message import DirectMessageDialog
         dlg = DirectMessageDialog(target_callsign=self.callsign, parent=self)
+        dlg.exec_()
+
+    def _on_reply_clicked(self) -> None:
+        from direct_message import DirectMessageDialog
+        original = self.message_text.replace("||", "\n")
+        prefill = "\n\n----------\n" + original
+        dlg = DirectMessageDialog(target_callsign=self.callsign, parent=self)
+        dlg.set_message_text(prefill)
         dlg.exec_()
 
     def _on_delete(self) -> None:

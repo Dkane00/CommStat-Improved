@@ -87,13 +87,13 @@ class DirectMessageDialog(QDialog):
 
         self.setStyleSheet(f"""
             QDialog {{ background-color: {DATA_BACKGROUND}; }}
-            QLabel {{ color: #333333; }}
+            QLabel {{ color: #000000; }}
             QLineEdit {{
-                background-color: white; color: #333333;
+                background-color: white; color: #000000;
                 border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px;
             }}
             QPlainTextEdit {{
-                background-color: white; color: #333333;
+                background-color: white; color: #000000;
                 border: 1px solid #cccccc; border-radius: 4px; padding: 4px;
             }}
         """)
@@ -105,26 +105,44 @@ class DirectMessageDialog(QDialog):
         # Title
         title = QtWidgets.QLabel("Direct Message")
         title.setAlignment(Qt.AlignCenter)
-        title.setFont(QtGui.QFont(FONT_FAMILY, 16, QtGui.QFont.Bold))
-        title.setStyleSheet("color: #333; margin-bottom: 6px;")
+        title.setFont(QtGui.QFont("Roboto Slab", 16, QtGui.QFont.Black))
+        title.setStyleSheet(
+            "QLabel { background-color: #A52A2A; color: #FFFFFF; "
+            "padding-top: 9px; padding-bottom: 9px; }"
+        )
         layout.addWidget(title)
 
         callsign_label = QtWidgets.QLabel("Callsign:")
-        callsign_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        _lbl_font = QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
+        _lbl_font.setPixelSize(15)
+        callsign_label.setFont(_lbl_font)
         layout.addWidget(callsign_label)
 
         self.callsign_input = QtWidgets.QLineEdit()
-        self.callsign_input.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
-        self.callsign_input.setFixedWidth(200)
+        _cs_font = QtGui.QFont("Kode Mono", -1)
+        _cs_font.setPixelSize(15)
+        self.callsign_input.setFont(_cs_font)
+        self.callsign_input.setFixedWidth(120)
         self.callsign_input.setMinimumHeight(28)
         self.callsign_input.setMaxLength(12)
         self.callsign_input.setPlaceholderText("e.g. N0CALL")
         self.callsign_input.textChanged.connect(self._on_callsign_changed)
-        layout.addWidget(self.callsign_input)
+
+        callsign_row = QtWidgets.QHBoxLayout()
+        callsign_row.addWidget(self.callsign_input)
+        self.last_seen_label = QtWidgets.QLabel("Last Seen:")
+        _ls_font = QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
+        _ls_font.setPixelSize(15)
+        self.last_seen_label.setFont(_ls_font)
+        callsign_row.addWidget(self.last_seen_label)
+        callsign_row.addStretch()
+        layout.addLayout(callsign_row)
 
         # Message text box (~8 rows)
         self.message_box = QtWidgets.QPlainTextEdit()
-        self.message_box.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        _msg_font = QtGui.QFont("Kode Mono", -1)
+        _msg_font.setPixelSize(15)
+        self.message_box.setFont(_msg_font)
         font_metrics = QtGui.QFontMetrics(self.message_box.font())
         row_height = font_metrics.lineSpacing()
         self.message_box.setMinimumHeight(row_height * 8 + 16)
@@ -171,7 +189,7 @@ class DirectMessageDialog(QDialog):
                 padding: 8px 12px;
                 border-radius: 4px;
                 font-weight: bold;
-                font-size: 11pt;
+                font-size: 15px;
             }}
             QPushButton:hover {{
                 opacity: 0.9;
@@ -180,6 +198,14 @@ class DirectMessageDialog(QDialog):
                 opacity: 0.8;
             }}
         """
+
+    def set_message_text(self, text: str) -> None:
+        """Pre-fill the message box with the given text."""
+        self.message_box.setPlainText(text)
+        cursor = self.message_box.textCursor()
+        cursor.movePosition(cursor.Start)
+        self.message_box.setTextCursor(cursor)
+        self.message_box.setFocus()
 
     def _get_my_callsign(self) -> str:
         """Retrieve operator callsign from controls table."""
@@ -217,8 +243,7 @@ class DirectMessageDialog(QDialog):
     # -------------------------------------------------------------------------
 
     def _on_clear(self) -> None:
-        """Clear all input fields."""
-        self.callsign_input.clear()
+        """Clear the message section."""
         self.message_box.clear()
 
     def _on_send(self) -> None:
