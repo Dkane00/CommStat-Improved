@@ -134,7 +134,6 @@ class QRZClient:
         self.username = username
         self.password = password
         self.session_key: Optional[str] = None
-        self._init_cache_table()
 
     @staticmethod
     def is_active() -> bool:
@@ -142,98 +141,7 @@ class QRZClient:
         active, _, _ = load_qrz_config()
         return active
 
-    def _init_cache_table(self) -> None:
-        """Create the QRZ cache table if it doesn't exist, migrating from qrz_cache if present."""
-        try:
-            with sqlite3.connect(DB_PATH, timeout=10) as conn:
-                cursor = conn.cursor()
-                # One-time migration: drop old table if it exists
-                cursor.execute("DROP TABLE IF EXISTS qrz_cache")
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS qrz (
-                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                        callsign    TEXT UNIQUE,
-                        active      INTEGER,
-                        name        TEXT,
-                        address     TEXT,
-                        city        TEXT,
-                        county      TEXT,
-                        state       TEXT,
-                        zip         TEXT,
-                        country     TEXT,
-                        ccode       TEXT,
-                        lat         REAL,
-                        lon         REAL,
-                        grid        TEXT,
-                        fips        TEXT,
-                        effdate     TEXT,
-                        expdate     TEXT,
-                        class       TEXT,
-                        email       TEXT,
-                        image       TEXT,
-                        areacode    TEXT,
-                        timezone    TEXT,
-                        born        INTEGER,
-                        moddate     TEXT,
-                        insert_date TEXT DEFAULT (datetime('now'))
-                    )
-                """)
-                # Migration: add moddate to existing installs
-                try:
-                    cursor.execute("ALTER TABLE qrz ADD COLUMN moddate TEXT")
-                except sqlite3.OperationalError:
-                    pass  # Column already exists
-                # Migration: combine fname into name and drop fname column
-                cols = [row[1] for row in cursor.execute("PRAGMA table_info(qrz)").fetchall()]
-                if "fname" in cols:
-                    cursor.execute("""
-                        UPDATE qrz SET name = TRIM(
-                            COALESCE(NULLIF(fname, ''), '') || ' ' || COALESCE(NULLIF(name, ''), '')
-                        )
-                    """)
-                    cursor.execute("""
-                        CREATE TABLE qrz_new (
-                            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                            callsign    TEXT UNIQUE,
-                            active      INTEGER,
-                            name        TEXT,
-                            address     TEXT,
-                            city        TEXT,
-                            county      TEXT,
-                            state       TEXT,
-                            zip         TEXT,
-                            country     TEXT,
-                            ccode       TEXT,
-                            lat         REAL,
-                            lon         REAL,
-                            grid        TEXT,
-                            fips        TEXT,
-                            effdate     TEXT,
-                            expdate     TEXT,
-                            class       TEXT,
-                            email       TEXT,
-                            image       TEXT,
-                            areacode    TEXT,
-                            timezone    TEXT,
-                            born        INTEGER,
-                            moddate     TEXT,
-                            insert_date TEXT DEFAULT (datetime('now'))
-                        )
-                    """)
-                    cursor.execute("""
-                        INSERT INTO qrz_new
-                            SELECT id, callsign, active, name, address, city, county, state,
-                                   zip, country, ccode, lat, lon, grid, fips, effdate, expdate,
-                                   class, email, image, areacode, timezone, born, moddate, insert_date
-                            FROM qrz
-                    """)
-                    cursor.execute("DROP TABLE qrz")
-                    cursor.execute("ALTER TABLE qrz_new RENAME TO qrz")
-                conn.commit()
-        except sqlite3.Error as e:
-            debug_print(f"Error creating QRZ cache table: {e}")
-
-    def _get_cached(self, callsign: str) -> Optional[Dict]:
+    def _get_cached(self, callsign: str) -> tuple:
         """
         Check cache for callsign data.
 
@@ -241,7 +149,8 @@ class QRZClient:
             callsign: Callsign to look up
 
         Returns:
-            Cached data dict or None if not found/expired
+            (data_dict, is_fresh) where data_dict may be None if no row exists,
+            and is_fresh is True when the cached entry is within CACHE_DAYS.
         """
         try:
             with sqlite3.connect(DB_PATH, timeout=10) as conn:
@@ -254,25 +163,19 @@ class QRZClient:
                 row = cursor.fetchone()
 
                 if row:
-                    # Check if cache is still valid
                     cached_date = datetime.fromisoformat(row["insert_date"])
                     age_days = (datetime.now(timezone.utc) - cached_date).days
 
                     if age_days < CACHE_DAYS:
-                        return dict(row)
+                        return dict(row), True
                     else:
-                        # Cache expired, delete it
                         qrz_log(f"Cache expired for {callsign} (age: {age_days} days), refreshing from API")
-                        cursor.execute(
-                            "DELETE FROM qrz WHERE callsign = ?",
-                            (callsign.upper(),)
-                        )
-                        conn.commit()
+                        return dict(row), False
 
-                return None
+                return None, False
         except sqlite3.Error as e:
             debug_print(f"Error reading QRZ cache: {e}")
-            return None
+            return None, False
 
     def _save_to_cache(self, data: Dict) -> None:
         """
@@ -300,41 +203,42 @@ class QRZClient:
         county    = (data.get("county")  or "").strip().title()
         email     = (data.get("email")   or "").strip().lower()
 
+        callsign = data.get("call", "").upper()
+        values = (
+            active, full_name, address, city, county,
+            data.get("state"), data.get("zip"), data.get("country"),
+            data.get("ccode"), data.get("lat"), data.get("lon"),
+            data.get("grid"), data.get("fips"),
+            data.get("efdate"),      # API sends efdate (one f), stored as effdate
+            data.get("expdate"),
+            data.get("class"),       # dict key access — "class" is valid here
+            email, data.get("image"), data.get("areacode"),
+            data.get("timezone"), data.get("born"), data.get("moddate"),
+            datetime.now(timezone.utc).isoformat(),
+        )
+
         try:
             with sqlite3.connect(DB_PATH, timeout=10) as conn:
                 cursor = conn.cursor()
+                # Update existing row (preserves memo column)
                 cursor.execute("""
-                    INSERT OR REPLACE INTO qrz (
-                        callsign, active, name, address, city, county, state, zip,
-                        country, ccode, lat, lon, grid, fips, effdate, expdate,
-                        class, email, image, areacode, timezone, born, moddate, insert_date
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    data.get("call", "").upper(),
-                    active,
-                    full_name,
-                    address,
-                    city,
-                    county,
-                    data.get("state"),
-                    data.get("zip"),
-                    data.get("country"),
-                    data.get("ccode"),
-                    data.get("lat"),
-                    data.get("lon"),
-                    data.get("grid"),
-                    data.get("fips"),
-                    data.get("efdate"),      # API sends efdate (one f), stored as effdate
-                    data.get("expdate"),
-                    data.get("class"),       # dict key access — "class" is valid here
-                    email,
-                    data.get("image"),
-                    data.get("areacode"),
-                    data.get("timezone"),
-                    data.get("born"),
-                    data.get("moddate"),
-                    datetime.now(timezone.utc).isoformat()
-                ))
+                    UPDATE qrz SET
+                        active=?, name=?, address=?, city=?, county=?,
+                        state=?, zip=?, country=?, ccode=?, lat=?, lon=?,
+                        grid=?, fips=?, effdate=?, expdate=?,
+                        class=?, email=?, image=?, areacode=?,
+                        timezone=?, born=?, moddate=?, insert_date=?
+                    WHERE callsign = ?
+                """, values + (callsign,))
+                if cursor.rowcount == 0:
+                    # New callsign — insert fresh row
+                    cursor.execute("""
+                        INSERT INTO qrz (
+                            callsign, active, name, address, city, county, state, zip,
+                            country, ccode, lat, lon, grid, fips, effdate, expdate,
+                            class, email, image, areacode, timezone, born, moddate, insert_date
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (callsign,) + values)
                 conn.commit()
         except sqlite3.Error as e:
             debug_print(f"Error saving to QRZ cache: {e}")
@@ -456,21 +360,24 @@ class QRZClient:
             callsign = max(callsign.split('/'), key=len)
 
         # Check cache first (works even if QRZ is disabled)
+        stale_data = None
         if use_cache:
-            cached = self._get_cached(callsign)
-            if cached:
+            cached, fresh = self._get_cached(callsign)
+            if cached and fresh:
                 qrz_log(f"Cache hit for {callsign}")
                 return cached
+            if cached:
+                stale_data = cached
 
         # Check if QRZ is active before making API calls
         if not self.is_active():
             qrz_log("QRZ disabled or QRZ not configured")
-            return None
+            return stale_data
 
         # Need session key
         if not self.session_key:
             if not self.login():
-                return None
+                return stale_data
 
         # Make API call
         params = {
@@ -480,7 +387,7 @@ class QRZClient:
 
         root = self._api_request(params)
         if root is None:
-            return None
+            return stale_data
 
         # Handle XML namespace
         ns = {"qrz": "http://xmldata.qrz.com"}
@@ -502,7 +409,7 @@ class QRZClient:
                         return self.lookup(callsign, use_cache=False)
                 else:
                     qrz_log(f"Lookup error for {callsign}: {error.text}")
-                return None
+                return stale_data
 
         # Parse callsign data
         callsign_elem = root.find(".//qrz:Callsign", ns)
@@ -510,7 +417,7 @@ class QRZClient:
             callsign_elem = root.find(".//Callsign")
         if callsign_elem is None:
             qrz_log(f"Data not found for {callsign}")
-            return None
+            return stale_data
 
         # Extract all fields (strip namespace from tag names)
         data = {}

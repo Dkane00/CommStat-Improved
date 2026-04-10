@@ -629,6 +629,24 @@ class QRZLookupDialog(QDialog):
         self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, parent=self)
         self.qrz_info.image_width_ready.connect(self._adjust_for_image_width)
         main.addWidget(self.qrz_info)
+
+        # Memo — user notes about this callsign, auto-saved on focus-out
+        memo_lbl = QLabel("Notes / Memo")
+        memo_lbl.setFont(QFont("Arial", fs(11), QFont.Bold))
+        memo_lbl.setVisible(False)
+        self._memo_label = memo_lbl
+        main.addWidget(memo_lbl)
+
+        self.memo_edit = _MemoTextEdit()
+        self.memo_edit.setPlaceholderText("Add notes…")
+        self.memo_edit.setFont(QFont("Arial", fs(11)))
+        self.memo_edit.setStyleSheet(
+            f"background-color:white; border:1px solid #ccc; border-radius:4px;"
+        )
+        self.memo_edit.setFixedHeight(60)
+        self.memo_edit.setVisible(False)
+        self.memo_edit.focus_lost.connect(self._save_memo)
+        main.addWidget(self.memo_edit)
         main.addStretch()
 
         # Action buttons
@@ -671,8 +689,30 @@ class QRZLookupDialog(QDialog):
             self.lbl_status.setText("")
             self.qrz_info.update_data(result)
             self.btn_message_lookup.setVisible(True)
+
+            # Show memo section and load saved text
+            self._memo_label.setVisible(True)
+            self.memo_edit.setVisible(True)
+            self.memo_edit.blockSignals(True)
+            self.memo_edit.setPlainText(result.get("memo") or "")
+            self.memo_edit.blockSignals(False)
         else:
             self.lbl_status.setText("No results found.")
+
+    def _save_memo(self) -> None:
+        """Save memo text to the qrz table on focus-out."""
+        cs = self.cs_edit.text().strip().upper()
+        if not cs:
+            return
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                conn.execute(
+                    "UPDATE qrz SET memo = ? WHERE callsign = ?",
+                    (self.memo_edit.toPlainText(), cs)
+                )
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"[QRZLookupDialog] Memo save error: {e}")
 
     def _on_message_clicked(self) -> None:
         from direct_message import DirectMessageDialog
@@ -757,9 +797,9 @@ class StatRepDetailDialog(QDialog):
         # QRZ info (top section) — lbl_moddate embedded below image in right column
         self.memo_edit = _MemoTextEdit()
         self.memo_edit.setPlaceholderText("Add notes…")
-        self.memo_edit.setFont(QFont("Arial", fs(11)))
+        self.memo_edit.setFont(QFont("Kode Mono", 15, QFont.Normal))
         self.memo_edit.setStyleSheet(
-            f"background-color:{self._data_bg}; border:1px solid #ccc; border-radius:4px;"
+            f"background-color:{self._data_bg}; color:#000000; border:1px solid #ccc; border-radius:4px;"
         )
         self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, parent=self)
         self.qrz_info.add_statrep_rows(memo_widget=self.memo_edit)
