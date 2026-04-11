@@ -58,13 +58,13 @@ def get_state_from_connector(connector_manager, rig_name: str) -> str:
 
 
 def get_active_group_from_db() -> str:
-    """Get the first active group from the database."""
+    """Get the first group from the database."""
     import sqlite3
     try:
         with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT name FROM groups WHERE is_active = 1 ORDER BY name LIMIT 1"
+                "SELECT name FROM groups ORDER BY name LIMIT 1"
             )
             result = cursor.fetchone()
             return result[0] if result else ""

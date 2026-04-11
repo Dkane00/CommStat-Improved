@@ -492,16 +492,16 @@ class Ui_FormMessage:
             print(f"[Message] Set mode to {self.mode_combo.currentText()} (speed={speed_value})")
 
     def _get_active_group_from_db(self) -> str:
-        """Get the active group from the database."""
+        """Get the first group from the database."""
         try:
             with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT name FROM groups WHERE is_active = 1")
+                cursor.execute("SELECT name FROM groups ORDER BY name LIMIT 1")
                 result = cursor.fetchone()
                 if result:
                     return result[0]
         except sqlite3.Error as e:
-            print(f"Error reading active group from database: {e}")
+            print(f"Error reading group from database: {e}")
         return ""
 
     def _get_all_groups_from_db(self) -> list:

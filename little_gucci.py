@@ -1085,48 +1085,6 @@ class DatabaseManager:
             return [row[0] for row in cursor.fetchall()]
         return self._execute(op, [])
 
-    def get_all_groups_with_status(self) -> List[Tuple[str, bool]]:
-        """Get all groups with their active status."""
-        def op(cursor, conn):
-            cursor.execute("SELECT name, is_active FROM groups ORDER BY name")
-            return [(row[0], bool(row[1])) for row in cursor.fetchall()]
-        return self._execute(op, [])
-
-    def get_active_groups(self) -> List[str]:
-        """Get list of all active group names."""
-        def op(cursor, conn):
-            cursor.execute("SELECT name FROM groups WHERE is_active = 1 ORDER BY name")
-            return [row[0] for row in cursor.fetchall()]
-        return self._execute(op, [])
-
-    def get_active_group(self) -> str:
-        """Get the first active group name (for backwards compatibility)."""
-        groups = self.get_active_groups()
-        return groups[0] if groups else ""
-
-    def set_group_active(self, group_name: str, active: bool) -> bool:
-        """Set a group's active status (doesn't affect other groups)."""
-        def op(cursor, conn):
-            cursor.execute(
-                "UPDATE groups SET is_active = ? WHERE name = ?",
-                (1 if active else 0, group_name.upper())
-            )
-            conn.commit()
-            return cursor.rowcount > 0
-        return self._execute(op, False)
-
-    def set_active_group(self, group_name: str) -> bool:
-        """Set a group as the only active group (deactivates others)."""
-        def op(cursor, conn):
-            cursor.execute("UPDATE groups SET is_active = 0")
-            cursor.execute(
-                "UPDATE groups SET is_active = 1 WHERE name = ?",
-                (group_name.upper(),)
-            )
-            conn.commit()
-            return cursor.rowcount > 0
-        return self._execute(op, False)
-
     def add_group(self, group_name: str, comment: str = "", url1: str = "", url2: str = "") -> bool:
         """Add a new group with optional fields. Returns True if successful."""
         name = group_name.strip().upper()[:MAX_GROUP_NAME_LENGTH]
@@ -1137,7 +1095,7 @@ class DatabaseManager:
                 cursor = connection.cursor()
                 today = datetime.now().strftime("%Y-%m-%d")
                 cursor.execute(
-                    "INSERT INTO groups (name, comment, url1, url2, date_added, is_active) VALUES (?, ?, ?, ?, ?, 0)",
+                    "INSERT INTO groups (name, comment, url1, url2, date_added) VALUES (?, ?, ?, ?, ?)",
                     (name, comment.strip(), url1.strip(), url2.strip(), today)
                 )
                 connection.commit()
@@ -1164,7 +1122,7 @@ class DatabaseManager:
         """Get full details of a group."""
         def op(cursor, conn):
             cursor.execute(
-                "SELECT name, comment, url1, url2, date_added, is_active FROM groups WHERE name = ?",
+                "SELECT name, comment, url1, url2, date_added FROM groups WHERE name = ?",
                 (group_name.upper(),)
             )
             row = cursor.fetchone()
@@ -1175,7 +1133,6 @@ class DatabaseManager:
                     "url1": row[2] or "",
                     "url2": row[3] or "",
                     "date_added": row[4] or "",
-                    "is_active": bool(row[5])
                 }
             return None
         return self._execute(op, None)
@@ -1383,9 +1340,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rig_grids: Dict[str, str] = {}
         self.rig_states: Dict[str, str] = {}
         self.rig_status_logged: Set[str] = set()  # Track which rigs have logged initial status
-
-        # Active groups (currently single, but list for future multi-group support)
-        self.active_groups: List[str] = [self.db.get_active_group()]
 
         # Live feed message buffer (stores messages from all TCP connections)
         self.feed_messages: List[str] = []
@@ -3207,12 +3161,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _load_message_data(self) -> None:
         """Load message data from database into the table."""
-        groups, show_all = self._get_filtered_groups()
         data = self.db.get_message_data(
-            groups=groups,
+            groups=[],
             start='',
             end='',
-            show_all=show_all
+            show_all=True
         )
 
         self._populate_table(self.message_table, data)
@@ -4749,24 +4702,26 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Check if message is to a group we're in or to one of our callsigns
         if msg_target.startswith("@"):
-            # Group message - check if we're in this group (entire group list, not just active)
+            # Group message - always accept @COMMSTAT; otherwise check membership
             group_name = msg_target[1:].upper()  # Remove @ and normalize
-            all_groups = self.db.get_all_groups()
-            if group_name not in all_groups:
-                # Skip messages to groups we're not in
-                return ("", None)
+            if group_name != "COMMSTAT":
+                all_groups = self.db.get_all_groups()
+                if group_name not in all_groups:
+                    # Skip messages to groups we're not in
+                    return ("", None)
         else:
-            # Direct message - check if target is one of our callsigns
+            # Direct message - always accept COMMSTAT callsign; otherwise check our callsigns
             target_call = msg_target.upper()
-            user_callsigns = [c.upper() for c in self.rig_callsigns.values() if c]
-            if not user_callsigns:
-                # No JS8 connectors active — fall back to user settings callsign
-                settings_callsign, _, __ = self.db.get_user_settings()
-                if settings_callsign:
-                    user_callsigns = [settings_callsign.upper()]
-            if target_call not in user_callsigns:
-                # Skip messages not to our callsigns
-                return ("", None)
+            if target_call != "COMMSTAT":
+                user_callsigns = [c.upper() for c in self.rig_callsigns.values() if c]
+                if not user_callsigns:
+                    # No JS8 connectors active — fall back to user settings callsign
+                    settings_callsign, _, __ = self.db.get_user_settings()
+                    if settings_callsign:
+                        user_callsigns = [settings_callsign.upper()]
+                if target_call not in user_callsigns:
+                    # Skip messages not to our callsigns
+                    return ("", None)
 
         # Build data dict for insertion
         data = {
@@ -4922,9 +4877,10 @@ class MainWindow(QtWidgets.QMainWindow):
         is_to_group = to_call.startswith("@")
         user_callsign = self.get_callsign_for_rig(rig_name)
         is_to_user = to_call.split("/")[0] == user_callsign if user_callsign else False
+        is_to_commstat = to_call.upper().lstrip("@").split("/")[0] == "COMMSTAT"
 
-        # Only process if to group OR to our callsign
-        if not (is_to_group or is_to_user):
+        # Only process if to group OR to our callsign OR to COMMSTAT
+        if not (is_to_group or is_to_user or is_to_commstat):
             return ""
 
         # Parse using unified parser (source=1 for Radio)
