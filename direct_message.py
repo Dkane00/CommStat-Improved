@@ -107,7 +107,9 @@ class DirectMessageDialog(QDialog):
         # Title
         title = QtWidgets.QLabel("Direct Message")
         title.setAlignment(Qt.AlignCenter)
-        title.setFont(QtGui.QFont("Roboto Slab", 16, QtGui.QFont.Black))
+        _title_font = QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black)
+        _title_font.setPixelSize(20)
+        title.setFont(_title_font)
         title.setStyleSheet(
             "QLabel { background-color: #A52A2A; color: #FFFFFF; "
             "padding-top: 9px; padding-bottom: 9px; }"

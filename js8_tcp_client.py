@@ -46,19 +46,20 @@ class JS8CallTCPClient(QObject):
     # Speed mode names
     SPEED_NAMES = {0: "NORMAL", 1: "FAST", 2: "TURBO", 4: "SLOW", 8: "ULTRA"}
 
-    def __init__(self, rig_name: str, port: int, parent: QObject = None):
+    def __init__(self, rig_name: str, port: int, host: str = DEFAULT_HOST, parent: QObject = None):
         """
         Initialize TCP client.
 
         Args:
             rig_name: Name identifying this rig/connection.
             port: TCP port for JS8Call (typically 2442).
+            host: IP address or hostname of the JS8Call computer (default 127.0.0.1).
             parent: Parent QObject.
         """
         super().__init__(parent)
         self.rig_name = rig_name
         self.port = port
-        self.host = DEFAULT_HOST
+        self.host = host
         self.buffer = b""
         self._auto_reconnect = True
         self._reconnect_attempts = 0
@@ -384,9 +385,10 @@ class TCPConnectionPool(QObject):
         for conn in enabled_connectors:
             rig_name = conn["rig_name"]
             tcp_port = conn["tcp_port"]
+            server = conn.get("server", DEFAULT_HOST)
 
             if rig_name not in self.clients:
-                self._create_client(rig_name, tcp_port)
+                self._create_client(rig_name, tcp_port, server)
 
     def disconnect_all(self) -> None:
         """Disconnect and remove all TCP clients."""
@@ -413,21 +415,22 @@ class TCPConnectionPool(QObject):
         for conn in enabled_connectors:
             rig_name = conn["rig_name"]
             tcp_port = conn["tcp_port"]
+            server = conn.get("server", DEFAULT_HOST)
 
             if rig_name in self.clients:
-                # Check if port changed
+                # Check if port or host changed
                 client = self.clients[rig_name]
-                if client.port != tcp_port:
-                    # Recreate with new port
+                if client.port != tcp_port or client.host != server:
+                    # Recreate with new settings
                     self._remove_client(rig_name)
-                    self._create_client(rig_name, tcp_port)
+                    self._create_client(rig_name, tcp_port, server)
             else:
                 # Create new client
-                self._create_client(rig_name, tcp_port)
+                self._create_client(rig_name, tcp_port, server)
 
-    def _create_client(self, rig_name: str, port: int) -> None:
+    def _create_client(self, rig_name: str, port: int, host: str = DEFAULT_HOST) -> None:
         """Create and connect a single TCP client."""
-        client = JS8CallTCPClient(rig_name, port, self)
+        client = JS8CallTCPClient(rig_name, port, host, self)
 
         # Connect signals to aggregate signals
         client.message_received.connect(self.any_message_received)

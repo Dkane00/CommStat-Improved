@@ -516,8 +516,8 @@ class _QRZInfoSection(QWidget):
         self.lbl_county.setText(f"<b>County:</b> {d['county']}" if d["county"] else "")
         self.lbl_country.setText(f"<b>Country:</b> {d['country']}" if d["country"] else "")
 
-        self.lbl_license.setText("<b>Last Seen:</b> —")
         if d["call"] and not self._skip_last_seen:
+            self.lbl_license.setText("<b>Last Seen:</b> —")
             self._fetch_last_seen(d["call"])
 
         if d["license"] and d["expdate"]:

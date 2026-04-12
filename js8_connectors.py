@@ -16,7 +16,9 @@ from PyQt5.QtWidgets import (
     QMessageBox, QGroupBox, QTextEdit
 )
 
-from connector_manager import ConnectorManager, MAX_CONNECTORS
+from connector_manager import ConnectorManager
+
+MAX_CONNECTORS = 3  # legacy limit — kept local until this file is replaced
 from js8_tcp_client import TCPConnectionPool
 
 

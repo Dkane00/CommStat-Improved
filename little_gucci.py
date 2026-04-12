@@ -69,7 +69,7 @@ from alert import Ui_FormAlert
 from statrep import StatRepDialog
 from connector_manager import ConnectorManager
 from js8_tcp_client import TCPConnectionPool
-from js8_connectors import JS8ConnectorsDialog
+from js8_connectors2 import JS8ConnectorsDialog
 from id_utils import generate_time_based_id
 from constants import *
 
@@ -1058,7 +1058,8 @@ class DatabaseManager:
                     # Show all messages regardless of group
                     query = f"""SELECT db, datetime, freq, from_callsign, target, msg_id, message, source
                                FROM messages
-                               WHERE {date_condition}"""
+                               WHERE {date_condition}
+                               ORDER BY datetime DESC"""
                     params = date_params
                 elif groups:
                     # Filter by active groups (add @ prefix for matching)
@@ -1066,7 +1067,8 @@ class DatabaseManager:
                     placeholders = ",".join("?" * len(groups_with_at))
                     query = f"""SELECT db, datetime, freq, from_callsign, target, msg_id, message, source
                                FROM messages
-                               WHERE target IN ({placeholders}) AND {date_condition}"""
+                               WHERE target IN ({placeholders}) AND {date_condition}
+                               ORDER BY datetime DESC"""
                     params = groups_with_at + date_params
                 else:
                     # No groups and not show_all - return empty
@@ -2555,9 +2557,9 @@ class MainWindow(QtWidgets.QMainWindow):
         except sqlite3.IntegrityError as e:
             if id_field in str(e) or "UNIQUE" in str(e):
                 id_val = data.get(id_field, "unknown")
-                print(f"{ConsoleColors.SUCCESS}[{rig_name}] Skipping {msg_type} from {from_callsign} — already received (ID: {id_val}){ConsoleColors.RESET}")
                 # Backfill global_id if backbone returned a real ID for a locally-stored record (global_id=0)
                 incoming_global_id = data.get('global_id', 0)
+                print(f"[{rig_name}] Skipping {msg_type} from {from_callsign} — already received (Global ID: {incoming_global_id})")
                 if incoming_global_id:
                     cursor.execute(
                         f"UPDATE {table} SET global_id = ? WHERE {id_field} = ? AND (global_id IS NULL OR global_id = 0)",
@@ -4471,7 +4473,7 @@ class MainWindow(QtWidgets.QMainWindow):
             except sqlite3.Error:
                 _existing = None
             if _existing:
-                print(f"[{rig_name}] Skipping duplicate STATREP from {from_callsign} (ID: {sr_id})")
+                print(f"[{rig_name}] Skipping duplicate STATREP from {from_callsign} (Global ID: {global_id})")
                 return ("", None)
 
         # Build data dict for insertion

@@ -5,7 +5,7 @@
 connector_manager.py - JS8Call TCP Connector Database Manager
 
 Manages database operations for JS8Call TCP connectors.
-Supports up to 3 connectors with one designated as default.
+Supports unlimited connectors with one designated as default.
 """
 
 import sqlite3
@@ -14,8 +14,8 @@ from typing import Dict, List, Optional
 
 # Constants
 DATABASE_FILE = "traffic.db3"
-MAX_CONNECTORS = 3
 DEFAULT_TCP_PORT = 2442
+DEFAULT_SERVER = "127.0.0.1"
 
 
 class ConnectorManager:
@@ -67,7 +67,7 @@ class ConnectorManager:
 
         Returns:
             List of connector dictionaries with keys:
-            id, rig_name, tcp_port, comment, date_added, is_default, enabled
+            id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
         """
         try:
             with sqlite3.connect(self.db_path, timeout=10) as conn:
@@ -75,14 +75,14 @@ class ConnectorManager:
                 cursor = conn.cursor()
                 if enabled_only:
                     cursor.execute("""
-                        SELECT id, rig_name, tcp_port, state, comment, date_added, is_default, enabled
+                        SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
                         FROM js8_connectors
                         WHERE enabled = 1
                         ORDER BY is_default DESC, rig_name ASC
                     """)
                 else:
                     cursor.execute("""
-                        SELECT id, rig_name, tcp_port, state, comment, date_added, is_default, enabled
+                        SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
                         FROM js8_connectors
                         ORDER BY is_default DESC, rig_name ASC
                     """)
@@ -107,7 +107,7 @@ class ConnectorManager:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT id, rig_name, tcp_port, state, comment, date_added, is_default, enabled
+                    SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
                     FROM js8_connectors
                     WHERE id = ?
                 """, (connector_id,))
@@ -132,7 +132,7 @@ class ConnectorManager:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT id, rig_name, tcp_port, state, comment, date_added, is_default, enabled
+                    SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
                     FROM js8_connectors
                     WHERE rig_name = ?
                 """, (rig_name,))
@@ -154,7 +154,7 @@ class ConnectorManager:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT id, rig_name, tcp_port, state, comment, date_added, is_default, enabled
+                    SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
                     FROM js8_connectors
                     WHERE is_default = 1
                 """)
@@ -170,7 +170,8 @@ class ConnectorManager:
         tcp_port: int = DEFAULT_TCP_PORT,
         state: str = "",
         comment: str = "",
-        set_as_default: bool = False
+        set_as_default: bool = False,
+        server: str = DEFAULT_SERVER
     ) -> bool:
         """
         Add a new connector.
@@ -181,15 +182,11 @@ class ConnectorManager:
             state: 2-letter state code (e.g., TX).
             comment: Optional description.
             set_as_default: If True, set this as the default connector.
+            server: IP address or hostname of the JS8Call computer (default 127.0.0.1).
 
         Returns:
             True if successful, False otherwise.
         """
-        # Check max connectors limit
-        if self.get_connector_count() >= MAX_CONNECTORS:
-            print(f"Cannot add connector: maximum of {MAX_CONNECTORS} reached")
-            return False
-
         # Validate rig_name
         rig_name = rig_name.strip()
         if not rig_name:
@@ -214,14 +211,16 @@ class ConnectorManager:
 
                 date_added = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
+                server = server.strip() if server else DEFAULT_SERVER
+
                 cursor.execute("""
                     INSERT INTO js8_connectors
-                    (rig_name, tcp_port, state, comment, date_added, is_default)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (rig_name, tcp_port, state, comment, date_added, is_default))
+                    (rig_name, tcp_port, state, comment, date_added, is_default, server)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (rig_name, tcp_port, state, comment, date_added, is_default, server))
 
                 conn.commit()
-                print(f"Added connector: {rig_name} on port {tcp_port}")
+                print(f"Added connector: {rig_name} on {server}:{tcp_port}")
                 return True
 
         except sqlite3.IntegrityError:
@@ -237,7 +236,8 @@ class ConnectorManager:
         rig_name: str,
         tcp_port: int,
         state: str = "",
-        comment: str = ""
+        comment: str = "",
+        server: str = DEFAULT_SERVER
     ) -> bool:
         """
         Update an existing connector.
@@ -248,6 +248,7 @@ class ConnectorManager:
             tcp_port: New TCP port.
             state: 2-letter state code (e.g., TX).
             comment: New comment.
+            server: IP address or hostname of the JS8Call computer.
 
         Returns:
             True if successful, False otherwise.
@@ -259,15 +260,16 @@ class ConnectorManager:
 
         # Clean state (uppercase, max 2 chars)
         state = state.strip().upper()[:2] if state else ""
+        server = server.strip() if server else DEFAULT_SERVER
 
         try:
             with sqlite3.connect(self.db_path, timeout=10) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     UPDATE js8_connectors
-                    SET rig_name = ?, tcp_port = ?, state = ?, comment = ?
+                    SET rig_name = ?, tcp_port = ?, state = ?, comment = ?, server = ?
                     WHERE id = ?
-                """, (rig_name, tcp_port, state, comment, connector_id))
+                """, (rig_name, tcp_port, state, comment, server, connector_id))
                 conn.commit()
 
                 if cursor.rowcount > 0:

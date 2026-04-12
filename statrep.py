@@ -286,9 +286,18 @@ class StatRepDialog(QDialog):
         # Always enabled by default. Could read from config.ini if user wants control.
         return True
 
-    def _submit_to_backbone_async(self, frequency: int) -> None:
-        """Start background thread to submit statrep to backbone server."""
+    def _submit_to_backbone_async(self, frequency: int, on_complete=None) -> None:
+        """Start background thread to submit statrep to backbone server.
+
+        Args:
+            frequency: Transmission frequency in Hz.
+            on_complete: Optional callable(global_id: int) invoked after the
+                request completes (success or failure).  global_id is 0 on
+                failure or when the server returns a non-numeric response.
+        """
         if not self._is_backbone_enabled():
+            if on_complete:
+                on_complete(0)
             return
 
         # Capture current state for the thread
@@ -298,6 +307,7 @@ class StatRepDialog(QDialog):
 
         def submit_thread():
             """Background thread that performs the HTTP POST."""
+            global_id = 0
             try:
                 # Format data string: datetime\tfreq_hz\t0\t30\tmessage
                 data_string = f"{now}\t{frequency}\t0\t30\t{message}"
@@ -313,14 +323,18 @@ class StatRepDialog(QDialog):
                 with urllib.request.urlopen(req, timeout=10) as response:
                     result = response.read().decode('utf-8').strip()
 
-                # Check server response: "1" = success, other = failure
-                if result == "1":
-                    print(f"[Backbone] Statrep submitted successfully (response: {result})")
+                # Server returns the assigned global_id as an integer string
+                if result.isdigit():
+                    global_id = int(result)
+                    print(f"[Backbone] Statrep submitted successfully (global_id={global_id})")
                 else:
                     print(f"[Backbone] Statrep submission failed - server returned: {result}")
 
             except Exception as e:
                 print(f"[Backbone] Failed to submit statrep: {e}")
+            finally:
+                if on_complete:
+                    on_complete(global_id)
 
         # Start daemon thread (won't block app shutdown)
         thread = threading.Thread(target=submit_thread, daemon=True)
@@ -1114,57 +1128,98 @@ class StatRepDialog(QDialog):
 
         return message
 
-    def _save_to_database(self, frequency: int = 0) -> None:
-        """Save StatRep to database.
+    def _capture_save_data(self, frequency: int) -> dict:
+        """Capture all widget state needed for DB insert on the main thread.
+
+        Call this before launching any background thread so Qt widgets are only
+        accessed from the main thread.
 
         Args:
             frequency: The frequency in Hz at the time of transmission.
+
+        Returns:
+            Dict of pre-captured values ready for _save_to_database().
         """
         values = self._get_status_values()
-        scope_text = self.scope_combo.currentText()
         remarks = self._get_remarks_text()
-
-        # Replace newlines with || for storage
         remarks = remarks.replace('\r\n', NEWLINE_PLACEHOLDER).replace('\n', NEWLINE_PLACEHOLDER).replace('\r', NEWLINE_PLACEHOLDER)
         remarks = re.sub(r"[^A-Za-z0-9*\-\s|.?!'/:()#@+=&]+", " ", remarks)
 
         now = QDateTime.currentDateTimeUtc()
-        date = now.toString("yyyy-MM-dd HH:mm:ss")
-        date_only = now.toString("yyyy-MM-dd")
+        return {
+            'frequency': frequency,
+            'source': 3 if self.rig_combo.currentText() == INTERNET_RIG else 1,
+            'statrep_id': self.statrep_id,
+            'callsign': self.callsign.upper(),
+            'target': '@' + self.to_combo.currentText().upper(),
+            'grid': self.grid.upper(),
+            'scope_text': self.scope_combo.currentText(),
+            'date': now.toString("yyyy-MM-dd HH:mm:ss"),
+            'date_only': now.toString("yyyy-MM-dd"),
+            'map': values["status"],
+            'power': values["power"],
+            'water': values["water"],
+            'med': values["medical"],
+            'telecom': values["comms"],
+            'travel': values["travel"],
+            'internet': values["internet"],
+            'fuel': values["fuel"],
+            'food': values["food"],
+            'crime': values["crime"],
+            'civil': values["civil"],
+            'political': values["political"],
+            'comments': remarks,
+        }
+
+    def _save_to_database(self, frequency: int = 0, global_id: int = 0) -> None:
+        """Save StatRep to database.
+
+        Uses pre-captured data from self._pending_save_data if available,
+        otherwise reads widget state directly (safe only on the main thread).
+
+        Args:
+            frequency: The frequency in Hz at the time of transmission.
+            global_id: The global ID returned by the backbone server (0 if unknown).
+        """
+        if hasattr(self, '_pending_save_data') and self._pending_save_data:
+            d = self._pending_save_data
+        else:
+            d = self._capture_save_data(frequency)
 
         try:
             with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO statrep(
-                        datetime, date, freq, db, source, sr_id, from_callsign, target, grid, scope,
+                        global_id, datetime, date, freq, db, source, sr_id, from_callsign, target, grid, scope,
                         map, power, water, med, telecom, travel, internet,
                         fuel, food, crime, civil, political, comments
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    date,
-                    date_only,
-                    frequency,
+                    global_id,
+                    d['date'],
+                    d['date_only'],
+                    d['frequency'],
                     30,  # db (SNR): set to 30 for manual entries
-                    3 if self.rig_combo.currentText() == INTERNET_RIG else 1,  # source: 1=Radio, 3=Internet
-                    self.statrep_id,
-                    self.callsign.upper(),
-                    '@' + self.to_combo.currentText().upper(),
-                    self.grid.upper(),
-                    scope_text,
-                    values["status"],      # -> map column
-                    values["power"],       # -> power column
-                    values["water"],       # -> water column
-                    values["medical"],     # -> med column
-                    values["comms"],       # -> telecom column
-                    values["travel"],      # -> travel column
-                    values["internet"],    # -> internet column
-                    values["fuel"],        # -> fuel column
-                    values["food"],        # -> food column
-                    values["crime"],       # -> crime column
-                    values["civil"],       # -> civil column
-                    values["political"],   # -> political column
-                    remarks,
+                    d['source'],
+                    d['statrep_id'],
+                    d['callsign'],
+                    d['target'],
+                    d['grid'],
+                    d['scope_text'],
+                    d['map'],
+                    d['power'],
+                    d['water'],
+                    d['med'],
+                    d['telecom'],
+                    d['travel'],
+                    d['internet'],
+                    d['fuel'],
+                    d['food'],
+                    d['crime'],
+                    d['civil'],
+                    d['political'],
+                    d['comments'],
                 ))
                 conn.commit()
         except sqlite3.Error as e:
@@ -1229,8 +1284,14 @@ class StatRepDialog(QDialog):
             self.callsign = callsign
             self._pending_message = self._build_message()
             if not getattr(self, '_forward_origin', None):
-                self._save_to_database(0)
-            self._submit_to_backbone_async(0)
+                self._pending_save_data = self._capture_save_data(0)
+
+                def _on_internet_backbone_complete(global_id: int) -> None:
+                    self._save_to_database(0, global_id)
+
+                self._submit_to_backbone_async(0, on_complete=_on_internet_backbone_complete)
+            else:
+                self._submit_to_backbone_async(0)
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
             print(f"\n{'='*60}")
             print(f"STATREP TRANSMITTED (Internet) - {now} UTC")
@@ -1314,12 +1375,19 @@ class StatRepDialog(QDialog):
             # Transmit via TCP
             client.send_tx_message(self._pending_message)
 
-            # Save to database with frequency (skip if forwarding — record already exists)
+            # Save to database (skip if forwarding — record already exists)
             if not getattr(self, '_forward_origin', None):
-                self._save_to_database(frequency)
-
-            # Submit to backbone server (asynchronous, non-blocking)
-            if self.delivery_combo.currentText() != "Limited Reach":
+                self._pending_save_data = self._capture_save_data(frequency)
+                if self.delivery_combo.currentText() == "Limited Reach":
+                    # No backbone submission — save immediately with no global_id
+                    self._save_to_database(frequency, 0)
+                else:
+                    # Delay DB write until backbone returns the assigned global_id
+                    def _on_radio_backbone_complete(global_id: int) -> None:
+                        self._save_to_database(frequency, global_id)
+                    self._submit_to_backbone_async(frequency, on_complete=_on_radio_backbone_complete)
+            elif self.delivery_combo.currentText() != "Limited Reach":
+                # Forwarding path — still submit to backbone, no DB write
                 self._submit_to_backbone_async(frequency)
 
             # Print to terminal
