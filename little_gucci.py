@@ -69,7 +69,7 @@ from alert import Ui_FormAlert
 from statrep import StatRepDialog
 from connector_manager import ConnectorManager
 from js8_tcp_client import TCPConnectionPool
-from js8_connectors2 import JS8ConnectorsDialog
+from js8_connectors import JS8ConnectorsDialog
 from id_utils import generate_time_based_id
 from constants import *
 
