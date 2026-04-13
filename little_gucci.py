@@ -1271,6 +1271,18 @@ class DatabaseManager:
             return result[0] if result else 0
         return self._execute(op, 0)
 
+    def delete_alert_at_offset(self, offset: int) -> bool:
+        """Delete the alert at the specified offset from most recent."""
+        def op(cursor, conn):
+            cursor.execute(
+                "DELETE FROM alerts WHERE id = ("
+                "SELECT id FROM alerts ORDER BY datetime DESC LIMIT 1 OFFSET ?)",
+                (offset,)
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
+
     def get_alert_at_offset(self, offset: int) -> Optional[Tuple[str, str, int, str, str, str]]:
         """Get an alert at the specified offset from most recent.
 
@@ -1644,7 +1656,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # STATREP & MESSAGES section
         self.filter_menu.addSeparator()
-        statrep_messages_label = QtWidgets.QAction("STATUS REPORTS && MESSAGES", self)
+        statrep_messages_label = QtWidgets.QAction("STATUS REPORTS", self)
         statrep_messages_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(statrep_messages_label)
 
@@ -1690,7 +1702,7 @@ class MainWindow(QtWidgets.QMainWindow):
             btn = QtWidgets.QPushButton(label)
             btn.setFont(font_tiny)
             btn.setFixedHeight(18)
-            btn.setFixedWidth(52)
+            btn.setFixedWidth(62)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked, m=mode: self._set_map_view_mode(m))
             self.statusbar.addWidget(btn)
@@ -2007,25 +2019,35 @@ class MainWindow(QtWidgets.QMainWindow):
         alert_layout.addWidget(self.alert_date_label)
         alert_layout.addSpacing(10)
 
-        # Navigation buttons row
-        nav_layout = QtWidgets.QHBoxLayout()
-        nav_layout.setAlignment(Qt.AlignCenter)
+        # Bottom row: nav buttons centered, delete button at right
+        bottom_layout = QtWidgets.QHBoxLayout()
 
         self.alert_prev_btn = QtWidgets.QPushButton("<")
         self.alert_prev_btn.setFixedSize(40, 30)
         self.alert_prev_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; background-color: white; color: #000000; }")
         self.alert_prev_btn.clicked.connect(lambda: self._alert_navigate(-1))
-        nav_layout.addWidget(self.alert_prev_btn)
-
-        nav_layout.addSpacing(20)
 
         self.alert_next_btn = QtWidgets.QPushButton(">")
         self.alert_next_btn.setFixedSize(40, 30)
         self.alert_next_btn.setStyleSheet("QPushButton { font-size: 16px; font-weight: bold; background-color: white; color: #000000; }")
         self.alert_next_btn.clicked.connect(lambda: self._alert_navigate(1))
-        nav_layout.addWidget(self.alert_next_btn)
 
-        alert_layout.addLayout(nav_layout)
+        self.alert_delete_btn = QtWidgets.QPushButton("Delete")
+        self.alert_delete_btn.setStyleSheet(
+            "QPushButton { background-color: #dc3545; color: white; font-family: Roboto; font-size: 15px; font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
+            "QPushButton:hover { background-color: #c82333; }"
+            "QPushButton:pressed { background-color: #bd2130; }"
+        )
+        self.alert_delete_btn.clicked.connect(self._alert_delete)
+
+        bottom_layout.addStretch(1)
+        bottom_layout.addWidget(self.alert_prev_btn)
+        bottom_layout.addSpacing(20)
+        bottom_layout.addWidget(self.alert_next_btn)
+        bottom_layout.addStretch(1)
+        bottom_layout.addWidget(self.alert_delete_btn)
+
+        alert_layout.addLayout(bottom_layout)
 
         # Default styling (will be updated when alert is displayed)
         self.alert_display.setStyleSheet("background-color: #333333;")
@@ -2143,6 +2165,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.alert_message_label.setText("")
             self.alert_date_label.setText("")
 
+        self.alert_delete_btn.setVisible(alert is not None)
         self.alert_display.show()
 
     def _alert_navigate(self, direction: int) -> None:
@@ -2154,6 +2177,14 @@ class MainWindow(QtWidgets.QMainWindow):
         elif direction > 0 and new_index < self.db.get_alert_count():
             self.alert_index = new_index
             self._show_alert_display()
+
+    def _alert_delete(self) -> None:
+        """Delete the currently displayed alert and refresh the view."""
+        self.db.delete_alert_at_offset(self.alert_index)
+        count = self.db.get_alert_count()
+        if self.alert_index >= count:
+            self.alert_index = max(0, count - 1)
+        self._show_alert_display()
 
     def _fetch_backbone_content(self) -> Optional[str]:
         """Fetch and extract content from backbone server.
@@ -3926,10 +3957,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 if cs_item:
                     cs_item.setData(QtCore.Qt.UserRole, row_data[22])
 
-        # Sort by datetime column for message and alert tables (statrep is sorted by SQL)
-        if is_message_table:
-            table.sortItems(1, QtCore.Qt.DescendingOrder)
-        elif not is_statrep_table:
+        # Alert table (non-statrep, non-message): sort by first column descending
+        if not is_message_table and not is_statrep_table:
             table.sortItems(0, QtCore.Qt.DescendingOrder)
 
     def _get_normalization_settings(self) -> Tuple[bool, Optional[Dict[str, str]]]:
@@ -4547,9 +4576,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     user_callsigns = [local_callsign.upper()]
             if alert_target.upper() not in user_callsigns:
                 return ("", None)
-        elif alert_target.upper() == "@GLOBAL":
-            # @GLOBAL is a broadcast to everyone — store as @ALLCALL
-            alert_target = "@ALLCALL"
+        elif alert_target.upper() == "@COMMSTAT":
+            # @COMMSTAT is a broadcast to everyone — store as @COMMSTAT
+            alert_target = "@COMMSTAT"
         else:
             # Standard @GROUP — only save if we're a member of that group (active or not)
             group_name = alert_target[1:].upper()
@@ -4659,18 +4688,17 @@ class MainWindow(QtWidgets.QMainWindow):
                     # Skip messages to groups we're not in
                     return ("", None)
         else:
-            # Direct message - always accept COMMSTAT callsign; otherwise check our callsigns
+            # Direct message - only save if to one of our callsigns
             target_call = msg_target.upper()
-            if target_call != "COMMSTAT":
-                user_callsigns = [c.upper() for c in self.rig_callsigns.values() if c]
-                if not user_callsigns:
-                    # No JS8 connectors active — fall back to user settings callsign
-                    settings_callsign, _, __ = self.db.get_user_settings()
-                    if settings_callsign:
-                        user_callsigns = [settings_callsign.upper()]
-                if target_call not in user_callsigns:
-                    # Skip messages not to our callsigns
-                    return ("", None)
+            user_callsigns = [c.upper() for c in self.rig_callsigns.values() if c]
+            if not user_callsigns:
+                # No JS8 connectors active — fall back to user settings callsign
+                settings_callsign, _, __ = self.db.get_user_settings()
+                if settings_callsign:
+                    user_callsigns = [settings_callsign.upper()]
+            if target_call not in user_callsigns:
+                # Skip messages not to our callsigns
+                return ("", None)
 
         # Build data dict for insertion
         data = {
@@ -4823,13 +4851,21 @@ class MainWindow(QtWidgets.QMainWindow):
             target = to_call
 
         # Determine if message is relevant (to group or to our callsign)
-        is_to_group = to_call.startswith("@")
         user_callsign = self.get_callsign_for_rig(rig_name)
         is_to_user = to_call.split("/")[0] == user_callsign if user_callsign else False
-        is_to_commstat = to_call.upper().lstrip("@").split("/")[0] == "COMMSTAT"
 
-        # Only process if to group OR to our callsign OR to COMMSTAT
-        if not (is_to_group or is_to_user or is_to_commstat):
+        # Group check: @COMMSTAT always accepted; other groups only if in our groups list
+        if to_call.startswith("@"):
+            if to_call.upper() == "@COMMSTAT":
+                is_to_group = True
+            else:
+                group_name = to_call[1:].upper()
+                is_to_group = group_name in self.db.get_all_groups()
+        else:
+            is_to_group = False
+
+        # Only process if to our group OR to our callsign
+        if not (is_to_group or is_to_user):
             return ""
 
         # Parse using unified parser (source=1 for Radio)
