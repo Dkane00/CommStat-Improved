@@ -1868,6 +1868,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 color: {data_fg};
                 font-family: Roboto;
                 font-size: 13px;
+                gridline-color: #D2D0CF;
+                border: 1px solid #D2D0CF;
+            }}
+            QTableWidget::item {{
+                border: none;
             }}
             QTableWidget QHeaderView::section {{
                 background-color: {title_bg};
@@ -1883,6 +1888,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 border: 1px solid black;
             }}
         """)
+        table.setShowGrid(True)
 
         table.horizontalHeader().setStyleSheet(f"""
             QHeaderView::section {{

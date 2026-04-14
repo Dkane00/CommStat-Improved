@@ -1256,6 +1256,7 @@ class MessageDetailDialog(QDialog):
         self._msg_id = msg_id
         self._thread: Optional[_QRZThread] = None
         self._map_loaded = False
+        self._deleted_any = False
         self.setWindowTitle(f"Message — {callsign}")
         self.setModal(True)
         self.setMinimumSize(996, 460)
@@ -1322,7 +1323,7 @@ class MessageDetailDialog(QDialog):
         btn_row.addWidget(self.btn_message_msg)
         self.btn_close = QPushButton("Close")
         self.btn_close.setStyleSheet(_bs("#555555"))
-        self.btn_close.clicked.connect(self.reject)
+        self.btn_close.clicked.connect(self._on_close_clicked)
         btn_row.addWidget(self.btn_close)
         main.addLayout(btn_row)
 
@@ -1339,14 +1340,49 @@ class MessageDetailDialog(QDialog):
         dlg.set_message_text(prefill)
         dlg.exec_()
 
+    def _on_close_clicked(self) -> None:
+        if self._deleted_any:
+            self.accept()
+        else:
+            self.reject()
+
     def _on_delete(self) -> None:
+        next_row = None
         try:
             with sqlite3.connect(DB_PATH, timeout=10) as conn:
-                conn.execute("DELETE FROM messages WHERE msg_id = ?", (self._msg_id,))
+                cur = conn.cursor()
+                cur.execute("SELECT datetime FROM messages WHERE msg_id = ?", (self._msg_id,))
+                row = cur.fetchone()
+                current_dt = row[0] if row else None
+                cur.execute("DELETE FROM messages WHERE msg_id = ?", (self._msg_id,))
                 conn.commit()
+                self._deleted_any = True
+                if current_dt is not None:
+                    cur.execute(
+                        "SELECT msg_id, from_callsign, message FROM messages "
+                        "WHERE datetime < ? ORDER BY datetime DESC LIMIT 1",
+                        (current_dt,)
+                    )
+                    next_row = cur.fetchone()
         except sqlite3.Error:
-            pass
-        self.accept()
+            self.accept()
+            return
+        if not next_row:
+            self.accept()
+            return
+        self._msg_id, self.callsign, self.message_text = next_row[0], next_row[1] or "", next_row[2] or ""
+        self.setWindowTitle(f"Message — {self.callsign}")
+        self.msg_text.setHtml(_text_to_html(self.message_text.replace("||", "\n"), self._data_bg))
+        self._map_loaded = False
+        self.map_view.setHtml("", QUrl("http://localhost/"))
+        self.qrz_info.update_data({"call": self.callsign})
+        if self._thread is not None:
+            try:
+                self._thread.result_ready.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            self._thread = None
+        self._start_qrz()
 
     def _start_qrz(self) -> None:
         cached = get_qrz_cached(self.callsign)
