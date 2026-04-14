@@ -149,12 +149,9 @@ def test_python():
 def lininstall():
     """Install dependencies for Linux/Pi systems."""
     packages = [
-        "feedparser",
-        "file-read-backwards",
         "folium",
         "pandas",
         "maidenhead",
-        "psutil",
         "pyenchant",
     ]
     print(f"\nInstalling {len(packages)} packages...")
@@ -167,15 +164,10 @@ def macinstall():
     """Install dependencies for macOS systems."""
     packages = [
         "PyQt5",
-        "PyQt5-Qt5",
         "PyQtWebEngine",
-        "PyQtWebEngine-Qt5",
-        "feedparser",
-        "file-read-backwards",
         "folium",
         "pandas",
         "maidenhead",
-        "psutil",
         "pyenchant",
     ]
     print(f"\nInstalling {len(packages)} packages...")
@@ -189,12 +181,9 @@ def wininstall():
     packages = [
         "pyqt5",
         "PyQtWebEngine",
-        "feedparser",
-        "file-read-backwards",
         "folium",
         "pandas",
         "maidenhead",
-        "psutil",
         "pyenchant",
     ]
     print(f"\nInstalling {len(packages)} packages...")
