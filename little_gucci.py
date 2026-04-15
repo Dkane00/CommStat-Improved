@@ -4126,6 +4126,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Create a styled checkbox as a menu item and add it to the given menu."""
         panel_bg = self.config.get_color('panel_background')
         panel_fg = self.config.get_color('panel_foreground')
+        checked_color = self.config.get_color('menu_background')
         checkbox = QtWidgets.QCheckBox(label)
         checkbox.setChecked(is_checked)
         checkbox.setStyleSheet(f"""
@@ -4144,8 +4145,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 border-radius: 2px;
             }}
             QCheckBox::indicator:checked {{
-                background-color: #000000;
-                border: 1px solid #000000;
+                background-color: {checked_color};
+                border: 1px solid {checked_color};
                 border-radius: 2px;
             }}
         """)
