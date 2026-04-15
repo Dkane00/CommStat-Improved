@@ -311,8 +311,6 @@ class JS8ConnectorsDialog(QDialog):
 
         self.table.setRowCount(0)
         mono = _mono_font(15)
-        bold_mono = _mono_font(15)
-        bold_mono.setBold(True)
 
         for row_idx, conn in enumerate(connectors):
             self.table.insertRow(row_idx)
@@ -335,7 +333,7 @@ class JS8ConnectorsDialog(QDialog):
                 status_text  = "Disconnected"
                 status_color = _COL_DISCONNECTED
 
-            cell_font = bold_mono if is_default else mono
+            cell_font = mono
             values = [rig, server, port, state, status_text, comment]
 
             for col_idx, val in enumerate(values):
