@@ -4192,7 +4192,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 }}
                 QCheckBox::indicator:checked {{
                     background-color: {checked_color};
-                    border: 1px solid {checked_color};
+                    border: 1px solid {panel_fg};
                     border-radius: 2px;
                 }}
             """)
