@@ -4336,6 +4336,42 @@ class MainWindow(QtWidgets.QMainWindow):
             # Process the message for database insertion
             # Use dial frequency (freq - offset) for database storage
             dial_freq = freq - offset if freq else 0
+
+            # --- Relay message detection ---
+            # Handles JS8Call relay protocol: RELAY: USER_CALL> CONTENT *DE* SENDER
+            import re as _re_relay
+            _clean = self._preprocess_message_value(value, from_call)
+            _user_call = self.get_callsign_for_rig(rig_name)
+
+            if _user_call:
+                # Pattern A: USER_CALL> ACK *DE* RECIPIENT
+                _ack = _re_relay.match(
+                    r'^(\w+)>\s+ACK\s+\*DE\*\s+(\w+)', _clean, _re_relay.IGNORECASE
+                )
+                if _ack and _ack.group(1).upper() == _user_call.upper():
+                    _recipient = _ack.group(2).upper()
+                    QtWidgets.QMessageBox.information(
+                        self,
+                        "Message Delivered",
+                        f"Your message to {_recipient} was delivered successfully."
+                    )
+                    return  # fully handled
+
+                # Pattern B: USER_CALL> CONTENT *DE* SENDER (not ACK)
+                _relay = _re_relay.match(
+                    r'^(\w+)>\s+(?!ACK\b)(.+?)\s+\*DE\*\s+(\w+)\s*$', _clean, _re_relay.IGNORECASE
+                )
+                if _relay and _relay.group(1).upper() == _user_call.upper():
+                    _actual_sender = _relay.group(3)
+                    _content = f"{_relay.group(2).strip()} - Relayed by: {from_call}"
+                    _data_type = self._process_relay_message(
+                        rig_name, _actual_sender, _content, _user_call, dial_freq, snr, utc_db
+                    )
+                    if _data_type == "message":
+                        self._load_message_data()
+                    return  # fully handled
+            # --- End relay detection ---
+
             data_type = self._process_directed_message(
                 rig_name, value, from_call, to_call, grid, dial_freq, snr, utc_db
             )
@@ -4833,6 +4869,59 @@ class MainWindow(QtWidgets.QMainWindow):
             return (result, None)
 
         return ("", None)
+
+    def _process_relay_message(
+        self,
+        rig_name: str,
+        actual_sender: str,
+        content: str,
+        target: str,
+        freq: int,
+        snr: int,
+        utc: str
+    ) -> str:
+        """
+        Process a relay-forwarded message addressed to the local user.
+
+        Format: RELAY: USER_CALL> CONTENT *DE* ORIGINAL_SENDER
+
+        Args:
+            rig_name: Name of the rig.
+            actual_sender: Callsign after *DE* (the original message author).
+            content: Message text between '>' and '*DE*'.
+            target: User's local callsign (the relay destination).
+            freq: Frequency in Hz.
+            snr: Signal-to-noise ratio.
+            utc: UTC timestamp "YYYY-MM-DD HH:MM:SS".
+
+        Returns:
+            "message" on successful insert, "" otherwise.
+        """
+        from id_utils import parse_message_datetime
+
+        actual_sender = actual_sender.split("/")[0].upper()
+        content = content.strip()
+        if not content or not actual_sender:
+            return ""
+
+        date_only, msg_id = parse_message_datetime(utc)
+
+        data = {
+            'datetime': utc,
+            'date': date_only,
+            'freq': freq,
+            'db': snr,
+            'source': 1,
+            'msg_id': msg_id,
+            'from_callsign': actual_sender,
+            'target': target,
+            'message': content
+        }
+
+        result = self._insert_message_data(
+            rig_name, "messages", data, "msg_id", "message", actual_sender
+        )
+        return result if result else ""
 
     def _parse_commstat_message(
         self,
