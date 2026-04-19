@@ -1513,6 +1513,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._setup_contacts_widget()
         self._setup_timers()
 
+        # Single Ctrl+C shortcut for all tables — dispatches by focused viewport
+        QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+C"), self).activated.connect(
+            self._handle_copy_shortcut
+        )
+
         # Populate the Groups menu and filter menu group checkboxes
         self._populate_groups_menu()
         self._populate_filter_groups_menu()
@@ -1734,6 +1739,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
         self.tools_menu.addSeparator()
+        create_action(self.tools_menu, "QRZ Contacts", "qrz_contacts", self._on_qrz_contacts_menu)
         create_action(self.tools_menu, "Grid Finder", "grid_finder", self._on_grid_finder)
         create_action(self.tools_menu, "Large Map...", "large_map", self._on_large_map)
 
@@ -1917,7 +1923,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {data_bg};
                 color: {data_fg};
                 font-family: Roboto;
-                font-size: 13px;
+                font-size: 15px;
                 gridline-color: #D2D0CF;
                 border: 1px solid #D2D0CF;
             }}
@@ -1928,6 +1934,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 font-weight: bold;
                 padding: 4px;
                 border: 1px solid {title_bg};
+            }}
+            QTableWidget::item:selected {{
+                background-color: #cce5ff;
+                color: #000000;
             }}
             QToolTip {{
                 background-color: #FFFFE1;
@@ -1971,9 +1981,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statrep_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.statrep_table.customContextMenuRequested.connect(
             lambda pos: self._show_table_copy_menu(self.statrep_table, pos)
-        )
-        QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+C"), self.statrep_table).activated.connect(
-            lambda: self._copy_table_current_cell(self.statrep_table)
         )
 
         self.main_layout.addWidget(self.statrep_table, 2, 0, 1, 2)
@@ -2189,6 +2196,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.message_table.hide()
                 self.contacts_widget.show()
                 self._load_contacts_data()
+                self.contacts_table.viewport().setFocus()
             else:
                 QTimer.singleShot(0, lambda: self._set_map_view_mode("contacts"))
 
@@ -3153,7 +3161,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.feed_text = QtWidgets.QPlainTextEdit(self.central_widget)
         self.feed_text.setObjectName("feedText")
         mono_font = QtGui.QFont(FONT_MONO, -1, QtGui.QFont.Medium)
-        mono_font.setPixelSize(13)
+        mono_font.setPixelSize(14)
         self.feed_text.setFont(mono_font)
         self.feed_text.setStyleSheet(
             f"background-color: {self.config.get_color('feed_background')};"
@@ -3237,9 +3245,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.message_table.customContextMenuRequested.connect(
             lambda pos: self._show_table_copy_menu(self.message_table, pos)
         )
-        QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+C"), self.message_table).activated.connect(
-            lambda: self._copy_table_current_cell(self.message_table)
-        )
 
         self.main_layout.addWidget(self.message_table, 4, 1, 1, 1)
 
@@ -3261,7 +3266,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.contacts_table.setRowCount(1)  # row 0 = filter row
 
         self._setup_table_widget(self.contacts_table, _CONTACTS_HEADERS)
-        self.contacts_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.contacts_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.contacts_table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
 
         # Interactive mode — resizeColumnsToContents() is called once after data loads
@@ -3272,7 +3277,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Embed a QLineEdit in every cell of row 0 as the filter row
         filter_font = QtGui.QFont("Kode Mono", -1)
-        filter_font.setPixelSize(13)
+        filter_font.setPixelSize(15)
         filter_style = (
             "QLineEdit { background-color: white; color: #333333; "
             "border: none; padding: 1px 3px; }"
@@ -3291,8 +3296,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.contacts_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.contacts_table.customContextMenuRequested.connect(self._on_contacts_context_menu)
 
-        copy_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+C"), self.contacts_table)
-        copy_shortcut.activated.connect(self._copy_contacts_current_cell)
 
         outer.addWidget(self.contacts_table)
 
@@ -3316,6 +3319,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         col_keys = ["callsign", "name", "address", "city", "state",
                     "zip", "country", "grid", "class", "email", "image", "insert_date"]
+
+        self.contacts_table.setHorizontalHeaderItem(
+            1, QTableWidgetItem(f"Name   ({len(rows)} Records)")
+        )
 
         self.contacts_table.setUpdatesEnabled(False)
         self.contacts_table.setRowCount(1 + len(rows))  # row 0 reserved for filters
@@ -3355,6 +3362,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.contacts_table.setUpdatesEnabled(True)
         self.contacts_table.resizeColumnsToContents()
 
+        # Cap narrow columns that ResizeToContents makes too wide
+        _MAX_WIDTHS = {4: 55, 5: 70, 7: 70, 8: 60, 10: 55}
+        header = self.contacts_table.horizontalHeader()
+        for col, max_w in _MAX_WIDTHS.items():
+            if header.sectionSize(col) > max_w:
+                header.resizeSection(col, max_w)
+
     def _apply_contacts_filter(self) -> None:
         """Show/hide data rows based on per-column filter inputs. Row 0 is always shown."""
         filters = [edit.text().strip().upper() for edit in self._contacts_filters]
@@ -3366,7 +3380,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 item = self.contacts_table.item(row, col)
                 cell = item.text().upper() if item else ""
                 if col == 0:
-                    if not cell.startswith(f):
+                    if f not in cell:
                         match = False
                         break
                 else:
@@ -3396,10 +3410,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 dlg.cs_edit.setText(callsign)
                 dlg._search()
                 dlg.exec_()
+                self.contacts_table.viewport().setFocus()
         elif col == 10:
             url = item.data(Qt.UserRole)
             if url:
                 QDesktopServices.openUrl(QUrl(url))
+        else:
+            text = item.text().strip()
+            if text and text != "—":
+                QtWidgets.QApplication.clipboard().setText(text)
 
     def _on_contacts_context_menu(self, pos) -> None:
         """Show right-click context menu with Copy option for contacts table."""
@@ -3415,6 +3434,18 @@ class MainWindow(QtWidgets.QMainWindow):
             text = item.text().strip()
             if text and text != "—":
                 QtWidgets.QApplication.clipboard().setText(text)
+
+    def _handle_copy_shortcut(self) -> None:
+        """Single Ctrl+C handler — dispatches to whichever table viewport has focus."""
+        focused = QtWidgets.QApplication.focusWidget()
+        if hasattr(self, 'contacts_table') and focused in (
+            self.contacts_table, self.contacts_table.viewport()
+        ):
+            self._copy_contacts_current_cell()
+        elif focused in (self.statrep_table, self.statrep_table.viewport()):
+            self._copy_table_current_cell(self.statrep_table)
+        elif focused in (self.message_table, self.message_table.viewport()):
+            self._copy_table_current_cell(self.message_table)
 
     def _show_table_copy_menu(self, table: QtWidgets.QTableWidget, pos) -> None:
         """Show a right-click Copy context menu for any table cell."""
@@ -3583,6 +3614,14 @@ window.addEventListener('load', function() {
     }, 500);
 });
 </script>"""
+        webkit_shim = """<script>
+if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) {
+    Object.defineProperty(window, 'webkitStorageInfo', {
+        get: function() { return navigator.webkitTemporaryStorage; }
+    });
+}
+</script>"""
+        map_html = map_html.replace('</head>', webkit_shim + '\n</head>')
         map_html = map_html.replace('</body>', hover_js + '\n</body>')
 
         # Always set new HTML content (reload() only refreshes cached content)
@@ -3723,6 +3762,13 @@ window.addEventListener('load', function() {
             text = item.text().strip()
             if text:
                 QtWidgets.QApplication.clipboard().setText(text)
+
+    def _on_qrz_contacts_menu(self) -> None:
+        """Toggle QRZ Contacts view; switch back to map if already showing."""
+        if hasattr(self, 'contacts_widget') and self.contacts_widget.isVisible():
+            self._set_map_view_mode("map")
+        else:
+            self._set_map_view_mode("contacts")
 
     def _on_grid_finder(self) -> None:
         """Launch Grid Finder in a separate process."""
@@ -4257,7 +4303,7 @@ window.addEventListener('load', function() {
                 # Use Kode Mono for remarks/message text columns
                 if (is_statrep_table and col_num == 20) or (is_message_table and col_num == 6):
                     _mono_item_font = QtGui.QFont("Kode Mono", -1)
-                    _mono_item_font.setPixelSize(13)
+                    _mono_item_font.setPixelSize(15)
                     item.setFont(_mono_item_font)
 
                 # Add tooltip for multi-line remarks

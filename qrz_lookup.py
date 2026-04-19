@@ -1088,6 +1088,10 @@ class StatRepDetailDialog(QDialog):
 
     def _on_brevity(self) -> None:
         selected = self.comments.textCursor().selectedText().strip()
+        if not selected:
+            matches = _BREVITY_RE.findall(self.comments.toPlainText())
+            if matches:
+                selected = matches[0]
         brevity_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brevity.py")
         if os.path.exists(brevity_path):
             args = [sys.executable, brevity_path, self._panel_bg, self._panel_fg]
@@ -1215,14 +1219,19 @@ import html as _html_mod
 import re as _re
 
 _URL_RE = _re.compile(r'(https?://[^\s<>"\']+)', _re.IGNORECASE)
+_BREVITY_RE = _re.compile(r'\b([0-9][A-Z]{5})\b')
 
 
 def _text_to_html(text: str, bg: str) -> str:
-    """Convert plain text to HTML, turning URLs into clickable links."""
+    """Convert plain text to HTML, turning URLs into clickable links and highlighting brevity codes."""
     escaped = _html_mod.escape(text)
+    highlighted = _BREVITY_RE.sub(
+        r'<span style="background-color:#FFD700;font-weight:bold;">\1</span>',
+        escaped
+    )
     linked = _URL_RE.sub(
         lambda m: f'<a href="{m.group(1)}" style="color:#0078d7;">{m.group(1)}</a>',
-        escaped
+        highlighted
     )
     lines = linked.replace("\n", "<br>")
     return (

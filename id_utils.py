@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 # Hour-to-letter mapping (24 letters for 24 hours, skip O)
 HOUR_LETTERS = "ABCDEFGHIJKLMNPQRSTUVWXY"
@@ -31,3 +31,19 @@ def generate_time_based_id(dt: Optional[datetime] = None) -> str:
     # Generate ID: letter + two-digit minute
     letter = HOUR_LETTERS[hour]
     return f"{letter}{minute:02d}"
+
+
+def parse_message_datetime(utc: str) -> Tuple[str, str]:
+    """
+    Parse UTC timestamp and generate time-based ID.
+
+    Args:
+        utc: UTC timestamp string ("YYYY-MM-DD HH:MM:SS" or with extra spaces)
+
+    Returns:
+        (date_only_str, time_based_id)
+    """
+    dt_str = utc.replace("   ", " ").strip()
+    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    date_only = utc.split()[0] if utc else ""
+    return (date_only, generate_time_based_id(dt))
