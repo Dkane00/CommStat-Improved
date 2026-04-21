@@ -1574,11 +1574,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {menu_bg};
                 color: {menu_fg};
                 font-family: Roboto;
-                font-size: 15px;
+                font-size: 13px;
                 font-weight: bold;
             }}
             QMenuBar::item {{
-                padding: 4px 8px;
+                padding: 6px 8px;
             }}
             QMenuBar::item:selected {{
                 background-color: {menu_bg};
@@ -1587,11 +1587,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {panel_bg};
                 color: {panel_fg};
                 font-family: Roboto;
-                font-size: 15px;
+                font-size: 13px;
             }}
             QMenu::item {{
                 font-family: Roboto;
-                font-size: 15px;
+                font-size: 13px;
                 padding: 3px 12px;
             }}
             QMenu::item:selected {{
@@ -1786,7 +1786,7 @@ class MainWindow(QtWidgets.QMainWindow):
         menu_bg = self.config.get_color('menu_background')
         menu_fg = self.config.get_color('menu_foreground')
         font = QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
-        font.setPixelSize(16)
+        font.setPixelSize(15)
 
         # News label
         self.label_newsfeed = QtWidgets.QLabel(self.header_widget)
@@ -1923,7 +1923,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 background-color: {data_bg};
                 color: {data_fg};
                 font-family: Roboto;
-                font-size: 15px;
+                font-size: 13px;
                 gridline-color: #D2D0CF;
                 border: 1px solid #D2D0CF;
             }}
@@ -1953,7 +1953,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 color: {title_fg};
                 font-family: Roboto;
                 font-weight: bold;
-                font-size: 15px;
+                font-size: 13px;
                 padding: 4px;
             }}
         """)
@@ -3161,7 +3161,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.feed_text = QtWidgets.QPlainTextEdit(self.central_widget)
         self.feed_text.setObjectName("feedText")
         mono_font = QtGui.QFont(FONT_MONO, -1, QtGui.QFont.Medium)
-        mono_font.setPixelSize(14)
+        mono_font.setPixelSize(13)
         self.feed_text.setFont(mono_font)
         self.feed_text.setStyleSheet(
             f"background-color: {self.config.get_color('feed_background')};"
@@ -3277,7 +3277,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Embed a QLineEdit in every cell of row 0 as the filter row
         filter_font = QtGui.QFont("Kode Mono", -1)
-        filter_font.setPixelSize(15)
+        filter_font.setPixelSize(13)
         filter_style = (
             "QLineEdit { background-color: white; color: #333333; "
             "border: none; padding: 1px 3px; }"
@@ -3310,9 +3310,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         data_fg = self.config.get_color('data_foreground')
         kode_font = QtGui.QFont("Kode Mono", -1)
-        kode_font.setPixelSize(15)
+        kode_font.setPixelSize(13)
         kode_bold = QtGui.QFont("Kode Mono", -1)
-        kode_bold.setPixelSize(15)
+        kode_bold.setPixelSize(13)
         kode_bold.setBold(True)
 
         rows = self.db.get_qrz_contacts()
@@ -3606,7 +3606,31 @@ window.addEventListener('load', function() {
                 obj.eachLayer(function(layer) {
                     if (layer.getPopup && layer.getPopup()) {
                         layer.off('click');
-                        layer.on('mouseover', function() { this.openPopup(); });
+                        layer._popupCloseTimer = null;
+                        var scheduleClose = function() {
+                            if (layer._popupCloseTimer) clearTimeout(layer._popupCloseTimer);
+                            layer._popupCloseTimer = setTimeout(function() {
+                                layer.closePopup();
+                            }, 3000);
+                        };
+                        var cancelClose = function() {
+                            if (layer._popupCloseTimer) {
+                                clearTimeout(layer._popupCloseTimer);
+                                layer._popupCloseTimer = null;
+                            }
+                        };
+                        layer.on('mouseover', function() {
+                            cancelClose();
+                            this.openPopup();
+                        });
+                        layer.on('mouseout', scheduleClose);
+                        layer.on('popupopen', function(e) {
+                            var el = e.popup.getElement();
+                            if (el) {
+                                el.addEventListener('mouseenter', cancelClose);
+                                el.addEventListener('mouseleave', scheduleClose);
+                            }
+                        });
                     }
                 });
             }
