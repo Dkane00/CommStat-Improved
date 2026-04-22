@@ -5,10 +5,12 @@ __pycache__/
 *.pyd
 
 # Database files (use traffic.db3.template for test data)
+*.db
 *.db3
 !traffic.db3.template
 *.sqlite
 *.sqlite3
+*.sqbpro
 
 # Config (use config.ini.template instead)
 config.ini
