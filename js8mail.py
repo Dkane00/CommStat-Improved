@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Manuel Ochoa
+# Copyright (c) 2025, 2026 Manuel Ochoa
 # This file is part of CommStat.
 # Licensed under the GNU General Public License v3.0.
 # AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
@@ -10,12 +10,18 @@ Allows sending emails via JS8Call APRS gateway.
 
 import os
 import re
-from configparser import ConfigParser
 from typing import TYPE_CHECKING
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDateTime, Qt
 from PyQt5.QtWidgets import QMessageBox, QDialog
+
+from constants import (
+    DEFAULT_COLORS,
+    COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
+    COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
+    COLOR_BTN_BLUE, COLOR_BTN_RED,
+)
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -26,29 +32,17 @@ if TYPE_CHECKING:
 # Constants
 # =============================================================================
 
-CONFIG_FILE = "config.ini"
 MIN_EMAIL_LENGTH = 8
 MIN_SUBJECT_LENGTH = 8
 MAX_SUBJECT_LENGTH = 67
 EMAIL_PATTERN = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
-FONT_FAMILY = "Arial"
-FONT_SIZE = 12
-WINDOW_WIDTH = 550
-WINDOW_HEIGHT = 340
-DATA_BACKGROUND = "#FFF5E1"   # matches little_gucci.py 'data_background'
+WINDOW_WIDTH = 560
+WINDOW_HEIGHT = 315
 
-
-def make_uppercase(field):
-    """Force uppercase input on a QLineEdit."""
-    def to_upper(text):
-        if text != text.upper():
-            pos = field.cursorPosition()
-            field.blockSignals(True)
-            field.setText(text.upper())
-            field.blockSignals(False)
-            field.setCursorPosition(pos)
-    field.textChanged.connect(to_upper)
+_PROGRAM_BG = DEFAULT_COLORS['program_background']
+_PROGRAM_FG = DEFAULT_COLORS['program_foreground']
+_DATA_BG    = DEFAULT_COLORS['data_background']
 
 
 # =============================================================================
@@ -56,7 +50,7 @@ def make_uppercase(field):
 # =============================================================================
 
 class JS8MailDialog(QDialog):
-    """Modern JS8 Email form for sending emails via APRS gateway."""
+    """JS8 Email form for sending emails via APRS gateway."""
 
     def __init__(
         self,
@@ -68,8 +62,8 @@ class JS8MailDialog(QDialog):
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
 
-        self.setWindowTitle("CommStat JS8Mail")
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT + 40)
+        self.setWindowTitle("JS8 Email")
+        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setWindowFlags(
             Qt.Window |
             Qt.CustomizeWindowHint |
@@ -78,194 +72,174 @@ class JS8MailDialog(QDialog):
             Qt.WindowStaysOnTopHint
         )
 
-        # Set window icon
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
 
-        # Build UI
         self._setup_ui()
-
-        # Load rigs
         self._load_rigs()
 
-    def _load_rigs(self) -> None:
-        """Load connected rigs into the rig dropdown.
-
-        Auto-selects only if exactly 1 rig is connected.
-        If multiple rigs are connected, user must select one.
-        """
-        if not self.tcp_pool:
-            return
-
-        self.rig_combo.blockSignals(True)
-        self.rig_combo.clear()
-
-        # Get connected rigs
-        connected_rigs = self.tcp_pool.get_connected_rig_names()
-
-        if not connected_rigs:
-            # No connected rigs - show all configured rigs as disconnected
-            all_rigs = self.tcp_pool.get_all_rig_names()
-            if all_rigs:
-                self.rig_combo.addItem("")  # Empty first item
-                for rig_name in all_rigs:
-                    self.rig_combo.addItem(f"{rig_name} (disconnected)")
-        elif len(connected_rigs) == 1:
-            # Exactly 1 connected rig - auto-select it
-            self.rig_combo.addItem(connected_rigs[0])
-        else:
-            # Multiple connected rigs - require user selection
-            self.rig_combo.addItem("")  # Empty first item
-            for rig_name in connected_rigs:
-                self.rig_combo.addItem(rig_name)
-
-        self.rig_combo.blockSignals(False)
-
-        # Trigger rig changed to populate mode/frequency (only if a rig is selected)
-        current_text = self.rig_combo.currentText()
-        if current_text and "(disconnected)" not in current_text:
-            self._on_rig_changed(current_text)
+    # -------------------------------------------------------------------------
+    # Setup
+    # -------------------------------------------------------------------------
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
         self.setStyleSheet(f"""
-            QDialog {{ background-color: {DATA_BACKGROUND}; }}
-            QLabel {{ color: #333333; }}
-            QLineEdit {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
-            QComboBox {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
-            QComboBox:disabled {{ background-color: #e9ecef; color: #999999; border: 1px solid #cccccc; }}
-            QComboBox QAbstractItemView {{ background-color: white; color: #333333; selection-background-color: #0078d7; selection-color: white; }}
+            QDialog {{ background-color: {_DATA_BG}; }}
+            QLabel {{ color: {COLOR_INPUT_TEXT}; }}
+            QLineEdit {{
+                background-color: white; color: {COLOR_INPUT_TEXT};
+                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
+            }}
+            QComboBox {{
+                background-color: white; color: {COLOR_INPUT_TEXT};
+                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
+            }}
+            QComboBox:disabled {{ background-color: {COLOR_DISABLED_BG}; color: {COLOR_DISABLED_TEXT}; }}
+            QComboBox QAbstractItemView {{
+                background-color: white; color: {COLOR_INPUT_TEXT};
+                selection-background-color: #0078d7; selection-color: white;
+            }}
         """)
 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setSpacing(12)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(3)
+        layout.setContentsMargins(15, 15, 15, 15)
 
         # Title
-        title = QtWidgets.QLabel("CommStat JS8 Email")
+        title = QtWidgets.QLabel("JS8 Email")
         title.setAlignment(Qt.AlignCenter)
-        title_font = QtGui.QFont(FONT_FAMILY, 16, QtGui.QFont.Bold)
-        title.setFont(title_font)
-        title.setStyleSheet("color: #333; margin-bottom: 5px;")
+        _title_font = QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black)
+        _title_font.setPixelSize(16)
+        title.setFont(_title_font)
+        title.setFixedHeight(36)
+        title.setStyleSheet(
+            f"QLabel {{ background-color: {_PROGRAM_BG}; color: {_PROGRAM_FG}; "
+            "padding-top: 9px; padding-bottom: 9px; }}"
+        )
         layout.addWidget(title)
+        layout.addSpacing(30)
 
-        # Rig selection
-        rig_layout = QtWidgets.QHBoxLayout()
+        # Rig / Mode / Frequency row
+        rig_row = QtWidgets.QHBoxLayout()
+        rig_row.setSpacing(8)
+
+        _lbl_font = QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
+        _lbl_font.setPixelSize(13)
+        _km_font = QtGui.QFont("Kode Mono", -1)
+        _km_font.setPixelSize(13)
+
         rig_label = QtWidgets.QLabel("Rig:")
-        rig_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        rig_label.setFont(_lbl_font)
+        rig_row.addWidget(rig_label)
+
         self.rig_combo = QtWidgets.QComboBox()
-        self.rig_combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
-        self.rig_combo.setMinimumWidth(150)
+        self.rig_combo.setFont(_km_font)
+        self.rig_combo.setMinimumWidth(140)
         self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
-        rig_layout.addWidget(rig_label)
-        rig_layout.addWidget(self.rig_combo)
-        # Mode dropdown
+        rig_row.addWidget(self.rig_combo)
+
         mode_label = QtWidgets.QLabel("Mode:")
-        mode_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        mode_label.setFont(_lbl_font)
+        rig_row.addWidget(mode_label)
+
         self.mode_combo = QtWidgets.QComboBox()
-        self.mode_combo.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        self.mode_combo.setFont(_km_font)
         self.mode_combo.addItem("Slow", 4)
         self.mode_combo.addItem("Normal", 0)
         self.mode_combo.addItem("Fast", 1)
         self.mode_combo.addItem("Turbo", 2)
         self.mode_combo.addItem("Ultra", 8)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
-        rig_layout.addWidget(mode_label)
-        rig_layout.addWidget(self.mode_combo)
-        # Frequency field
+        rig_row.addWidget(self.mode_combo)
+
         freq_label = QtWidgets.QLabel("Freq:")
-        freq_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
+        freq_label.setFont(_lbl_font)
+        rig_row.addWidget(freq_label)
+
         self.freq_field = QtWidgets.QLineEdit()
-        self.freq_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
-        self.freq_field.setMaximumWidth(80)
+        self.freq_field.setFont(_km_font)
+        self.freq_field.setFixedWidth(80)
         self.freq_field.setReadOnly(True)
-        self.freq_field.setStyleSheet("background-color: #f0f0f0;")
-        rig_layout.addWidget(freq_label)
-        rig_layout.addWidget(self.freq_field)
-        rig_layout.addStretch()
-        layout.addLayout(rig_layout)
+        self.freq_field.setStyleSheet(
+            f"background-color: white; color: {COLOR_INPUT_TEXT}; "
+            f"border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;"
+        )
+        rig_row.addWidget(self.freq_field)
+        rig_row.addStretch()
+        layout.addLayout(rig_row)
 
         # Warning
         warning = QtWidgets.QLabel("Sending email depends on APRS services being available.")
-        warning.setAlignment(Qt.AlignCenter)
-        warning.setFont(QtGui.QFont(FONT_FAMILY, 10, QtGui.QFont.Bold))
-        warning.setStyleSheet("color: #dc3545;")
+        warning.setAlignment(Qt.AlignLeft)
+        warning.setFixedHeight(18)
+        _warn_font = QtGui.QFont("Roboto", -1)
+        _warn_font.setPixelSize(13)
+        warning.setFont(_warn_font)
+        warning.setStyleSheet(f"color: {COLOR_INPUT_TEXT};")
         layout.addWidget(warning)
 
-        # Input field style
-        input_style = "padding: 8px;"
-
-        # Email field
-        email_layout = QtWidgets.QVBoxLayout()
-        email_layout.setSpacing(2)
+        # Email address
+        email_group = QtWidgets.QVBoxLayout()
+        email_group.setSpacing(0)
         email_label = QtWidgets.QLabel("Email Address:")
-        email_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        email_label.setFont(_lbl_font)
+        email_group.addWidget(email_label)
         self.email_field = QtWidgets.QLineEdit()
-        self.email_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
-        self.email_field.setMinimumHeight(36)
-        self.email_field.setMinimumWidth(300)
-        self.email_field.setStyleSheet(input_style)
+        self.email_field.setFont(_km_font)
+        self.email_field.setMinimumHeight(30)
         self.email_field.setMaxLength(40)
         self.email_field.setPlaceholderText("recipient@example.com")
-        make_uppercase(self.email_field)
-        email_layout.addWidget(email_label)
-        email_layout.addWidget(self.email_field)
-        layout.addLayout(email_layout)
+        email_group.addWidget(self.email_field)
+        layout.addLayout(email_group)
 
-        # Subject field
-        subject_layout = QtWidgets.QVBoxLayout()
-        subject_layout.setSpacing(2)
+        # Subject / message
+        subject_group = QtWidgets.QVBoxLayout()
+        subject_group.setSpacing(0)
         subject_label = QtWidgets.QLabel("Message (Subject Line):")
-        subject_label.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE, QtGui.QFont.Bold))
+        subject_label.setFont(_lbl_font)
+        subject_group.addWidget(subject_label)
         self.subject_field = QtWidgets.QLineEdit()
-        self.subject_field.setFont(QtGui.QFont(FONT_FAMILY, FONT_SIZE))
-        self.subject_field.setMinimumHeight(36)
-        self.subject_field.setMinimumWidth(500)
-        self.subject_field.setStyleSheet(input_style)
+        self.subject_field.setFont(_km_font)
+        self.subject_field.setMinimumHeight(30)
         self.subject_field.setMaxLength(MAX_SUBJECT_LENGTH)
         self.subject_field.setPlaceholderText("Your message here (max 67 characters)")
-        make_uppercase(self.subject_field)
-        subject_layout.addWidget(subject_label)
-        subject_layout.addWidget(self.subject_field)
-        layout.addLayout(subject_layout)
+        self.subject_field.textChanged.connect(self._force_uppercase_subject)
+        subject_group.addWidget(self.subject_field)
+        layout.addLayout(subject_group)
 
         # Note
-        note = QtWidgets.QLabel(
-            "APRS emails are sent in the subject line. Replies are not supported."
-        )
-        note.setAlignment(Qt.AlignCenter)
-        note.setFont(QtGui.QFont(FONT_FAMILY, 10))
-        note.setStyleSheet(
-            "color: #856404; background-color: #fff3cd; "
-            "padding: 10px; border-radius: 4px;"
-        )
+        note = QtWidgets.QLabel("APRS emails are sent in the subject line. Replies are not supported.")
+        note.setAlignment(Qt.AlignLeft)
+        note.setFixedHeight(18)
+        _note_font = QtGui.QFont("Roboto", -1)
+        _note_font.setPixelSize(13)
+        note.setFont(_note_font)
+        note.setStyleSheet(f"color: {COLOR_INPUT_TEXT};")
         layout.addWidget(note)
 
-        # Spacer
-        layout.addStretch()
+        layout.addSpacing(12)
 
-        # Buttons
-        button_layout = QtWidgets.QHBoxLayout()
-        button_layout.setSpacing(10)
+        # Button row
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
 
-        button_layout.addStretch()
-
-        btn_transmit = QtWidgets.QPushButton("Transmit")
-        btn_transmit.clicked.connect(self._on_transmit)
-        btn_transmit.setStyleSheet(self._button_style("#007bff"))
-        btn_transmit.setMinimumWidth(100)
-        button_layout.addWidget(btn_transmit)
+        self.btn_transmit = QtWidgets.QPushButton("Transmit")
+        self.btn_transmit.setStyleSheet(self._button_style(COLOR_BTN_BLUE))
+        self.btn_transmit.setMinimumWidth(100)
+        self.btn_transmit.clicked.connect(self._on_transmit)
+        btn_row.addWidget(self.btn_transmit)
 
         btn_cancel = QtWidgets.QPushButton("Cancel")
-        btn_cancel.clicked.connect(self.close)
-        btn_cancel.setStyleSheet(self._button_style("#dc3545"))
+        btn_cancel.setStyleSheet(self._button_style(COLOR_BTN_RED))
         btn_cancel.setMinimumWidth(100)
-        button_layout.addWidget(btn_cancel)
+        btn_cancel.clicked.connect(self.close)
+        btn_row.addWidget(btn_cancel)
 
-        layout.addLayout(button_layout)
+        layout.addLayout(btn_row)
 
     def _button_style(self, color: str) -> str:
-        """Generate button stylesheet."""
         return f"""
             QPushButton {{
                 background-color: {color};
@@ -273,16 +247,62 @@ class JS8MailDialog(QDialog):
                 border: none;
                 padding: 8px 12px;
                 border-radius: 4px;
+                font-family: Roboto;
+                font-size: 13px;
                 font-weight: bold;
-                font-size: 12px;
             }}
             QPushButton:hover {{
-                opacity: 0.9;
+                background-color: {color}cc;
+            }}
+            QPushButton:pressed {{
+                background-color: {color}99;
             }}
         """
 
+    def _force_uppercase_subject(self, text: str) -> None:
+        upper = text.upper()
+        if upper != text:
+            pos = self.subject_field.cursorPosition()
+            self.subject_field.blockSignals(True)
+            self.subject_field.setText(upper)
+            self.subject_field.blockSignals(False)
+            self.subject_field.setCursorPosition(pos)
+
+    # -------------------------------------------------------------------------
+    # Rig management
+    # -------------------------------------------------------------------------
+
+    def _load_rigs(self) -> None:
+        """Load connected rigs into the rig dropdown."""
+        if not self.tcp_pool:
+            return
+
+        self.rig_combo.blockSignals(True)
+        self.rig_combo.clear()
+
+        connected_rigs = self.tcp_pool.get_connected_rig_names()
+
+        if not connected_rigs:
+            all_rigs = self.tcp_pool.get_all_rig_names()
+            if all_rigs:
+                self.rig_combo.addItem("")
+                for rig_name in all_rigs:
+                    self.rig_combo.addItem(f"{rig_name} (disconnected)")
+        elif len(connected_rigs) == 1:
+            self.rig_combo.addItem(connected_rigs[0])
+        else:
+            self.rig_combo.addItem("")
+            for rig_name in connected_rigs:
+                self.rig_combo.addItem(rig_name)
+
+        self.rig_combo.blockSignals(False)
+
+        current_text = self.rig_combo.currentText()
+        if current_text and "(disconnected)" not in current_text:
+            self._on_rig_changed(current_text)
+
     def _on_rig_changed(self, rig_name: str) -> None:
-        """Handle rig selection change - update mode/frequency display."""
+        """Handle rig selection change — update mode/frequency display."""
         if not rig_name or "(disconnected)" in rig_name:
             self.freq_field.setText("")
             return
@@ -290,7 +310,6 @@ class JS8MailDialog(QDialog):
         if not self.tcp_pool:
             return
 
-        # Disconnect frequency signal from all clients to avoid duplicates
         for client_name in self.tcp_pool.get_all_rig_names():
             client = self.tcp_pool.get_client(client_name)
             if client:
@@ -301,43 +320,34 @@ class JS8MailDialog(QDialog):
 
         client = self.tcp_pool.get_client(rig_name)
         if client and client.is_connected():
-            # Connect frequency signal for this client
             client.frequency_received.connect(self._on_frequency_received)
 
-            # Populate mode dropdown with current mode preselected
             speed_name = (client.speed_name or "").upper()
             mode_map = {"SLOW": 0, "NORMAL": 1, "FAST": 2, "TURBO": 3, "ULTRA": 4}
-            idx = mode_map.get(speed_name, 1)  # Default to Normal
+            idx = mode_map.get(speed_name, 1)
             self.mode_combo.blockSignals(True)
             self.mode_combo.setCurrentIndex(idx)
             self.mode_combo.blockSignals(False)
 
-            # Populate frequency field with cached value initially
             frequency = client.frequency
             if frequency:
                 self.freq_field.setText(f"{frequency:.3f}")
             else:
                 self.freq_field.setText("")
 
-            # Request fresh frequency from JS8Call
             client.get_frequency()
         else:
             self.freq_field.setText("")
 
     def _on_frequency_received(self, rig_name: str, dial_freq: int) -> None:
         """Handle frequency received from JS8Call."""
-        # Only update if this is the currently selected rig
         if self.rig_combo.currentText() == rig_name:
-            frequency_mhz = dial_freq / 1000000
-            self.freq_field.setText(f"{frequency_mhz:.3f}")
+            self.freq_field.setText(f"{dial_freq / 1000000:.3f}")
 
     def _on_mode_changed(self, index: int) -> None:
-        """Handle mode dropdown change - send MODE.SET_SPEED to JS8Call."""
+        """Send MODE.SET_SPEED to JS8Call when mode dropdown changes."""
         rig_name = self.rig_combo.currentText()
-        if not rig_name or "(disconnected)" in rig_name:
-            return
-
-        if not self.tcp_pool:
+        if not rig_name or "(disconnected)" in rig_name or not self.tcp_pool:
             return
 
         client = self.tcp_pool.get_client(rig_name)
@@ -346,21 +356,23 @@ class JS8MailDialog(QDialog):
             client.send_message("MODE.SET_SPEED", "", {"SPEED": speed_value})
             print(f"[JS8Mail] Set mode to {self.mode_combo.currentText()} (speed={speed_value})")
 
+    # -------------------------------------------------------------------------
+    # Validation & transmit
+    # -------------------------------------------------------------------------
+
     def _show_error(self, message: str) -> None:
-        """Display an error message box."""
         msg = QMessageBox(self)
-        msg.setWindowTitle("CommStat Error")
+        msg.setWindowTitle("JS8 Email")
         msg.setText(message)
         msg.setIcon(QMessageBox.Critical)
         msg.setWindowFlag(Qt.WindowStaysOnTopHint)
         msg.exec_()
 
     def _validate(self) -> bool:
-        """Validate form fields. Returns True if valid."""
         email = self.email_field.text().strip()
         subject = self.subject_field.text().strip()
 
-        if len(email) < MIN_EMAIL_LENGTH or not re.match(EMAIL_PATTERN, email):
+        if len(email) < MIN_EMAIL_LENGTH or not re.match(EMAIL_PATTERN, email, re.IGNORECASE):
             self._show_error("Please enter a valid email address.")
             self.email_field.setFocus()
             return False
@@ -379,27 +391,25 @@ class JS8MailDialog(QDialog):
 
         rig_name = self.rig_combo.currentText()
         if "(disconnected)" in rig_name:
-            self._show_error("Cannot transmit: rig is disconnected")
+            self._show_error("Cannot transmit: rig is disconnected.")
             return
 
         if not self.tcp_pool:
-            self._show_error("Cannot transmit: TCP pool not available")
+            self._show_error("Cannot transmit: TCP pool not available.")
             return
 
         client = self.tcp_pool.get_client(rig_name)
         if not client or not client.is_connected():
-            self._show_error("Cannot transmit: not connected to rig")
+            self._show_error("Cannot transmit: not connected to rig.")
             return
 
         email = self.email_field.text().strip()
         subject = self.subject_field.text().strip()
 
-        # Build and store message for transmission after check
         self._pending_message = f"@APRSIS CMD :EMAIL-2  :{email} {subject}{{03}}"
         self._pending_email = email
         self._pending_subject = subject
 
-        # First check if a call is selected in JS8Call
         try:
             client.call_selected_received.disconnect(self._on_call_selected_for_transmit)
         except TypeError:
@@ -408,7 +418,7 @@ class JS8MailDialog(QDialog):
         client.get_call_selected()
 
     def _on_call_selected_for_transmit(self, rig_name: str, selected_call: str) -> None:
-        """Handle call selected response - check if clear to transmit."""
+        """Check call selection before transmitting."""
         if self.rig_combo.currentText() != rig_name:
             return
 
@@ -419,7 +429,6 @@ class JS8MailDialog(QDialog):
             except TypeError:
                 pass
 
-        # If a call is selected, show error and abort
         if selected_call:
             QMessageBox.critical(
                 self, "ERROR",
@@ -428,11 +437,9 @@ class JS8MailDialog(QDialog):
             )
             return
 
-        # No call selected - proceed with transmission
         try:
             client.send_tx_message(self._pending_message)
 
-            # Print to terminal
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
             print(f"\n{'='*60}")
             print(f"JS8MAIL TRANSMITTED - {now} UTC")
@@ -460,7 +467,6 @@ if __name__ == "__main__":
 
     app = QtWidgets.QApplication(sys.argv)
 
-    # Initialize dependencies
     connector_manager = ConnectorManager()
     connector_manager.init_connectors_table()
     tcp_pool = TCPConnectionPool(connector_manager)

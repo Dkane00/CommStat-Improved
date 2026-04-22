@@ -1845,8 +1845,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # News ticker (scrolling text)
         self.newsfeed_label = QtWidgets.QLabel(self.header_widget)
-        self.newsfeed_label.setFixedSize(740, 32)
-        _ticker_font = QtGui.QFont("Roboto", -1)
+        self.newsfeed_label.setFixedSize(840, 32)
+        _ticker_font = QtGui.QFont("Kode Mono", -1)
         _ticker_font.setPixelSize(15)
         self.newsfeed_label.setFont(_ticker_font)
         self.newsfeed_label.setStyleSheet(
@@ -4043,7 +4043,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
             # Add padding spaces
             padding = ' ' * self.newsfeed_chars
-            self.newsfeed_text = ticker_text + "      +++" + padding
+            self.newsfeed_text = ticker_text + padding
 
             # Setup and start animation
             self._newsfeed_frame = 0
