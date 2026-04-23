@@ -37,10 +37,11 @@ MIN_MESSAGE_LENGTH = 8
 MAX_MESSAGE_LENGTH = 67
 
 WINDOW_WIDTH = 560
-WINDOW_HEIGHT = 330
+WINDOW_HEIGHT = 360
 
 _PROGRAM_BG = DEFAULT_COLORS['program_background']
 _PROGRAM_FG = DEFAULT_COLORS['program_foreground']
+_PANEL_BG   = DEFAULT_COLORS['panel_background']
 _DATA_BG    = DEFAULT_COLORS['data_background']
 
 
@@ -84,7 +85,7 @@ class JS8SMSDialog(QDialog):
     def _setup_ui(self) -> None:
         """Build the user interface."""
         self.setStyleSheet(f"""
-            QDialog {{ background-color: {_DATA_BG}; }}
+            QDialog {{ background-color: {_PANEL_BG}; }}
             QLabel {{ color: {COLOR_INPUT_TEXT}; }}
             QLineEdit {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
@@ -102,7 +103,7 @@ class JS8SMSDialog(QDialog):
         """)
 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setSpacing(3)
+        layout.setSpacing(2)
         layout.setContentsMargins(15, 15, 15, 15)
 
         # Title
@@ -170,7 +171,7 @@ class JS8SMSDialog(QDialog):
         # Warning
         warning = QtWidgets.QLabel("Sending SMS depends on APRS services being available.")
         warning.setAlignment(Qt.AlignLeft)
-        warning.setFixedHeight(18)
+        warning.setFixedHeight(30)
         _warn_font = QtGui.QFont("Roboto", -1)
         _warn_font.setPixelSize(13)
         warning.setFont(_warn_font)
@@ -179,7 +180,7 @@ class JS8SMSDialog(QDialog):
 
         # Phone number
         phone_group = QtWidgets.QVBoxLayout()
-        phone_group.setSpacing(0)
+        phone_group.setSpacing(4)
         phone_label = QtWidgets.QLabel("Phone Number:")
         phone_label.setFont(_lbl_font)
         phone_group.addWidget(phone_label)
@@ -193,7 +194,7 @@ class JS8SMSDialog(QDialog):
 
         # Message
         msg_group = QtWidgets.QVBoxLayout()
-        msg_group.setSpacing(0)
+        msg_group.setSpacing(4)
         message_label = QtWidgets.QLabel("Text Message:")
         message_label.setFont(_lbl_font)
         msg_group.addWidget(message_label)

@@ -27,8 +27,8 @@ DATABASE_FILE = "traffic.db3"
 FONT_ROBOTO   = "Roboto"
 FONT_SLAB     = "Roboto Slab"
 FONT_MONO     = "Kode Mono"
-FONT_SIZE     = 11   # body / inputs
-FONT_SIZE_SM  = 10   # hints & tips
+FONT_SIZE     = 13   # body / inputs
+FONT_SIZE_SM  = 13   # hints & tips
 FONT_SIZE_LG  = 16   # section / dialog headers
 
 # =============================================================================
@@ -63,7 +63,8 @@ COLOR_ALERT_TEXT = "#ffffff"
 
 DEFAULT_COLORS: Dict[str, str] = {
     # Main window
-    'program_background': '#A52A2A',       # Maroon
+    #'program_background': '#A52A2A',       # Maroon
+'program_background': '#000000',       # Maroon
     'program_foreground': '#FFFFFF',
     'menu_background': '#3050CC',          # Blue
     'menu_foreground': '#FFFFFF',
@@ -84,10 +85,10 @@ DEFAULT_COLORS: Dict[str, str] = {
     'data_background': '#F8F6F4',          # Cream
     'data_foreground': '#000000',
     # Live feed display
-    'feed_background': '#000000',
-    'feed_foreground': '#FFFF00',
+    'feed_background': '#454545',
+    'feed_foreground': '#00FF00',
     # Secondary panels / dropdowns
-    'panel_background': '#DDDDDD',
+    'panel_background': '#DDDD00',
     'panel_foreground': '#000000',
 }
 

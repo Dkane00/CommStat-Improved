@@ -1390,7 +1390,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Live feed message buffer (stores messages from all TCP connections)
         self.feed_messages: List[str] = []
         self.max_feed_messages = 500  # Limit buffer size
-        self._hide_live_feed: bool = False  # Session-only; resets on restart
+        self._hide_live_feed: bool = False          # Session-only; resets on restart
+        self._hide_internet_statrep: bool = False   # Session-only; resets on restart
 
         # Initiate TCP connections (Connecting... messages come via status_message signal)
         self.tcp_pool.connect_all()
@@ -1709,6 +1710,10 @@ class MainWindow(QtWidgets.QMainWindow):
         statrep_messages_label = QtWidgets.QAction("STATUS REPORTS", self)
         statrep_messages_label.setEnabled(False)  # Disabled as a section title
         self.filter_menu.addAction(statrep_messages_label)
+
+        self.hide_internet_statrep_checkbox = self._create_menu_checkbox(
+            self.filter_menu, "Hide Internet feed",
+            False, self._on_toggle_hide_internet_statrep)
 
         # Per-group checkboxes are inserted here dynamically after DB is ready
         self.filter_group_actions: Dict[str, QtWidgets.QAction] = {}
@@ -2098,7 +2103,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.alert_delete_btn = QtWidgets.QPushButton("Delete")
         self.alert_delete_btn.setStyleSheet(
-            "QPushButton { background-color: #dc3545; color: white; font-family: Roboto; font-size: 15px; font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
+            "QPushButton { background-color: #dc3545; color: white; font-family: Roboto; font-size: 13px; font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
             "QPushButton:hover { background-color: #c82333; }"
             "QPushButton:pressed { background-color: #bd2130; }"
         )
@@ -3708,6 +3713,9 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             exclude_groups=exclude_groups
         )
 
+        if self._hide_internet_statrep:
+            data = [row for row in data if row[21] == 1]
+
         # Status color mapping for values 1-4
         status_colors = {
             "1": "condition_green",
@@ -4180,6 +4188,11 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         self.config.set_hide_heartbeat(checked)
         self._load_live_feed()
 
+    def _on_toggle_hide_internet_statrep(self, checked: bool) -> None:
+        """Show only RF-sourced (source=1) statreps. Session-only — resets on restart."""
+        self._hide_internet_statrep = checked
+        self._load_statrep_data()
+
     def _on_toggle_hide_live_feed(self, checked: bool) -> None:
         """Hide/show the live feed. Session-only — resets on restart."""
         self._hide_live_feed = checked
@@ -4497,13 +4510,16 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         checked_color = self.config.get_color('menu_background')
         checkbox = QtWidgets.QCheckBox(label)
         checkbox.setChecked(is_checked)
+        _cb_font = QtGui.QFont("Roboto")
+        _cb_font.setPixelSize(13)
+        checkbox.setFont(_cb_font)
         checkbox.setStyleSheet(f"""
             QCheckBox {{
                 padding: 4px 8px;
                 background-color: {panel_bg};
                 color: {panel_fg};
                 font-family: Roboto;
-                font-size: 15px;
+                font-size: 13px;
             }}
             QCheckBox::indicator {{
                 width: 14px;
@@ -4550,7 +4566,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                     background-color: {panel_bg};
                     color: {panel_fg};
                     font-family: Roboto;
-                    font-size: 15px;
+                    font-size: 13px;
                 }}
                 QCheckBox::indicator {{
                     width: 14px;
