@@ -22,36 +22,47 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDateTime
 from PyQt5.QtWidgets import QMessageBox
 
+from constants import (
+    DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
+    COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
+    COLOR_BTN_CYAN, COLOR_BTN_BLUE, COLOR_ERROR,
+)
+
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
     from connector_manager import ConnectorManager
 
 
+# =============================================================================
 # Constants
+# =============================================================================
+
 MIN_CALLSIGN_LENGTH = 4
 MAX_CALLSIGN_LENGTH = 8
 MIN_MESSAGE_LENGTH = 4
 MAX_MESSAGE_LENGTH = 67
 MAX_MESSAGE_LENGTH_INTERNET = 500
-WINDOW_HEIGHT_DEFAULT = 344
-WINDOW_HEIGHT_EXPANDED = 418   # 344 + 74 (expanded message field height - single-line height)
-_MSG_EXPAND_DELTA = 74         # 100px expanded height - 26px single-line height
 DATABASE_FILE = "traffic.db3"
 CONFIG_FILE = "config.ini"
 
-# Backbone server (base64 encoded)
 _BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
 _DATAFEED = _BACKBONE + "/datafeed-808585.php"
 
 INTERNET_RIG = "INTERNET ONLY"
-DATA_BACKGROUND = "#FFF5E1"   # matches little_gucci.py 'data_background'
 
-# Callsign pattern for international amateur radio
+_PROG_BG    = DEFAULT_COLORS.get("program_background", "#000000")
+_PROG_FG    = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
+_DATA_BG    = DEFAULT_COLORS.get("data_background",    "#F8F6F4")
+_COL_CANCEL = "#555555"
+
 CALLSIGN_PATTERN = re.compile(r'[A-Z0-9]{1,3}[0-9][A-Z]{1,3}')
 
 
+# =============================================================================
+# Helpers
+# =============================================================================
+
 def make_uppercase(field):
-    """Force uppercase input on a QLineEdit."""
     def to_upper(text):
         if text != text.upper():
             pos = field.cursorPosition()
@@ -62,6 +73,35 @@ def make_uppercase(field):
     field.textChanged.connect(to_upper)
 
 
+def _lbl_font() -> QtGui.QFont:
+    f = QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
+    f.setPixelSize(13)
+    return f
+
+
+def _mono_font() -> QtGui.QFont:
+    f = QtGui.QFont("Kode Mono")
+    f.setPixelSize(13)
+    return f
+
+
+def _btn(label: str, color: str, min_w: int = 90) -> QtWidgets.QPushButton:
+    b = QtWidgets.QPushButton(label)
+    b.setMinimumWidth(min_w)
+    b.setStyleSheet(
+        f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
+        f" padding:6px 14px; border-radius:4px; font-family:Roboto; font-size:15px;"
+        f" font-weight:bold; }}"
+        f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
+        f"QPushButton:pressed {{ background-color:{color}; }}"
+    )
+    return b
+
+
+# =============================================================================
+# Message Dialog
+# =============================================================================
+
 class Ui_FormMessage:
     """Message form for creating and transmitting messages."""
 
@@ -69,7 +109,7 @@ class Ui_FormMessage:
         self,
         tcp_pool: "TCPConnectionPool" = None,
         connector_manager: "ConnectorManager" = None,
-        refresh_callback = None
+        refresh_callback=None
     ):
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
@@ -84,208 +124,12 @@ class Ui_FormMessage:
         self._message_is_expanded: bool = False
 
     def setupUi(self, FormMessage: QtWidgets.QWidget) -> None:
-        """Initialize the UI components."""
         self.MainWindow = FormMessage
         FormMessage.setObjectName("FormMessage")
-        FormMessage.resize(835, 344)
+        FormMessage.setWindowTitle("GROUP MESSAGE")
+        FormMessage.resize(835, 370)
 
-        # Set font
-        font = QtGui.QFont()
-        font.setFamily("Arial")
-        font.setPointSize(12)
-        FormMessage.setFont(font)
-
-        # Set icon
-        icon = QtGui.QIcon()
-        icon.addPixmap(QtGui.QPixmap("radiation-32.png"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        FormMessage.setWindowIcon(icon)
-
-        # Apply theme
-        FormMessage.setStyleSheet(f"""
-            QWidget {{ background-color: {DATA_BACKGROUND}; }}
-            QLabel {{ color: #333333; }}
-            QLineEdit {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
-            QComboBox {{ background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px; }}
-            QComboBox:disabled {{ background-color: #e9ecef; color: #999999; border: 1px solid #cccccc; }}
-            QComboBox QAbstractItemView {{ background-color: white; color: #333333; selection-background-color: #0078d7; selection-color: white; }}
-        """)
-
-        # Title
-        self.title_label = QtWidgets.QLabel(FormMessage)
-        self.title_label.setGeometry(QtCore.QRect(58, 10, 400, 30))
-        title_font = QtGui.QFont("Arial", 16, QtGui.QFont.Bold)
-        self.title_label.setFont(title_font)
-        self.title_label.setText("CommStat Group Message")
-        self.title_label.setStyleSheet("color: #333;")
-        self.title_label.setObjectName("title_label")
-
-        # Settings row label (left column, vertically centered in row)
-        self.settings_label = QtWidgets.QLabel(FormMessage)
-        self.settings_label.setGeometry(QtCore.QRect(58, 72, 120, 20))
-        self.settings_label.setFont(font)
-        self.settings_label.setText("Settings:")
-        self.settings_label.setObjectName("settings_label")
-
-        # Rig dropdown (label above control, aligned with other controls at x=190)
-        self.rig_label = QtWidgets.QLabel(FormMessage)
-        self.rig_label.setGeometry(QtCore.QRect(190, 46, 150, 20))
-        self.rig_label.setFont(font)
-        self.rig_label.setText("Rig:")
-        self.rig_label.setObjectName("rig_label")
-
-        self.rig_combo = QtWidgets.QComboBox(FormMessage)
-        self.rig_combo.setGeometry(QtCore.QRect(190, 72, 150, 26))
-        self.rig_combo.setFont(font)
-        self.rig_combo.setObjectName("rig_combo")
-
-        # Mode dropdown (label above control)
-        self.mode_label = QtWidgets.QLabel(FormMessage)
-        self.mode_label.setGeometry(QtCore.QRect(350, 46, 100, 20))
-        self.mode_label.setFont(font)
-        self.mode_label.setText("Mode:")
-        self.mode_label.setObjectName("mode_label")
-
-        self.mode_combo = QtWidgets.QComboBox(FormMessage)
-        self.mode_combo.setGeometry(QtCore.QRect(350, 72, 100, 26))
-        self.mode_combo.setFont(font)
-        self.mode_combo.addItem("Slow", 4)
-        self.mode_combo.addItem("Normal", 0)
-        self.mode_combo.addItem("Fast", 1)
-        self.mode_combo.addItem("Turbo", 2)
-        self.mode_combo.addItem("Ultra", 8)
-        self.mode_combo.setObjectName("mode_combo")
-
-        # Frequency field (label above control)
-        self.freq_label = QtWidgets.QLabel(FormMessage)
-        self.freq_label.setGeometry(QtCore.QRect(460, 46, 80, 20))
-        self.freq_label.setFont(font)
-        self.freq_label.setText("Freq:")
-        self.freq_label.setObjectName("freq_label")
-
-        self.freq_field = QtWidgets.QLineEdit(FormMessage)
-        self.freq_field.setGeometry(QtCore.QRect(460, 72, 80, 26))
-        self.freq_field.setFont(font)
-        self.freq_field.setReadOnly(True)
-        self.freq_field.setStyleSheet("background-color: #f0f0f0;")
-        self.freq_field.setObjectName("freq_field")
-
-        # Delivery dropdown (label above control)
-        self.delivery_label = QtWidgets.QLabel(FormMessage)
-        self.delivery_label.setGeometry(QtCore.QRect(550, 46, 150, 20))
-        self.delivery_label.setFont(font)
-        self.delivery_label.setText("Delivery:")
-        self.delivery_label.setObjectName("delivery_label")
-
-        self.delivery_combo = QtWidgets.QComboBox(FormMessage)
-        self.delivery_combo.setGeometry(QtCore.QRect(550, 72, 150, 26))
-        self.delivery_combo.setFont(font)
-        self.delivery_combo.addItem("Maximum Reach")
-        self.delivery_combo.addItem("Limited Reach")
-        self.delivery_combo.setObjectName("delivery_combo")
-
-        # Group dropdown
-        self.group_label = QtWidgets.QLabel(FormMessage)
-        self.group_label.setGeometry(QtCore.QRect(58, 107, 120, 20))
-        self.group_label.setFont(font)
-        self.group_label.setText("Group:")
-        self.group_label.setObjectName("group_label")
-
-        self.group_combo = QtWidgets.QComboBox(FormMessage)
-        self.group_combo.setGeometry(QtCore.QRect(190, 107, 150, 26))
-        self.group_combo.setFont(font)
-        self.group_combo.setObjectName("group_combo")
-
-        # Callsign input (read-only, from JS8Call)
-        self.label_3 = QtWidgets.QLabel(FormMessage)
-        self.label_3.setGeometry(QtCore.QRect(58, 142, 120, 20))
-        self.label_3.setFont(font)
-        self.label_3.setObjectName("label_3")
-
-        self.lineEdit_3 = QtWidgets.QLineEdit(FormMessage)
-        self.lineEdit_3.setGeometry(QtCore.QRect(190, 142, 100, 26))
-        self.lineEdit_3.setFont(font)
-        self.lineEdit_3.setMaxLength(MAX_CALLSIGN_LENGTH)
-        self.lineEdit_3.setReadOnly(True)
-        self.lineEdit_3.setStyleSheet("background-color: #e9ecef;")
-        self.lineEdit_3.setObjectName("lineEdit_3")
-
-        # Message input
-        self.label_2 = QtWidgets.QLabel(FormMessage)
-        self.label_2.setGeometry(QtCore.QRect(58, 177, 120, 20))
-        self.label_2.setFont(font)
-        self.label_2.setObjectName("label_2")
-
-        self.lineEdit_2 = QtWidgets.QLineEdit(FormMessage)
-        self.lineEdit_2.setGeometry(QtCore.QRect(190, 177, 530, 26))
-        self.lineEdit_2.setFont(QtGui.QFont("Kode Mono", 12))
-        self.lineEdit_2.setMaxLength(MAX_MESSAGE_LENGTH)
-        self.lineEdit_2.setObjectName("lineEdit_2")
-
-        # Multi-line message field for Internet Only (hidden by default)
-        self.message_expanded = QtWidgets.QPlainTextEdit(FormMessage)
-        self.message_expanded.setGeometry(QtCore.QRect(190, 177, 530, 100))
-        self.message_expanded.setFont(QtGui.QFont("Kode Mono", 12))
-        self.message_expanded.setStyleSheet(
-            "background-color: white; color: #333333; border: 1px solid #cccccc; border-radius: 4px; padding: 2px 4px;"
-        )
-        self.message_expanded.hide()
-
-        # Character limit note
-        self.note_label = QtWidgets.QLabel(FormMessage)
-        self.note_label.setGeometry(QtCore.QRect(190, 207, 481, 20))
-        note_font = QtGui.QFont()
-        note_font.setFamily("Arial")
-        note_font.setPointSize(10)
-        note_font.setBold(True)
-        self.note_label.setFont(note_font)
-        self.note_label.setStyleSheet("color: #AA0000;")
-        self.note_label.setText("Messages are limited to 67 characters.")
-        self.note_label.setObjectName("note_label")
-
-        # Delivery legend
-        self.delivery_legend_label = QtWidgets.QLabel(FormMessage)
-        self.delivery_legend_label.setGeometry(QtCore.QRect(190, 229, 481, 20))
-        self.delivery_legend_label.setFont(note_font)
-        self.delivery_legend_label.setStyleSheet("color: #AA0000;")
-        self.delivery_legend_label.setText("Delivery: Maximum Reach = RF + Internet | Limited Reach = RF Only")
-        self.delivery_legend_label.setObjectName("delivery_legend_label")
-
-        # Buttons
-        self.pushButton_3 = QtWidgets.QPushButton(FormMessage)
-        self.pushButton_3.setGeometry(QtCore.QRect(410, 264, 100, 32))
-        self.pushButton_3.setObjectName("pushButton_3")
-        self.pushButton_3.clicked.connect(self._save_only)
-        self.pushButton_3.setStyleSheet(self._button_style("#17a2b8"))
-
-        self.pushButton = QtWidgets.QPushButton(FormMessage)
-        self.pushButton.setGeometry(QtCore.QRect(520, 264, 100, 32))
-        self.pushButton.setObjectName("pushButton")
-        self.pushButton.clicked.connect(self._transmit)
-        self.pushButton.setStyleSheet(self._button_style("#007bff"))
-
-        self.pushButton_2 = QtWidgets.QPushButton(FormMessage)
-        self.pushButton_2.setGeometry(QtCore.QRect(630, 264, 100, 32))
-        self.pushButton_2.setObjectName("pushButton_2")
-        self.pushButton_2.clicked.connect(self.MainWindow.close)
-        self.pushButton_2.setStyleSheet(self._button_style("#dc3545"))
-
-        self.retranslateUi(FormMessage)
-        QtCore.QMetaObject.connectSlotsByName(FormMessage)
-
-        # Load config and initialize
-        self._generate_msg_id()
-        self._load_config()
-
-        # Connect rig combo signal
-        self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
-
-        # Connect mode combo signal
-        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
-
-        # Load rigs into dropdown
-        self._load_rigs()
-
-        self.MainWindow.setWindowFlags(
+        FormMessage.setWindowFlags(
             QtCore.Qt.Window |
             QtCore.Qt.CustomizeWindowHint |
             QtCore.Qt.WindowTitleHint |
@@ -293,15 +137,202 @@ class Ui_FormMessage:
             QtCore.Qt.WindowStaysOnTopHint
         )
 
-    def retranslateUi(self, FormMessage: QtWidgets.QWidget) -> None:
-        """Set UI text labels."""
-        _translate = QtCore.QCoreApplication.translate
-        FormMessage.setWindowTitle(_translate("FormMessage", "CommStat Send Message"))
-        self.label_2.setText(_translate("FormMessage", "Message:"))
-        self.label_3.setText(_translate("FormMessage", "From Callsign:"))
-        self.pushButton.setText(_translate("FormMessage", "Transmit"))
-        self.pushButton_2.setText(_translate("FormMessage", "Cancel"))
-        self.pushButton_3.setText(_translate("FormMessage", "Save Only"))
+        if os.path.exists("radiation-32.png"):
+            FormMessage.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+
+        FormMessage.setStyleSheet(f"""
+            QWidget {{ background-color: {_DATA_BG}; }}
+            QLabel {{ color: {COLOR_INPUT_TEXT}; background-color: transparent; }}
+            QLineEdit {{
+                background-color: white; color: {COLOR_INPUT_TEXT};
+                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
+            }}
+            QComboBox {{
+                background-color: white; color: {COLOR_INPUT_TEXT};
+                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
+            }}
+            QComboBox:disabled {{
+                background-color: {COLOR_DISABLED_BG}; color: {COLOR_DISABLED_TEXT};
+                border: 1px solid {COLOR_INPUT_BORDER};
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: white; color: {COLOR_INPUT_TEXT};
+                selection-background-color: #cce5ff; selection-color: #000000;
+            }}
+            QPlainTextEdit {{
+                background-color: white; color: {COLOR_INPUT_TEXT};
+                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 4px;
+            }}
+        """)
+
+        layout = QtWidgets.QVBoxLayout(FormMessage)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        # Title
+        title = QtWidgets.QLabel("GROUP MESSAGE")
+        title.setAlignment(QtCore.Qt.AlignCenter)
+        _tf = QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black)
+        _tf.setPixelSize(16)
+        title.setFont(_tf)
+        title.setFixedHeight(36)
+        title.setStyleSheet(
+            f"QLabel {{ background-color: {_PROG_BG}; color: {_PROG_FG}; "
+            "padding-top: 9px; padding-bottom: 9px; }}"
+        )
+        layout.addWidget(title)
+
+        # Settings row: Rig | Mode | Freq | Delivery
+        def _labeled_col(lbl_text, ctrl):
+            col = QtWidgets.QVBoxLayout()
+            col.setSpacing(2)
+            lbl = QtWidgets.QLabel(lbl_text)
+            lbl.setFont(_lbl_font())
+            col.addWidget(lbl)
+            col.addWidget(ctrl)
+            return col
+
+        settings_row = QtWidgets.QHBoxLayout()
+        settings_row.setSpacing(8)
+
+        self.rig_combo = QtWidgets.QComboBox()
+        self.rig_combo.setFixedWidth(150)
+        self.rig_combo.setObjectName("rig_combo")
+        settings_row.addLayout(_labeled_col("Rig:", self.rig_combo))
+
+        self.mode_combo = QtWidgets.QComboBox()
+        self.mode_combo.setFixedWidth(100)
+        self.mode_combo.addItem("Slow",   4)
+        self.mode_combo.addItem("Normal", 0)
+        self.mode_combo.addItem("Fast",   1)
+        self.mode_combo.addItem("Turbo",  2)
+        self.mode_combo.addItem("Ultra",  8)
+        self.mode_combo.setObjectName("mode_combo")
+        settings_row.addLayout(_labeled_col("Mode:", self.mode_combo))
+
+        self.freq_field = QtWidgets.QLineEdit()
+        self.freq_field.setFixedWidth(90)
+        self.freq_field.setReadOnly(True)
+        self.freq_field.setStyleSheet(
+            f"background-color: {COLOR_DISABLED_BG}; color: {COLOR_DISABLED_TEXT};"
+            f" border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;"
+        )
+        self.freq_field.setObjectName("freq_field")
+        settings_row.addLayout(_labeled_col("Freq:", self.freq_field))
+
+        self.delivery_combo = QtWidgets.QComboBox()
+        self.delivery_combo.setFixedWidth(160)
+        self.delivery_combo.addItem("Maximum Reach")
+        self.delivery_combo.addItem("Limited Reach")
+        self.delivery_combo.setObjectName("delivery_combo")
+        settings_row.addLayout(_labeled_col("Delivery:", self.delivery_combo))
+
+        settings_row.addStretch()
+        layout.addLayout(settings_row)
+
+        # Group row
+        group_row = QtWidgets.QHBoxLayout()
+        group_row.setSpacing(8)
+        group_lbl = QtWidgets.QLabel("Group:")
+        group_lbl.setFont(_lbl_font())
+        group_lbl.setFixedWidth(110)
+        group_row.addWidget(group_lbl)
+        self.group_combo = QtWidgets.QComboBox()
+        self.group_combo.setFixedWidth(180)
+        self.group_combo.setObjectName("group_combo")
+        group_row.addWidget(self.group_combo)
+        group_row.addStretch()
+        layout.addLayout(group_row)
+
+        # From Callsign row
+        callsign_row = QtWidgets.QHBoxLayout()
+        callsign_row.setSpacing(8)
+        self.label_3 = QtWidgets.QLabel("From Callsign:")
+        self.label_3.setFont(_lbl_font())
+        self.label_3.setFixedWidth(110)
+        callsign_row.addWidget(self.label_3)
+        self.lineEdit_3 = QtWidgets.QLineEdit()
+        self.lineEdit_3.setFont(_mono_font())
+        self.lineEdit_3.setFixedWidth(120)
+        self.lineEdit_3.setMaxLength(MAX_CALLSIGN_LENGTH)
+        self.lineEdit_3.setReadOnly(True)
+        self.lineEdit_3.setStyleSheet(
+            f"background-color: {COLOR_DISABLED_BG}; color: {COLOR_INPUT_TEXT};"
+            f" border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;"
+        )
+        self.lineEdit_3.setObjectName("lineEdit_3")
+        callsign_row.addWidget(self.lineEdit_3)
+        callsign_row.addStretch()
+        layout.addLayout(callsign_row)
+
+        # Message label + inputs
+        self.label_2 = QtWidgets.QLabel("Message:")
+        self.label_2.setFont(_lbl_font())
+        layout.addWidget(self.label_2)
+
+        self.lineEdit_2 = QtWidgets.QLineEdit()
+        self.lineEdit_2.setFont(_mono_font())
+        self.lineEdit_2.setMaxLength(MAX_MESSAGE_LENGTH)
+        self.lineEdit_2.setObjectName("lineEdit_2")
+        layout.addWidget(self.lineEdit_2)
+
+        self.message_expanded = QtWidgets.QPlainTextEdit()
+        self.message_expanded.setFont(_mono_font())
+        self.message_expanded.setMinimumHeight(100)
+        self.message_expanded.hide()
+        layout.addWidget(self.message_expanded)
+
+        # Note labels
+        note_f = QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
+        note_f.setPixelSize(10)
+
+        self.note_label = QtWidgets.QLabel("Messages are limited to 67 characters.")
+        self.note_label.setFont(note_f)
+        self.note_label.setStyleSheet(f"color: {COLOR_ERROR};")
+        layout.addWidget(self.note_label)
+
+        self.delivery_legend_label = QtWidgets.QLabel(
+            "Delivery: Maximum Reach = RF + Internet | Limited Reach = RF Only"
+        )
+        self.delivery_legend_label.setFont(note_f)
+        self.delivery_legend_label.setStyleSheet(f"color: {COLOR_ERROR};")
+        layout.addWidget(self.delivery_legend_label)
+
+        layout.addStretch()
+
+        # Button row
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+
+        self.pushButton_3 = _btn("Save Only", COLOR_BTN_CYAN)
+        self.pushButton_3.setObjectName("pushButton_3")
+        self.pushButton_3.clicked.connect(self._save_only)
+        btn_row.addWidget(self.pushButton_3)
+
+        self.pushButton = _btn("Transmit", COLOR_BTN_BLUE)
+        self.pushButton.setObjectName("pushButton")
+        self.pushButton.clicked.connect(self._transmit)
+        btn_row.addWidget(self.pushButton)
+
+        self.pushButton_2 = _btn("Cancel", _COL_CANCEL)
+        self.pushButton_2.setObjectName("pushButton_2")
+        self.pushButton_2.clicked.connect(self.MainWindow.close)
+        btn_row.addWidget(self.pushButton_2)
+
+        layout.addLayout(btn_row)
+
+        # Signals
+        self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+
+        self._generate_msg_id()
+        self._load_config()
+        self._load_rigs()
+
+    # -------------------------------------------------------------------------
+    # Data / config loading
+    # -------------------------------------------------------------------------
 
     def _load_config(self) -> None:
         """Load configuration from database.
@@ -309,20 +340,15 @@ class Ui_FormMessage:
         Auto-selects group only if exactly 1 group exists.
         If multiple groups exist, user must select one.
         """
-        # Get active group from database
         self.selected_group = self._get_active_group_from_db()
 
-        # Populate group dropdown
         all_groups = self._get_all_groups_from_db()
         if len(all_groups) == 1:
-            # Exactly 1 group - auto-select it
             self.group_combo.addItem(all_groups[0])
         else:
-            # Multiple groups or no groups - require user selection
-            self.group_combo.addItem("")  # Empty first item
+            self.group_combo.addItem("")
             for group in all_groups:
                 self.group_combo.addItem(group)
-        # Callsign will be loaded from JS8Call when rig is selected
 
     def _load_rigs(self) -> None:
         """Load enabled connectors into the rig dropdown, plus Internet option."""
@@ -335,11 +361,9 @@ class Ui_FormMessage:
         available_count = len(available_connectors)
 
         if available_count == 0:
-            # No available connectors — Internet is the only/preselected option
             self.rig_combo.addItem(INTERNET_RIG)
         else:
-            # Connectors available — require explicit selection; Internet at bottom
-            self.rig_combo.addItem("")  # empty first
+            self.rig_combo.addItem("")
             for c in available_connectors:
                 self.rig_combo.addItem(c['rig_name'])
             self.rig_combo.addItem(INTERNET_RIG)
@@ -349,6 +373,10 @@ class Ui_FormMessage:
         current_text = self.rig_combo.currentText()
         if current_text:
             self._on_rig_changed(current_text)
+
+    # -------------------------------------------------------------------------
+    # Signal handlers
+    # -------------------------------------------------------------------------
 
     def _on_rig_changed(self, rig_name: str) -> None:
         """Handle rig selection change - fetch callsign from JS8Call."""
@@ -383,22 +411,19 @@ class Ui_FormMessage:
         if not self.tcp_pool:
             return
 
-        # Re-enable mode combo for real rig
         if hasattr(self, 'mode_combo'):
             self.mode_combo.setEnabled(True)
 
         client = self.tcp_pool.get_client(rig_name)
         if client and client.is_connected():
-            # Populate mode dropdown with current mode preselected
             if hasattr(self, 'mode_combo'):
                 speed_name = (client.speed_name or "").upper()
                 mode_map = {"SLOW": 0, "NORMAL": 1, "FAST": 2, "TURBO": 3, "ULTRA": 4}
-                idx = mode_map.get(speed_name, 1)  # Default to Normal
+                idx = mode_map.get(speed_name, 1)
                 self.mode_combo.blockSignals(True)
                 self.mode_combo.setCurrentIndex(idx)
                 self.mode_combo.blockSignals(False)
 
-            # Populate frequency field
             if hasattr(self, 'freq_field'):
                 frequency = client.frequency
                 if frequency:
@@ -406,7 +431,6 @@ class Ui_FormMessage:
                 else:
                     self.freq_field.setText("")
 
-            # Connect signals for this client (disconnect any existing first)
             try:
                 client.callsign_received.disconnect(self._on_callsign_received)
             except TypeError:
@@ -419,7 +443,6 @@ class Ui_FormMessage:
             client.callsign_received.connect(self._on_callsign_received)
             client.frequency_received.connect(self._on_frequency_received)
 
-            # Request callsign and frequency from JS8Call
             client.get_callsign()
             QtCore.QTimer.singleShot(100, client.get_frequency)
         else:
@@ -428,14 +451,12 @@ class Ui_FormMessage:
 
     def _on_callsign_received(self, rig_name: str, callsign: str) -> None:
         """Handle callsign received from JS8Call."""
-        # Only update if this is the currently selected rig
         if self.rig_combo.currentText() == rig_name:
             self.callsign = callsign
             self.lineEdit_3.setText(callsign)
 
     def _on_frequency_received(self, rig_name: str, dial_freq: int) -> None:
         """Handle frequency received from JS8Call."""
-        # Only update if this is the currently selected rig
         if self.rig_combo.currentText() == rig_name:
             frequency_mhz = dial_freq / 1000000
             if hasattr(self, 'freq_field'):
@@ -446,25 +467,21 @@ class Ui_FormMessage:
         if internet_only == self._message_is_expanded:
             return
         self._message_is_expanded = internet_only
-        shift = _MSG_EXPAND_DELTA if internet_only else -_MSG_EXPAND_DELTA
         if internet_only:
             text = self.lineEdit_2.text()
             self.lineEdit_2.hide()
             self.message_expanded.setPlainText(text)
             self.message_expanded.show()
-            self.note_label.setText(f"Internet Only: messages support up to {MAX_MESSAGE_LENGTH_INTERNET} characters.")
+            self.note_label.setText(
+                f"Internet Only: messages support up to {MAX_MESSAGE_LENGTH_INTERNET} characters."
+            )
         else:
             text = self.message_expanded.toPlainText()
             self.message_expanded.hide()
             self.lineEdit_2.setText(text[:MAX_MESSAGE_LENGTH])
             self.lineEdit_2.show()
             self.note_label.setText("Messages are limited to 67 characters.")
-        for w in [self.note_label, self.delivery_legend_label,
-                  self.pushButton_3, self.pushButton, self.pushButton_2]:
-            g = w.geometry()
-            w.setGeometry(g.x(), g.y() + shift, g.width(), g.height())
-        new_height = WINDOW_HEIGHT_EXPANDED if internet_only else WINDOW_HEIGHT_DEFAULT
-        self.MainWindow.resize(835, new_height)
+        self.MainWindow.adjustSize()
 
     def _get_internet_callsign(self) -> str:
         """Get callsign from User Settings for internet-only transmission."""
@@ -492,6 +509,10 @@ class Ui_FormMessage:
             client.send_message("MODE.SET_SPEED", "", {"SPEED": speed_value})
             print(f"[Message] Set mode to {self.mode_combo.currentText()} (speed={speed_value})")
 
+    # -------------------------------------------------------------------------
+    # Database helpers
+    # -------------------------------------------------------------------------
+
     def _get_active_group_from_db(self) -> str:
         """Get the first group from the database."""
         try:
@@ -516,6 +537,10 @@ class Ui_FormMessage:
             print(f"Error reading groups from database: {e}")
         return []
 
+    # -------------------------------------------------------------------------
+    # Validation / messaging helpers
+    # -------------------------------------------------------------------------
+
     def _show_error(self, message: str) -> None:
         """Display an error message box."""
         msg = QMessageBox()
@@ -524,26 +549,6 @@ class Ui_FormMessage:
         msg.setIcon(QMessageBox.Critical)
         msg.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint)
         msg.exec_()
-
-    def _button_style(self, color: str) -> str:
-        """Generate button stylesheet."""
-        return f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                border: none;
-                padding: 8px 12px;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                opacity: 0.9;
-            }}
-            QPushButton:pressed {{
-                opacity: 0.8;
-            }}
-        """
 
     def _show_info(self, message: str) -> None:
         """Display an info message box."""
@@ -560,33 +565,28 @@ class Ui_FormMessage:
 
         Returns (callsign, message) tuple if valid, None otherwise.
         """
-        # Check rig is selected
         rig_name = self.rig_combo.currentText()
         if not rig_name or rig_name == "":
             self._show_error("Please select a Rig")
             self.rig_combo.setFocus()
             return None
 
-        # Check group is selected
         group_name = self.group_combo.currentText()
         if not group_name or group_name == "":
             self._show_error("Please select a Group")
             self.group_combo.setFocus()
             return None
 
-        # Get and clean message
         if self._message_is_expanded and hasattr(self, 'message_expanded'):
             message_raw = self.message_expanded.toPlainText()
         else:
             message_raw = self.lineEdit_2.text()
         message = re.sub(r"[^ -~]+", " ", message_raw)
 
-        # Validate message length
         if len(message) < MIN_MESSAGE_LENGTH:
             self._show_error("Message too short")
             return None
 
-        # Validate callsign if required
         if validate_callsign:
             call = self.lineEdit_3.text().upper()
 
@@ -612,53 +612,33 @@ class Ui_FormMessage:
         marker = "{^%3}" if self.rig_combo.currentText() == INTERNET_RIG else "{^%}"
         return f"{group} MSG ,{self.msg_id},{message},{marker}"
 
+    # -------------------------------------------------------------------------
+    # Backbone / database
+    # -------------------------------------------------------------------------
+
     def _submit_to_backbone_async(self, frequency: int, callsign: str, message_data: str, now: str) -> None:
-        """Start background thread to submit message to backbone server.
-
-        Args:
-            frequency: Frequency in Hz
-            callsign: Sender callsign
-            message_data: The full message string to send
-            now: UTC datetime string
-        """
+        """Start background thread to submit message to backbone server."""
         def submit_thread():
-            """Background thread that performs the HTTP POST."""
             try:
-                # Format data string: datetime\tfreq_hz\t0\t30\tmessage
                 data_string = f"{now}\t{frequency}\t0\t30\t{message_data}"
-
-                # Build POST data
                 post_data = urllib.parse.urlencode({
                     'cs': callsign,
                     'data': data_string
                 }).encode('utf-8')
-
-                # Create and send request with 10-second timeout
                 req = urllib.request.Request(_DATAFEED, data=post_data, method='POST')
                 with urllib.request.urlopen(req, timeout=10) as response:
                     result = response.read().decode('utf-8').strip()
-
-                # Check server response: "1" = success, other = failure
                 if result == "1":
                     print(f"[Backbone] Message submitted successfully (response: {result})")
                 else:
                     print(f"[Backbone] Message submission failed - server returned: {result}")
-
             except Exception as e:
                 print(f"[Backbone] Error submitting message: {e}")
 
-        # Start background thread
-        thread = threading.Thread(target=submit_thread, daemon=True)
-        thread.start()
+        threading.Thread(target=submit_thread, daemon=True).start()
 
     def _save_to_database(self, callsign: str, message: str, frequency: int = 0) -> None:
-        """Save message to database.
-
-        Args:
-            callsign: The callsign of the sender.
-            message: The message content.
-            frequency: The frequency in Hz at the time of transmission.
-        """
+        """Save message to database."""
         now = QDateTime.currentDateTime()
         datetime_str = now.toUTC().toString("yyyy-MM-dd HH:mm:ss")
         date_only = now.toUTC().toString("yyyy-MM-dd")
@@ -670,7 +650,9 @@ class Ui_FormMessage:
                 "INSERT OR REPLACE INTO messages "
                 "(datetime, date, freq, db, source, msg_id, from_callsign, target, message) "
                 "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (datetime_str, date_only, frequency, 30, 3 if self.rig_combo.currentText() == INTERNET_RIG else 1, self.msg_id, callsign, "@" + self.group_combo.currentText(), message)
+                (datetime_str, date_only, frequency, 30,
+                 3 if self.rig_combo.currentText() == INTERNET_RIG else 1,
+                 self.msg_id, callsign, "@" + self.group_combo.currentText(), message)
             )
             conn.commit()
             freq_mhz = frequency / 1000000.0 if frequency else 0
@@ -678,13 +660,15 @@ class Ui_FormMessage:
         finally:
             conn.close()
 
-        # Submit to backbone server if transmitted (has frequency)
         if frequency > 0:
             if self.delivery_combo.currentText() != "Limited Reach":
                 group = "@" + self.group_combo.currentText()
-                # Format: CALLSIGN: @GROUP MSG ,ID,MESSAGE,{^%}
                 message_data = f"{callsign}: {group} MSG ,{self.msg_id},{message},{{^%}}"
                 self._submit_to_backbone_async(frequency, callsign, message_data, datetime_str)
+
+    # -------------------------------------------------------------------------
+    # Actions
+    # -------------------------------------------------------------------------
 
     def _save_only(self) -> None:
         """Validate and save message to database without transmitting."""
@@ -694,13 +678,11 @@ class Ui_FormMessage:
 
         callsign, message = result
 
-        # Build message for display
         tx_message = self._build_message(message)
         self._show_info(f"CommStat has saved:\n{tx_message}")
 
         self._save_to_database(callsign, message)
 
-        # Trigger refresh callback if provided
         if self.refresh_callback:
             self.refresh_callback()
 
@@ -747,11 +729,9 @@ class Ui_FormMessage:
             self._show_error("Cannot transmit: not connected to rig")
             return
 
-        # Store pending values for transmission after frequency is received
         self._pending_message = self._build_message(message)
         self._pending_callsign = callsign
 
-        # First check if a call is selected in JS8Call
         try:
             client.call_selected_received.disconnect(self._on_call_selected_for_transmit)
         except TypeError:
@@ -771,7 +751,6 @@ class Ui_FormMessage:
             except TypeError:
                 pass
 
-        # If a call is selected, show error and abort
         if selected_call:
             QtWidgets.QMessageBox.critical(
                 self.MainWindow, "ERROR",
@@ -780,7 +759,6 @@ class Ui_FormMessage:
             )
             return
 
-        # No call selected - proceed with getting frequency and transmitting
         if client:
             try:
                 client.frequency_received.disconnect(self._on_frequency_for_transmit)
@@ -791,11 +769,9 @@ class Ui_FormMessage:
 
     def _on_frequency_for_transmit(self, rig_name: str, frequency: int) -> None:
         """Handle frequency received - now transmit and save."""
-        # Only process if this is the currently selected rig
         if self.rig_combo.currentText() != rig_name:
             return
 
-        # Disconnect signal to prevent multiple calls
         client = self.tcp_pool.get_client(rig_name)
         if client:
             try:
@@ -804,16 +780,12 @@ class Ui_FormMessage:
                 pass
 
         try:
-            # Transmit via TCP
             client.send_tx_message(self._pending_message)
 
-            # Save to database with frequency
-            # Extract message content from the built message
             message = self.lineEdit_2.text()
             message = re.sub(r"[^ -~]+", " ", message)
             self._save_to_database(self.callsign, message, frequency)
 
-            # Trigger refresh callback if provided
             if self.refresh_callback:
                 self.refresh_callback()
 
@@ -834,7 +806,6 @@ if __name__ == "__main__":
 
     app = QtWidgets.QApplication(sys.argv)
 
-    # Initialize dependencies
     connector_manager = ConnectorManager()
     connector_manager.init_connectors_table()
     tcp_pool = TCPConnectionPool(connector_manager)
