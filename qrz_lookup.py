@@ -445,6 +445,31 @@ class _QRZInfoSection(QWidget):
         right.addStretch()
         outer.addLayout(right, 1)
 
+    def add_memo_row(self) -> QLineEdit:
+        """Add a contact-note label, input, and separator spanning all three columns."""
+        self._main_layout.addSpacing(6)
+        lbl = QLabel("Contact note / memo:")
+        lbl.setFont(_lbl_font())
+        self._main_layout.addWidget(lbl)
+
+        memo_input = QLineEdit()
+        memo_input.setFont(_mono_font())
+        memo_input.setMinimumHeight(34)
+        memo_input.setStyleSheet(
+            f"background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
+        )
+        memo_input.setPlaceholderText("Add a contact note…")
+        self._main_layout.addWidget(memo_input)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color:#cccccc;")
+        self._main_layout.addSpacing(4)
+        self._main_layout.addWidget(sep)
+
+        return memo_input
+
     def add_statrep_rows(self, memo_widget=None) -> None:
         """Add separator + StatRep fields below the QRZ section, spanning all three columns."""
         self._grid.setRowStretch(8, 0)
@@ -744,24 +769,9 @@ class QRZLookupDialog(QDialog):
         self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, parent=self)
         self.qrz_info.image_width_ready.connect(self._adjust_for_image_width)
         self.qrz_info.show_no_data_placeholder()
+        self.memo_edit = self.qrz_info.add_memo_row()
+        self.memo_edit.editingFinished.connect(self._save_memo)
         main.addWidget(self.qrz_info)
-
-        memo_lbl = QLabel("Notes / Memo")
-        memo_lbl.setFont(_lbl_font())
-        memo_lbl.setVisible(False)
-        self._memo_label = memo_lbl
-        main.addWidget(memo_lbl)
-
-        self.memo_edit = _MemoTextEdit()
-        self.memo_edit.setPlaceholderText("Add notes…")
-        self.memo_edit.setFont(_mono_font())
-        self.memo_edit.setStyleSheet(
-            f"background-color:white; border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
-        )
-        self.memo_edit.setFixedHeight(60)
-        self.memo_edit.setVisible(False)
-        self.memo_edit.focus_lost.connect(self._save_memo)
-        main.addWidget(self.memo_edit)
         main.addStretch()
 
         btn_row = QHBoxLayout()
@@ -796,6 +806,9 @@ class QRZLookupDialog(QDialog):
         self.btn_search.setEnabled(False)
         self.qrz_info.clear()
         self.qrz_info.show_no_data_placeholder()
+        self.memo_edit.blockSignals(True)
+        self.memo_edit.clear()
+        self.memo_edit.blockSignals(False)
         _, username, password = load_qrz_config()
         self._thread = _QRZThread(cs, username, password)
         self._thread.result_ready.connect(self._on_result)
@@ -807,11 +820,8 @@ class QRZLookupDialog(QDialog):
             self.lbl_status.setText("")
             self.qrz_info.update_data(result)
             self.btn_message_lookup.setVisible(True)
-
-            self._memo_label.setVisible(True)
-            self.memo_edit.setVisible(True)
             self.memo_edit.blockSignals(True)
-            self.memo_edit.setPlainText(result.get("memo") or "")
+            self.memo_edit.setText(result.get("memo") or "")
             self.memo_edit.blockSignals(False)
         else:
             self.lbl_status.setText("No results found.")
@@ -826,7 +836,7 @@ class QRZLookupDialog(QDialog):
             with sqlite3.connect(DB_PATH, timeout=10) as conn:
                 conn.execute(
                     "UPDATE qrz SET memo = ? WHERE callsign = ?",
-                    (self.memo_edit.toPlainText(), cs)
+                    (self.memo_edit.text(), cs)
                 )
                 conn.commit()
         except sqlite3.Error as e:
