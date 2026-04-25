@@ -1686,10 +1686,6 @@ class MainWindow(QtWidgets.QMainWindow):
             action.triggered.connect(lambda checked, d=days: self._reset_filter_date(d))
             self.filter_menu.addAction(action)
 
-        custom_date_action = QtWidgets.QAction("Custom Date Range...", self)
-        custom_date_action.triggered.connect(self._on_filter)
-        self.filter_menu.addAction(custom_date_action)
-        self.actions["filter"] = custom_date_action
 
         # LIVE FEED section
         self.filter_menu.addSeparator()
