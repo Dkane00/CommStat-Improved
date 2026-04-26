@@ -566,8 +566,8 @@ class StatRepDialog(QDialog):
             self.grid = grid
             if hasattr(self, 'grid_field'):
                 self.grid_field.setText(grid)
-            # Update remarks with state derived from grid
-            if hasattr(self, 'remarks_field'):
+            # Only auto-populate remarks if the user hasn't typed anything yet
+            if hasattr(self, 'remarks_field') and not self._get_remarks_text():
                 self._set_remarks_text(self._get_default_remarks())
 
     def _on_frequency_received(self, rig_name: str, dial_freq: int) -> None:
