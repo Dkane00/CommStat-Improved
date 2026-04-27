@@ -27,6 +27,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 DEFAULT_PORT = 2822
 MOCK_CALLSIGN = "W1TEST"
 MOCK_GRID = "EM50"
+DEFAULT_MY_CALLSIGN = "W1TEST"
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +46,10 @@ class MockServer(QtCore.QObject):
         self._lock = threading.Lock()
         self._conn: socket.socket | None = None
         self._running = False
+        self._my_callsign = DEFAULT_MY_CALLSIGN
+
+    def set_my_callsign(self, callsign: str) -> None:
+        self._my_callsign = callsign.strip().upper() or DEFAULT_MY_CALLSIGN
 
     # ------------------------------------------------------------------
     def start(self, host: str, port: int) -> None:
@@ -124,10 +129,10 @@ class MockServer(QtCore.QObject):
         t = msg.get("type", "")
         self.logged.emit(f"  << {t}")
         replies = {
-            "STATION.GET_CALLSIGN": {"type": "STATION.CALLSIGN",  "value": MOCK_CALLSIGN, "params": {}},
-            "MODE.GET_SPEED":       {"type": "MODE.SPEED",         "value": "",            "params": {"SPEED": 0}},
-            "RIG.GET_FREQ":         {"type": "RIG.FREQ",           "value": "",            "params": {"DIAL": 7110000, "OFFSET": 1940, "FREQ": 7111940}},
-            "STATION.GET_GRID":     {"type": "STATION.GRID",       "value": MOCK_GRID,     "params": {}},
+            "STATION.GET_CALLSIGN": {"type": "STATION.CALLSIGN",  "value": self._my_callsign, "params": {}},
+            "MODE.GET_SPEED":       {"type": "MODE.SPEED",         "value": "",                "params": {"SPEED": 0}},
+            "RIG.GET_FREQ":         {"type": "RIG.FREQ",           "value": "",                "params": {"DIAL": 7110000, "OFFSET": 1940, "FREQ": 7111940}},
+            "STATION.GET_GRID":     {"type": "STATION.GRID",       "value": MOCK_GRID,         "params": {}},
         }
         reply = replies.get(t)
         if reply:
@@ -204,6 +209,31 @@ class MainWindow(QtWidgets.QWidget):
         port_row.addWidget(self.restart_btn)
         port_row.addStretch()
         root.addLayout(port_row)
+
+        root.addWidget(self._hr())
+
+        # -- My Station Callsign (reported to CommStat as STATION.CALLSIGN) --
+        my_call_row = QtWidgets.QHBoxLayout()
+        my_call_row.addWidget(QtWidgets.QLabel("My Callsign:"))
+        self.my_call_edit = QtWidgets.QLineEdit(DEFAULT_MY_CALLSIGN)
+        self.my_call_edit.setMaximumWidth(100)
+        self.my_call_edit.setMaxLength(12)
+        self.my_call_edit.setToolTip(
+            "Station callsign CommStat will receive via STATION.CALLSIGN handshake.\n"
+            "Set this to match the TO field when testing direct-callsign messages."
+        )
+        self.my_call_edit.textChanged.connect(
+            lambda t: (self.my_call_edit.blockSignals(True),
+                       self.my_call_edit.setText(t.upper()),
+                       self.my_call_edit.blockSignals(False),
+                       self.server.set_my_callsign(t))
+        )
+        my_call_row.addWidget(self.my_call_edit)
+        my_call_row.addWidget(QtWidgets.QLabel(
+            "(must match TO field for direct-callsign messages)"
+        ))
+        my_call_row.addStretch()
+        root.addLayout(my_call_row)
 
         root.addWidget(self._hr())
 

@@ -586,6 +586,11 @@ class CustomWebEnginePage(QWebEnginePage):
         super().__init__(parent)
         self.parent_widget = parent
 
+    def javaScriptConsoleMessage(self, level, message, line, source):
+        if 'webkitStorageInfo' in message:
+            return
+        super().javaScriptConsoleMessage(level, message, line, source)
+
     def acceptNavigationRequest(self, url, navigation_type, is_main_frame):
         """Intercept custom URL schemes for statrep links and video events."""
         url_str = url.toString()
@@ -610,8 +615,8 @@ class CustomWebEnginePage(QWebEnginePage):
                             dlg = StatRepDetailDialog(
                                 sr_id, callsign, mw._internet_available,
                                 backbone_url=_BACKBONE,
-                                panel_background=mw.config.get_color('panel_background'),
-                                panel_foreground=mw.config.get_color('panel_foreground'),
+                                module_background=mw.config.get_color('module_background'),
+                                module_foreground=mw.config.get_color('module_foreground'),
                                 title_bar_background=mw.config.get_color('title_bar_background'),
                                 title_bar_foreground=mw.config.get_color('title_bar_foreground'),
                                 data_background=mw.config.get_color('data_background'),
@@ -976,7 +981,8 @@ class DatabaseManager:
         start: str,
         end: str = '',
         show_all: bool = False,
-        exclude_groups: List[str] = None
+        exclude_groups: List[str] = None,
+        user_callsign: str = ""
     ) -> List[Tuple]:
         """
         Fetch StatRep data from database.
@@ -987,12 +993,13 @@ class DatabaseManager:
             end: End date filter (optional, empty string means no upper limit)
             show_all: If True, return all statreps (subject to exclude_groups)
             exclude_groups: When show_all=True, exclude records from these groups
+            user_callsign: User's own callsign; also returns statreps addressed directly to it
 
         Returns:
             List of tuples containing StatRep records
         """
         # If no active groups and not showing all, return empty list
-        if not groups and not show_all:
+        if not groups and not show_all and not user_callsign:
             return []
 
         try:
@@ -1033,9 +1040,14 @@ class DatabaseManager:
                         """
                         params = date_params
                 else:
-                    # Build group filter for multiple groups (add @ prefix for matching)
+                    # Build group filter; also include statreps addressed to the user's callsign
                     groups_with_at = ["@" + g for g in groups]
-                    placeholders = ",".join("?" * len(groups_with_at))
+                    target_list = groups_with_at[:]
+                    if user_callsign:
+                        target_list.append(user_callsign.upper())
+                    if not target_list:
+                        return []
+                    placeholders = ",".join("?" * len(target_list))
                     query = f"""
                         SELECT db, datetime, freq, from_callsign, target, sr_id, grid, scope, map,
                                power, water, med, telecom, travel, internet,
@@ -1044,7 +1056,7 @@ class DatabaseManager:
                         WHERE target IN ({placeholders}) AND ({date_condition} OR pinned = 1)
                         ORDER BY datetime DESC
                     """
-                    params = groups_with_at + date_params
+                    params = target_list + date_params
 
                 cursor.execute(query, params)
                 return cursor.fetchall()
@@ -1568,8 +1580,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menubar.setCornerWidget(None, Qt.TopRightCorner)
         menu_bg = self.config.get_color('menu_background')
         menu_fg = self.config.get_color('menu_foreground')
-        panel_bg = self.config.get_color('panel_background')
-        panel_fg = self.config.get_color('panel_foreground')
+        panel_bg = self.config.get_color('module_background')
+        panel_fg = self.config.get_color('module_foreground')
         self.menubar.setStyleSheet(f"""
             QMenuBar {{
                 background-color: {menu_bg};
@@ -1652,15 +1664,44 @@ class MainWindow(QtWidgets.QMainWindow):
         self.transmit_menu = QtWidgets.QMenu("Transmit", self.menubar)
         self.menubar.addMenu(self.transmit_menu)
 
-        transmit_items = [
-            ("statrep", "Status Report", self._on_statrep),
-            ("group_alert", "Alert", self._on_group_alert),
+        hybrid_lbl = QtWidgets.QAction("HYBRID TOOLS", self)
+        hybrid_lbl.setEnabled(False)
+        self.transmit_menu.addAction(hybrid_lbl)
+
+        for name, text, handler in [
+            ("statrep",      "Status Report", self._on_statrep),
+            ("group_alert",  "Alert",         self._on_group_alert),
             ("send_message", "Group Message", self._on_send_message),
-            ("direct_message", "Direct Message", self._on_direct_message),
+        ]:
+            action = QtWidgets.QAction(text, self)
+            action.triggered.connect(handler)
+            self.transmit_menu.addAction(action)
+            self.actions[name] = action
+
+        self.transmit_menu.addSeparator()
+        internet_lbl = QtWidgets.QAction("INTERNET TOOLS", self)
+        internet_lbl.setEnabled(False)
+        self.transmit_menu.addAction(internet_lbl)
+
+        inet_msg_action = QtWidgets.QAction("Internet Message", self)
+        inet_msg_action.triggered.connect(self._on_qrz_lookup)
+        self.transmit_menu.addAction(inet_msg_action)
+        self.actions["internet_message"] = inet_msg_action
+
+        self.transmit_menu.addSeparator()
+        section_lbl = QtWidgets.QAction("GRID DOWN TOOLS", self)
+        section_lbl.setEnabled(False)
+        self.transmit_menu.addAction(section_lbl)
+
+        js8msg_action = QtWidgets.QAction("JS8 Message", self)
+        js8msg_action.triggered.connect(self._on_js8_message)
+        self.transmit_menu.addAction(js8msg_action)
+        self.actions["js8_message"] = js8msg_action
+
+        for name, text, handler in [
             ("js8email", "JS8 Email", self._on_js8email),
-            ("js8sms", "JS8 SMS", self._on_js8sms),
-        ]
-        for name, text, handler in transmit_items:
+            ("js8sms",   "JS8 SMS",   self._on_js8sms),
+        ]:
             action = QtWidgets.QAction(text, self)
             action.triggered.connect(handler)
             self.transmit_menu.addAction(action)
@@ -2885,6 +2926,15 @@ class MainWindow(QtWidgets.QMainWindow):
                     target_match = re.search(r'(@[A-Z0-9]+)', message_value, re.IGNORECASE)
                     if target_match:
                         target = target_match.group(1).upper()
+                    else:
+                        # Check if statrep is addressed directly to the user's callsign
+                        _my_call = next((cs for cs in self.rig_callsigns.values() if cs), None)
+                        if not _my_call:
+                            _my_call, _, __ = self.db.get_user_settings()
+                        if _my_call:
+                            _direct = re.match(r'^\w+:\s+(\w+)\s+,', message_value, re.IGNORECASE)
+                            if _direct and _direct.group(1).upper() == _my_call.upper():
+                                target = _my_call.upper()
 
                     # Preprocess message value
                     message_value = self._preprocess_message_value(message_value, from_callsign)
@@ -2936,7 +2986,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_delivered_popup(self, callsign: str, message: str) -> None:
         """Show a delivery confirmation popup when the backbone confirms a message was delivered."""
         print(f"[DELIVERED] Showing popup — callsign={callsign!r}  message={message!r}")
-        panel_bg = self.config.get_color('panel_background')
+        panel_bg = self.config.get_color('module_background')
 
         dlg = QtWidgets.QDialog(self)
         dlg.setWindowTitle("CommStat Delivered")
@@ -3402,8 +3452,8 @@ class MainWindow(QtWidgets.QMainWindow):
             if callsign:
                 from qrz_lookup import QRZLookupDialog
                 dlg = QRZLookupDialog(
-                    panel_background=self.config.get_color('panel_background'),
-                    panel_foreground=self.config.get_color('panel_foreground'),
+                    module_background=self.config.get_color('module_background'),
+                    module_foreground=self.config.get_color('module_foreground'),
                     program_background=self.config.get_color('program_background'),
                     program_foreground=self.config.get_color('program_foreground'),
                     parent=self
@@ -3518,12 +3568,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Get StatRep data for pins
         try:
+            _map_callsign = next((cs for cs in self.rig_callsigns.values() if cs), "") or ""
+            if not _map_callsign:
+                _map_callsign, _, __ = self.db.get_user_settings()
             data = self.db.get_statrep_data(
                 groups=groups,
                 start=filters.get('start', DEFAULT_FILTER_START),
                 end=filters.get('end', ''),
                 show_all=show_all,
-                exclude_groups=exclude_groups
+                exclude_groups=exclude_groups,
+                user_callsign=_map_callsign
             )
 
             gridlist = []
@@ -3700,13 +3754,18 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         filters = self.config.filter_settings
         groups, exclude_groups, show_all = self._get_filtered_groups()
 
+        user_callsign = next((cs for cs in self.rig_callsigns.values() if cs), "") or ""
+        if not user_callsign:
+            user_callsign, _, __ = self.db.get_user_settings()
+
         # Fetch data from database
         data = self.db.get_statrep_data(
             groups=groups,
             start=filters.get('start', DEFAULT_FILTER_START),
             end=filters.get('end', ''),
             show_all=show_all,
-            exclude_groups=exclude_groups
+            exclude_groups=exclude_groups,
+            user_callsign=user_callsign
         )
 
         if self._hide_internet_statrep:
@@ -3735,8 +3794,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                 dlg = StatRepDetailDialog(
                     record_id, callsign, self._internet_available,
                     backbone_url=_BACKBONE,
-                    panel_background=self.config.get_color('panel_background'),
-                    panel_foreground=self.config.get_color('panel_foreground'),
+                    module_background=self.config.get_color('module_background'),
+                    module_foreground=self.config.get_color('module_foreground'),
                     title_bar_background=self.config.get_color('title_bar_background'),
                     title_bar_foreground=self.config.get_color('title_bar_foreground'),
                     data_background=self.config.get_color('data_background'),
@@ -3776,8 +3835,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                 from qrz_lookup import MessageDetailDialog
                 dlg = MessageDetailDialog(
                     callsign, message_text, self._internet_available,
-                    panel_background=self.config.get_color('panel_background'),
-                    panel_foreground=self.config.get_color('panel_foreground'),
+                    module_background=self.config.get_color('module_background'),
+                    module_foreground=self.config.get_color('module_foreground'),
                     data_background=self.config.get_color('data_background'),
                     program_background=self.config.get_color('program_background'),
                     program_foreground=self.config.get_color('program_foreground'),
@@ -3805,8 +3864,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             geo = self.geometry()
             subprocess.Popen([
                 sys.executable, gridfinder_path,
-                self.config.get_color('panel_background'),
-                self.config.get_color('panel_foreground'),
+                self.config.get_color('module_background'),
+                self.config.get_color('module_foreground'),
                 self.config.get_color('data_background'),
                 self.config.get_color('data_foreground'),
                 str(geo.x()), str(geo.y()), str(geo.width()), str(geo.height()),
@@ -3820,8 +3879,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         if os.path.exists(brevity_path):
             subprocess.Popen([
                 sys.executable, brevity_path,
-                self.config.get_color('panel_background'),
-                self.config.get_color('panel_foreground'),
+                self.config.get_color('module_background'),
+                self.config.get_color('module_foreground'),
             ])
         else:
             QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find brevity.py")
@@ -3830,8 +3889,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         """Open standalone QRZ Lookup dialog (Tools menu)."""
         from qrz_lookup import QRZLookupDialog
         dlg = QRZLookupDialog(
-            panel_background=self.config.get_color('panel_background'),
-            panel_foreground=self.config.get_color('panel_foreground'),
+            module_background=self.config.get_color('module_background'),
+            module_foreground=self.config.get_color('module_foreground'),
             program_background=self.config.get_color('program_background'),
             program_foreground=self.config.get_color('program_foreground'),
             parent=self
@@ -4122,7 +4181,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         """Open StatRep window."""
         dialog = StatRepDialog(
             self.tcp_pool, self.connector_manager, self,
-            panel_background=self.config.get_color('panel_background'),
+            module_background=self.config.get_color('module_background'),
             data_background=self.config.get_color('data_background')
         )
         dialog.exec_()
@@ -4138,6 +4197,20 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         """Open Direct Message window."""
         dialog = DirectMessageDialog(self.tcp_pool, self.connector_manager, parent=self)
         dialog.exec_()
+
+    def _on_js8_message(self) -> None:
+        """Open JS8 Message dialog (RF transmit with QRZ lookup)."""
+        from qrz_lookup import JS8MessageDialog
+        dlg = JS8MessageDialog(
+            program_background=self.config.get_color('program_background'),
+            program_foreground=self.config.get_color('program_foreground'),
+            module_background=self.config.get_color('module_background'),
+            module_foreground=self.config.get_color('module_foreground'),
+            tcp_pool=self.tcp_pool,
+            connector_manager=self.connector_manager,
+            parent=self,
+        )
+        dlg.exec_()
 
     def _on_group_alert(self) -> None:
         """Open Group Alert window."""
@@ -4335,9 +4408,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
                 # Use Kode Mono for remarks/message text columns
                 if (is_statrep_table and col_num == 20) or (is_message_table and col_num == 6):
-                    _mono_item_font = QtGui.QFont("Kode Mono", -1)
-                    _mono_item_font.setPixelSize(15)
-                    item.setFont(_mono_item_font)
+                    item.setFont(QtGui.QFont("Kode Mono", -1))
 
                 # Add tooltip for multi-line remarks
                 if decoded_remarks:
@@ -4501,8 +4572,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
     def _create_menu_checkbox(self, menu, label: str, is_checked: bool, handler) -> QtWidgets.QCheckBox:
         """Create a styled checkbox as a menu item and add it to the given menu."""
-        panel_bg = self.config.get_color('panel_background')
-        panel_fg = self.config.get_color('panel_foreground')
+        panel_bg = self.config.get_color('module_background')
+        panel_fg = self.config.get_color('module_foreground')
         checked_color = self.config.get_color('menu_background')
         checkbox = QtWidgets.QCheckBox(label)
         checkbox.setChecked(is_checked)
@@ -4548,8 +4619,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             self.filter_menu.removeAction(action)
         self.filter_group_actions.clear()
 
-        panel_bg = self.config.get_color('panel_background')
-        panel_fg = self.config.get_color('panel_foreground')
+        panel_bg = self.config.get_color('module_background')
+        panel_fg = self.config.get_color('module_foreground')
         checked_color = self.config.get_color('menu_background')
 
         unchecked = set(self.config.get_unchecked_groups())
@@ -4805,6 +4876,23 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                     )
                     if data_type == "message":
                         self._load_message_data()
+                elif "{&%}" in _check_value or "{F%}" in _check_value:
+                    # STATREP arriving via RX.ACTIVITY — extract target from message body
+                    # e.g. "K7RIE: N0DDK  ,CN96OU,..." or "K7RIE: @MAGNET ,CN96OU,..."
+                    _sr_match = _re.match(
+                        r'^(?:\w+:\s+)?(@?\w+)\s*,', _check_value, _re.IGNORECASE
+                    )
+                    if _sr_match:
+                        _sr_to_call = _sr_match.group(1)
+                        utc_db = utc_dt.strftime("%Y-%m-%d %H:%M:%S")
+                        dial_freq = freq - offset if freq else 0
+                        data_type = self._process_directed_message(
+                            rig_name, value, from_call, _sr_to_call, "", dial_freq, snr, utc_db
+                        )
+                        if data_type == "statrep":
+                            self._load_statrep_data()
+                            if not self.config.get_show_alerts():
+                                self._save_map_position(callback=self._load_map)
 
     def _add_to_feed(self, line: str, rig_name: str) -> None:
         """
@@ -5435,7 +5523,9 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
         # Determine if message is relevant (to group or to our callsign)
         user_callsign = self.get_callsign_for_rig(rig_name)
-        is_to_user = to_call.split("/")[0] == user_callsign if user_callsign else False
+        if not user_callsign:
+            user_callsign, _, __ = self.db.get_user_settings()
+        is_to_user = to_call.split("/")[0].upper() == user_callsign.upper() if user_callsign else False
 
         # Group check: @COMMSTAT always accepted; other groups only if in our groups list
         if to_call.startswith("@"):
@@ -5450,6 +5540,10 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         # Only process if to our group OR to our callsign
         if not (is_to_group or is_to_user):
             return ""
+
+        # For direct-callsign messages, store the recipient callsign as target
+        if is_to_user and not target:
+            target = to_call.split("/")[0].upper()
 
         # Parse using unified parser (source=1 for Radio)
         msg_type, _ = self._parse_commstat_message(

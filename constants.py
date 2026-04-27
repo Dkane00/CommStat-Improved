@@ -87,9 +87,9 @@ DEFAULT_COLORS: Dict[str, str] = {
     # Live feed display
     'feed_background': '#454545',
     'feed_foreground': '#00FF00',
-    # Secondary panels / dropdowns
-    'panel_background': '#DDDD00',
-    'panel_foreground': '#000000',
+    # Module / dialog background
+    'module_background': '#DDDD00',
+    'module_foreground': '#223322',
 }
 
 # =============================================================================

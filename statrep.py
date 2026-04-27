@@ -181,13 +181,13 @@ class StatRepDialog(QDialog):
         tcp_pool: "TCPConnectionPool",
         connector_manager: "ConnectorManager",
         parent=None,
-        panel_background: str = _DATA_BG,
+        module_background: str = _DATA_BG,
         data_background: str = _DATA_BG
     ):
         super().__init__(parent)
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
-        self.panel_background = panel_background
+        self.module_background = module_background
         self.data_background = data_background
 
         self.setWindowTitle("STATREP")
@@ -1013,7 +1013,7 @@ class StatRepDialog(QDialog):
     def _on_brevity(self) -> None:
         """Launch Brevity modal over StatRep; Copy Code inserts into remarks field."""
         from brevity import BrevityApp
-        self._brevity_window = BrevityApp(self.panel_background, "#333333", parent=self)
+        self._brevity_window = BrevityApp(self.module_background, "#333333", parent=self)
         self._brevity_window.setWindowModality(QtCore.Qt.WindowModal)
         self._brevity_window.code_selected.connect(self._on_brevity_code_selected)
         self._brevity_window.show()
@@ -1037,7 +1037,7 @@ class StatRepDialog(QDialog):
         """Launch Grid Finder and wire selected grid back to the grid field."""
         from gridfinder import GridFinderApp
         self._grid_finder = GridFinderApp(
-            self.panel_background, "#333333", self.data_background, "#000000", parent=self
+            self.module_background, "#333333", self.data_background, "#000000", parent=self
         )
         self._grid_finder.setWindowModality(QtCore.Qt.WindowModal)
         self._grid_finder.grid_selected.connect(self._on_grid_finder_selected)

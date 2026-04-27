@@ -27,7 +27,7 @@ from constants import DEFAULT_COLORS
 
 _PROG_BG   = DEFAULT_COLORS.get("program_background",   "#A52A2A")
 _PROG_FG   = DEFAULT_COLORS.get("program_foreground",   "#FFFFFF")
-_PANEL_BG  = DEFAULT_COLORS.get("panel_background",     "#DDDDDD")
+_PANEL_BG  = DEFAULT_COLORS.get("module_background",    "#DDDDDD")
 _TITLE_BG  = DEFAULT_COLORS.get("title_bar_background", "#F07800")
 _TITLE_FG  = DEFAULT_COLORS.get("title_bar_foreground", "#FFFFFF")
 _DATA_BG   = DEFAULT_COLORS.get("data_background",      "#F8F6F4")
@@ -305,7 +305,7 @@ class JS8ConnectorsDialog(QDialog):
             status_map = self.tcp_pool.get_connection_status()
 
         self.table.setRowCount(0)
-        mono = _mono_font(15)
+        mono = _mono_font()
 
         for row_idx, conn in enumerate(connectors):
             self.table.insertRow(row_idx)

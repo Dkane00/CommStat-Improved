@@ -94,6 +94,8 @@ def get_qrz_cached(callsign: str) -> Optional[Dict]:
             row = cursor.fetchone()
             if row:
                 cached_date = datetime.fromisoformat(row["insert_date"])
+                if cached_date.tzinfo is None:
+                    cached_date = cached_date.replace(tzinfo=timezone.utc)
                 age_days = (datetime.now(timezone.utc) - cached_date).days
                 if age_days < CACHE_DAYS:
                     qrz_log(f"Cache hit for {cs} (age: {age_days} days)")
@@ -152,6 +154,8 @@ class QRZClient:
 
                 if row:
                     cached_date = datetime.fromisoformat(row["insert_date"])
+                    if cached_date.tzinfo is None:
+                        cached_date = cached_date.replace(tzinfo=timezone.utc)
                     age_days = (datetime.now(timezone.utc) - cached_date).days
 
                     if age_days < CACHE_DAYS:

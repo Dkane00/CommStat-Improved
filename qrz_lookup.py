@@ -29,10 +29,11 @@ from PyQt5.QtCore import QBuffer, QByteArray, Qt, QThread, QUrl, pyqtSignal
 from PyQt5.QtGui import QColor, QCursor, QDesktopServices, QFont, QMovie, QPainter, QPixmap
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import (
-    QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
+    QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPlainTextEdit, QPushButton, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from id_utils import generate_time_based_id
 from qrz_client import QRZClient, get_qrz_cached, load_qrz_config
 from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
@@ -40,7 +41,8 @@ from constants import (
 )
 
 DB_PATH = "traffic.db3"
-_BACKBONE_URL = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
+_BACKBONE_URL  = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
+_DATAFEED_URL  = _BACKBONE_URL + "/datafeed-808585.php"
 
 _PROG_BG    = DEFAULT_COLORS.get("program_background", "#000000")
 _PROG_FG    = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
@@ -416,7 +418,7 @@ class _QRZInfoSection(QWidget):
         self.lbl_image.setStyleSheet("border:none; padding:0px;")
         self.lbl_moddate = QLabel()
         self.lbl_moddate.setFont(QFont("Roboto"))
-        self.lbl_moddate.setStyleSheet("font-size: 10px; font-weight: normal;")
+        self.lbl_moddate.setStyleSheet("font-size: 13px; font-weight: normal;")
         self.lbl_moddate.setAlignment(Qt.AlignRight)
         moddate_row = QHBoxLayout()
         moddate_row.addStretch()
@@ -429,10 +431,6 @@ class _QRZInfoSection(QWidget):
     def add_memo_row(self) -> QLineEdit:
         """Add a contact-note label, input, and separator spanning all three columns."""
         self._main_layout.addSpacing(6)
-        lbl = QLabel("Contact note / memo:")
-        lbl.setFont(_lbl_font())
-        self._main_layout.addWidget(lbl)
-
         memo_input = QLineEdit()
         memo_input.setFont(_mono_font())
         memo_input.setMinimumHeight(34)
@@ -510,7 +508,8 @@ class _QRZInfoSection(QWidget):
     # ── Last Seen lookup ──────────────────────────────────────────────────────
 
     def _fetch_last_seen(self, target: str) -> None:
-        self.lbl_license.setText("<b>Last Seen:</b> …")
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        self.lbl_license.setText(f'<span style="{_k}">Last Seen:</span> …')
         threading.Thread(target=self._last_seen_thread, args=(target,), daemon=True).start()
 
     def _last_seen_thread(self, target: str) -> None:
@@ -531,7 +530,8 @@ class _QRZInfoSection(QWidget):
             self.last_seen_updated.emit("—")
 
     def _on_last_seen_updated(self, value: str) -> None:
-        self.lbl_license.setText(f"<b>Last Seen:</b> {value}")
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        self.lbl_license.setText(f'<span style="{_k}">Last Seen:</span> {value}')
 
     def update_data(self, data: dict) -> None:
         """Populate all labels from raw QRZ data (API or cached format)."""
@@ -539,7 +539,7 @@ class _QRZInfoSection(QWidget):
 
         self.hdr.setText(f"QRZ API Lookup For: {d['call']}")
         self.lbl_call.setText("")
-        self.lbl_name.setText(d["name"])
+        self.lbl_name.setText(f"<b>{d['name']}</b>" if d["name"] else "")
 
         self.lbl_addr1.setText(d["addr1"])
         city_state = ", ".join(x for x in (d["addr2"], d["state"]) if x)
@@ -547,29 +547,28 @@ class _QRZInfoSection(QWidget):
             city_state = (city_state + " " + d["zip"]).strip()
         self.lbl_addr2.setText(city_state)
 
-        self.lbl_county.setText(f"<b>County:</b> {d['county']}" if d["county"] else "")
-        self.lbl_country.setText(f"<b>Country:</b> {d['country']}" if d["country"] else "")
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        self.lbl_county.setText(f'<span style="{_k}">County:</span> {d["county"]}' if d["county"] else "")
+        self.lbl_country.setText(f'<span style="{_k}">Country:</span> {d["country"]}' if d["country"] else "")
 
         if d["call"] and not self._skip_last_seen:
-            self.lbl_license.setText("<b>Last Seen:</b> —")
+            self.lbl_license.setText(f'<span style="{_k}">Last Seen:</span> —')
             self._fetch_last_seen(d["call"])
 
         if d["license"] and d["expdate"]:
-            self.lbl_born.setText(f"<b>License:</b> {d['license']} (exp: {d['expdate']})")
+            self.lbl_born.setText(f'<span style="{_k}">License:</span> {d["license"]} (exp: {d["expdate"]})')
         elif d["expdate"]:
-            self.lbl_born.setText(f"(exp: {d['expdate']})")
+            self.lbl_born.setText(f'(exp: {d["expdate"]})')
         elif d["license"]:
-            self.lbl_born.setText(f"<b>License:</b> {d['license']}")
+            self.lbl_born.setText(f'<span style="{_k}">License:</span> {d["license"]}')
         else:
             self.lbl_born.setText("")
-        self.lbl_grid.setText(f"<b>Grid:</b> {d['grid']}" if d["grid"] else "")
-        self.lbl_lat.setText(f"<b>Lat:</b> {d['lat']}" if d["lat"] else "")
-        self.lbl_lon.setText(f"<b>Lon:</b> {d['lon']}" if d["lon"] else "")
+        self.lbl_grid.setText(f'<span style="{_k}">Grid:</span> {d["grid"]}' if d["grid"] else "")
+        self.lbl_lat.setText(f'<span style="{_k}">Lat:</span> {d["lat"]}' if d["lat"] else "")
+        self.lbl_lon.setText(f'<span style="{_k}">Lon:</span> {d["lon"]}' if d["lon"] else "")
 
         if d["email"]:
-            self.lbl_email.setText(
-                f'<b>Email:</b> <a href="mailto:{d["email"]}">{d["email"]}</a>'
-            )
+            self.lbl_email.setText(f'<a href="mailto:{d["email"]}">{d["email"]}</a>')
         else:
             self.lbl_email.setText("")
 
@@ -580,7 +579,7 @@ class _QRZInfoSection(QWidget):
             self.lbl_qrz_profile.setText("")
 
         self.lbl_moddate.setText(
-            f"QRZ profile last modified: {d['moddate']}" if d["moddate"] else ""
+            f"QRZ profile last modified: {d['moddate'].split()[0]}" if d["moddate"] else ""
         )
 
         self.lbl_image.clear()
@@ -599,18 +598,24 @@ class _QRZInfoSection(QWidget):
         self.image_width_ready.emit(px.width())
 
     def _on_gif_loaded(self, data: bytes) -> None:
+        # Load first frame into QPixmap to reliably get the native dimensions
+        # (QMovie.currentPixmap() before start() often returns a null pixmap)
+        px_probe = QPixmap()
+        px_probe.loadFromData(data)
+        if not px_probe.isNull():
+            target_h = 166 if px_probe.height() * 2.0 > px_probe.width() else 126
+            scaled_size = px_probe.scaledToHeight(target_h, Qt.SmoothTransformation).size()
+        else:
+            scaled_size = None
+
         buf = QBuffer()
         buf.setData(QByteArray(data))
         buf.open(QBuffer.ReadOnly)
         self._gif_movie = QMovie()
         self._gif_movie.setDevice(buf)
         self._gif_movie._buf = buf
-        self._gif_movie.jumpToFrame(0)
-        size = self._gif_movie.currentPixmap().size()
-        target_h = 166 if size.height() * 2.0 > size.width() else 126
-        self._gif_movie.setScaledSize(
-            self._gif_movie.currentPixmap().scaledToHeight(target_h, Qt.SmoothTransformation).size()
-        )
+        if scaled_size is not None:
+            self._gif_movie.setScaledSize(scaled_size)
         self.lbl_image.setMovie(self._gif_movie)
         self._gif_movie.start()
         self.image_width_ready.emit(self._gif_movie.scaledSize().width())
@@ -643,7 +648,7 @@ class _QRZInfoSection(QWidget):
         self.lbl_grid.setText(f"<span style='{_k}'>Grid:</span>")
         self.lbl_lat.setText(f"<span style='{_k}'>Lat:</span>")
         self.lbl_lon.setText(f"<span style='{_k}'>Lon:</span>")
-        self.lbl_email.setText(f"<span style='{_k}'>Email:</span>")
+        self.lbl_email.setText("")
         self.lbl_image.set_url("")
         self._load_default_image()
 
@@ -664,8 +669,10 @@ class _QRZInfoSection(QWidget):
 class QRZLookupDialog(QDialog):
     """Standalone QRZ callsign lookup (Tools → QRZ Lookup)."""
 
-    def __init__(self, panel_background: str = "#f5f5f5",
-                 panel_foreground: str = "#333333",
+    _send_result = pyqtSignal(str)
+
+    def __init__(self, module_background: str = "#f5f5f5",
+                 module_foreground: str = "#333333",
                  program_background: str = "",
                  program_foreground: str = "",
                  parent=None):
@@ -677,32 +684,23 @@ class QRZLookupDialog(QDialog):
             Qt.WindowCloseButtonHint |
             Qt.WindowStaysOnTopHint
         )
-        self._panel_bg = panel_background
-        self._panel_fg = panel_foreground
+        self._module_bg = module_background
+        self._module_fg = module_foreground
         self._program_bg = program_background or _PROG_BG
         self._program_fg = program_foreground or _PROG_FG
         self.setWindowTitle("QRZ Lookup")
         self.setModal(True)
-        self.setMinimumSize(825, 352)
-        self.resize(902, 418)
+        self.setMinimumSize(825, 500)
+        self.resize(902, 570)
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._thread: Optional[_QRZThread] = None
+        self._send_result.connect(self._on_send_result)
         self._setup_ui()
-        self._check_subscription()
-
-    def _check_subscription(self) -> None:
-        is_active, _, _ = load_qrz_config()
-        if not is_active:
-            QMessageBox.warning(
-                self, "QRZ Lookup",
-                "QRZ Lookup requires a paid QRZ subscription.\n"
-                "Please configure your QRZ credentials in Settings."
-            )
 
     def _setup_ui(self) -> None:
         self.setStyleSheet(
-            f"QDialog {{ background-color:{_DATA_BG}; }}"
+            f"QDialog {{ background-color:{self._module_bg}; }}"
             f"QLabel {{ color:{COLOR_INPUT_TEXT}; background-color: transparent; font-size: 13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
@@ -750,15 +748,33 @@ class QRZLookupDialog(QDialog):
         self.memo_edit = self.qrz_info.add_memo_row()
         self.memo_edit.editingFinished.connect(self._save_memo)
         main.addWidget(self.qrz_info)
+
+        self.msg_edit = QPlainTextEdit()
+        self.msg_edit.setFont(_mono_font())
+        self.msg_edit.setPlaceholderText("Enter message…")
+        self.msg_edit.setStyleSheet(
+            f"background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
+            f" font-family:'Kode Mono'; font-size:13px;"
+        )
+        from PyQt5.QtGui import QFontMetrics
+        _fm = QFontMetrics(self.msg_edit.font())
+        self.msg_edit.setFixedHeight(_fm.lineSpacing() * 6 + 14)
+        self.msg_edit.textChanged.connect(self._on_msg_changed)
+        main.addWidget(self.msg_edit)
         main.addStretch()
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
         btn_row.addStretch()
-        self.btn_message_lookup = _btn("Message", COLOR_BTN_BLUE)
-        self.btn_message_lookup.setVisible(False)
-        self.btn_message_lookup.clicked.connect(self._on_message_clicked)
-        btn_row.addWidget(self.btn_message_lookup)
+        self.btn_clear_msg = _btn("Clear", _COL_CANCEL)
+        self.btn_clear_msg.setVisible(False)
+        self.btn_clear_msg.clicked.connect(self.msg_edit.clear)
+        btn_row.addWidget(self.btn_clear_msg)
+        self.btn_send = _btn("Send", COLOR_BTN_BLUE)
+        self.btn_send.setVisible(False)
+        self.btn_send.clicked.connect(self._on_send_internet)
+        btn_row.addWidget(self.btn_send)
         self.btn_close_lookup = _btn("Close", _COL_CANCEL)
         self.btn_close_lookup.clicked.connect(self.reject)
         btn_row.addWidget(self.btn_close_lookup)
@@ -797,7 +813,6 @@ class QRZLookupDialog(QDialog):
         if result:
             self.lbl_status.setText("")
             self.qrz_info.update_data(result)
-            self.btn_message_lookup.setVisible(True)
             self.memo_edit.blockSignals(True)
             self.memo_edit.setText(result.get("memo") or "")
             self.memo_edit.blockSignals(False)
@@ -820,14 +835,346 @@ class QRZLookupDialog(QDialog):
         except sqlite3.Error as e:
             print(f"[QRZLookupDialog] Memo save error: {e}")
 
-    def _on_message_clicked(self) -> None:
-        from direct_message import DirectMessageDialog
+    def _on_msg_changed(self) -> None:
+        has_text = bool(self.msg_edit.toPlainText().strip())
+        self.btn_clear_msg.setVisible(has_text)
+        self.btn_send.setVisible(has_text)
+
+    def _sanitize_message(self, text: str) -> str:
+        import re
+        text = text.replace('\r', '').replace('\n', '||')
+        return re.sub(r'[^\x20-\x7E]', '', text).strip()
+
+    def _on_send_internet(self) -> None:
         cs = self.cs_edit.text().strip().upper()
-        dlg = DirectMessageDialog(target_callsign=cs, parent=self)
-        dlg.exec_()
+        text = self._sanitize_message(self.msg_edit.toPlainText())
+        if not cs or not text:
+            return
+        my_cs = _get_local_callsign()
+        if not my_cs:
+            QMessageBox.warning(self, "Send Failed", "No operator callsign configured in Settings.")
+            return
+        now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        msg_id = generate_time_based_id()
+        message_data = f"{my_cs}: {cs} MSG ,{msg_id},{text},{{^%3}}"
+        data_string  = f"DM:{now}\t0\t0\t30\t{message_data}"
+        threading.Thread(
+            target=self._submit_internet, args=(my_cs, data_string), daemon=True
+        ).start()
+
+    def _submit_internet(self, callsign: str, data_string: str) -> None:
+        try:
+            post = urllib.parse.urlencode({'cs': callsign, 'data': data_string}).encode()
+            req  = urllib.request.Request(_DATAFEED_URL, data=post, method='POST')
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = resp.read().decode().strip()
+            self._send_result.emit(result)
+        except Exception as e:
+            print(f"[QRZLookupDialog] Internet send error: {e}")
+            self._send_result.emit("")
+
+    def _on_send_result(self, result: str) -> None:
+        if result.lstrip('-').isdigit():
+            QMessageBox.information(self, "Message Sent", "Your message was sent.")
+            self.msg_edit.clear()
 
 
-# ── Dialog 2: StatRep Detail ───────────────────────────────────────────────
+# ── Dialog 2: JS8 Message (RF) ─────────────────────────────────────────────
+
+class JS8MessageDialog(QDialog):
+    """QRZ lookup with inline JS8 RF transmit controls (JS8 Message menu item)."""
+
+    def __init__(self, program_background: str = "",
+                 program_foreground: str = "",
+                 module_background: str = "#f5f5f5",
+                 module_foreground: str = "#333333",
+                 tcp_pool=None,
+                 connector_manager=None,
+                 parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(
+            Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint |
+            Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
+        )
+        self._program_bg = program_background or _PROG_BG
+        self._program_fg = program_foreground or _PROG_FG
+        self._module_bg = module_background
+        self._module_fg = module_foreground
+        self._tcp_pool = tcp_pool
+        self._connector_manager = connector_manager
+        self._qrz_thread: Optional[_QRZThread] = None
+        self.setWindowTitle("JS8 Message")
+        self.setModal(True)
+        self.setMinimumSize(825, 460)
+        self.resize(900, 530)
+        if os.path.exists("radiation-32.png"):
+            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+        self._setup_ui()
+        self._populate_rigs()
+
+    def _setup_ui(self) -> None:
+        self.setStyleSheet(
+            f"QDialog {{ background-color:{self._module_bg}; }}"
+            f"QLabel {{ color:{COLOR_INPUT_TEXT}; background-color: transparent; font-size: 13px; }}"
+            f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
+        )
+        main = QVBoxLayout(self)
+        main.setContentsMargins(15, 15, 15, 15)
+        main.setSpacing(10)
+
+        title = QLabel("JS8 MESSAGE")
+        title.setAlignment(Qt.AlignCenter)
+        title.setFont(QFont("Roboto Slab", -1, QFont.Black))
+        title.setFixedHeight(36)
+        title.setStyleSheet(
+            f"QLabel {{ background-color: {self._program_bg}; color: {self._program_fg}; "
+            "font-size: 16px; padding-top: 9px; padding-bottom: 9px; }}"
+        )
+        main.addWidget(title)
+
+        search_row = QHBoxLayout()
+        self.cs_edit = QLineEdit()
+        self.cs_edit.setPlaceholderText("Enter callsign…")
+        self.cs_edit.setMaxLength(12)
+        self.cs_edit.setFont(_mono_font())
+        self.cs_edit.setMinimumHeight(34)
+        self.cs_edit.returnPressed.connect(self._search)
+        self.cs_edit.textChanged.connect(self._force_upper)
+        search_row.addWidget(self.cs_edit)
+        self.btn_search = _btn("Search", COLOR_BTN_BLUE)
+        self.btn_search.setFixedWidth(90)
+        self.btn_search.clicked.connect(self._search)
+        search_row.addWidget(self.btn_search)
+        main.addLayout(search_row)
+
+        self.lbl_status = QLabel()
+        self.lbl_status.setFont(QFont("Roboto"))
+        self.lbl_status.setStyleSheet("color:#888888; font-size:10px; font-weight:normal;")
+        main.addWidget(self.lbl_status)
+
+        self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, parent=self)
+        self.qrz_info.image_width_ready.connect(self._adjust_for_image_width)
+        self.qrz_info.show_no_data_placeholder()
+        self.contact_memo_edit = self.qrz_info.add_memo_row()
+        self.contact_memo_edit.editingFinished.connect(self._save_contact_memo)
+        main.addWidget(self.qrz_info)
+
+        # RF controls row
+        rf_row = QHBoxLayout()
+        rf_row.setSpacing(12)
+
+        rig_lbl = QLabel("Rig:")
+        rig_lbl.setFont(_lbl_font())
+        self.rig_combo = QComboBox()
+        self.rig_combo.setFont(_mono_font())
+        self.rig_combo.setMinimumWidth(140)
+        self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
+        rf_row.addWidget(rig_lbl)
+        rf_row.addWidget(self.rig_combo)
+
+        mode_lbl = QLabel("Mode:")
+        mode_lbl.setFont(_lbl_font())
+        self.mode_combo = QComboBox()
+        self.mode_combo.setFont(_mono_font())
+        self.mode_combo.addItems(["Normal", "Fast", "Turbo", "Ultra", "Slow"])
+        rf_row.addWidget(mode_lbl)
+        rf_row.addWidget(self.mode_combo)
+
+        freq_lbl = QLabel("Frequency:")
+        freq_lbl.setFont(_lbl_font())
+        self.freq_edit = QLineEdit()
+        self.freq_edit.setReadOnly(True)
+        self.freq_edit.setFont(_mono_font())
+        self.freq_edit.setPlaceholderText("—")
+        self.freq_edit.setMaximumWidth(100)
+        self.freq_edit.setStyleSheet(
+            f"background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
+            f" font-family:'Kode Mono'; font-size:13px;"
+        )
+        rf_row.addWidget(freq_lbl)
+        rf_row.addWidget(self.freq_edit)
+        rf_row.addStretch()
+        main.addLayout(rf_row)
+
+        # Message box — 2 rows, 100 char limit
+        self.msg_edit = QPlainTextEdit()
+        self.msg_edit.setFont(_mono_font())
+        self.msg_edit.setPlaceholderText("Enter message… (100 characters max)")
+        self.msg_edit.setStyleSheet(
+            f"background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
+            f" font-family:'Kode Mono'; font-size:13px;"
+        )
+        self.msg_edit.setFixedHeight(34)
+        self.msg_edit.textChanged.connect(self._on_msg_changed)
+        main.addWidget(self.msg_edit)
+
+        main.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+        self.btn_clear_msg = _btn("Clear", _COL_CANCEL)
+        self.btn_clear_msg.setVisible(False)
+        self.btn_clear_msg.clicked.connect(self.msg_edit.clear)
+        btn_row.addWidget(self.btn_clear_msg)
+        self.btn_transmit = _btn("Transmit", COLOR_BTN_CYAN)
+        self.btn_transmit.setVisible(False)
+        self.btn_transmit.clicked.connect(self._on_transmit)
+        btn_row.addWidget(self.btn_transmit)
+        self.btn_close = _btn("Close", _COL_CANCEL)
+        self.btn_close.clicked.connect(self.reject)
+        btn_row.addWidget(self.btn_close)
+        main.addLayout(btn_row)
+
+    def _adjust_for_image_width(self, img_width: int) -> None:
+        if img_width > 275:
+            self.resize(self.width() + (img_width - 275), self.height())
+
+    def _force_upper(self, text: str) -> None:
+        if text != text.upper():
+            self.cs_edit.blockSignals(True)
+            pos = self.cs_edit.cursorPosition()
+            self.cs_edit.setText(text.upper())
+            self.cs_edit.setCursorPosition(pos)
+            self.cs_edit.blockSignals(False)
+
+    def _populate_rigs(self) -> None:
+        self.rig_combo.clear()
+        if self._tcp_pool:
+            names = self._tcp_pool.get_all_rig_names()
+            if len(names) == 1:
+                self.rig_combo.addItems(names)
+                self._on_rig_changed(names[0])
+                return
+            if len(names) > 1:
+                self.rig_combo.addItem("Select a rig…")
+                self.rig_combo.addItems(names)
+                return
+        self.rig_combo.addItem("No rigs configured")
+
+    def _on_rig_changed(self, rig_name: str) -> None:
+        if not self._tcp_pool or not rig_name or rig_name in ("No rigs configured", "Select a rig…"):
+            self.freq_edit.setText("—")
+            return
+        client = self._tcp_pool.get_client(rig_name)
+        if not client or not client.is_connected():
+            self.freq_edit.setText("—")
+            return
+        # Show cached frequency immediately
+        if client.frequency:
+            self.freq_edit.setText(f"{client.frequency:.3f} MHz")
+        else:
+            self.freq_edit.setText("Fetching…")
+        # Connect signal for live updates and request a fresh value
+        try:
+            client.frequency_received.disconnect(self._on_frequency_received)
+        except (TypeError, RuntimeError):
+            pass
+        client.frequency_received.connect(self._on_frequency_received)
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(200, client.get_frequency)
+
+    def _on_frequency_received(self, rig_name: str, dial_freq: int) -> None:
+        self.freq_edit.setText(f"{dial_freq / 1_000_000:.3f} MHz")
+
+    def _search(self) -> None:
+        cs = self.cs_edit.text().strip().upper()
+        if not cs:
+            return
+        self.lbl_status.setText(f"Looking up {cs}…")
+        self.btn_search.setEnabled(False)
+        self.qrz_info.clear()
+        self.qrz_info.show_no_data_placeholder()
+        _, username, password = load_qrz_config()
+        self._qrz_thread = _QRZThread(cs, username, password)
+        self._qrz_thread.result_ready.connect(self._on_qrz_result)
+        self._qrz_thread.start()
+
+    def _on_qrz_result(self, result) -> None:
+        self.btn_search.setEnabled(True)
+        if result:
+            self.lbl_status.setText("")
+            self.qrz_info.update_data(result)
+            self.contact_memo_edit.blockSignals(True)
+            self.contact_memo_edit.setText(result.get("memo") or "")
+            self.contact_memo_edit.blockSignals(False)
+        else:
+            self.lbl_status.setText("No results found.")
+            self.qrz_info.show_no_data_placeholder()
+
+    def _on_msg_changed(self) -> None:
+        text = self.msg_edit.toPlainText()
+        if len(text) > 100:
+            cursor = self.msg_edit.textCursor()
+            pos = cursor.position()
+            self.msg_edit.blockSignals(True)
+            self.msg_edit.setPlainText(text[:100])
+            from PyQt5.QtGui import QTextCursor
+            c = self.msg_edit.textCursor()
+            c.setPosition(min(pos, 100))
+            self.msg_edit.setTextCursor(c)
+            self.msg_edit.blockSignals(False)
+            text = text[:100]
+        has_text = bool(text.strip())
+        self.btn_clear_msg.setVisible(has_text)
+        self.btn_transmit.setVisible(has_text)
+
+    def _save_contact_memo(self) -> None:
+        cs = self.cs_edit.text().strip().upper()
+        if not cs:
+            return
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                conn.execute(
+                    "UPDATE qrz SET memo = ? WHERE callsign = ?",
+                    (self.contact_memo_edit.text(), cs)
+                )
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"[JS8MessageDialog] Contact memo save error: {e}")
+
+    @staticmethod
+    def _sanitize(text: str) -> str:
+        import re
+        text = text.replace('\r', '').replace('\n', '||')
+        return re.sub(r'[^\x20-\x7E]', '', text).strip()
+
+    def _on_transmit(self) -> None:
+        cs = self.cs_edit.text().strip().upper()
+        text = self._sanitize(self.msg_edit.toPlainText())
+        if not cs or not text:
+            return
+        if not self._tcp_pool:
+            QMessageBox.warning(self, "Transmit", "No TCP connection available.")
+            return
+        rig_name = self.rig_combo.currentText()
+        if rig_name in ("No rigs configured", "Select a rig…"):
+            QMessageBox.warning(self, "Transmit", "Please select a rig.")
+            return
+        client = self._tcp_pool.get_client(rig_name)
+        if not client or not client.is_connected():
+            QMessageBox.warning(self, "Transmit", f"Rig '{rig_name}' is not connected.")
+            return
+        my_cs = _get_local_callsign()
+        if not my_cs:
+            QMessageBox.warning(self, "Transmit", "No operator callsign configured in Settings.")
+            return
+        client.send_message("MODE.SET_SPEED", params={"SPEED": self.mode_combo.currentIndex()})
+        msg_id = generate_time_based_id()
+        payload = f"{my_cs}: {cs} MSG ,{msg_id},{text},{{^%}}"
+        client.send_tx_message(payload)
+        QMessageBox.information(self, "JS8 Message", "Message queued for transmission.")
+        self.msg_edit.clear()
+
+
+# ── Dialog 3: StatRep Detail ───────────────────────────────────────────────
 
 class StatRepDetailDialog(QDialog):
     """Detail view for a StatRep row: QRZ info + 12 status indicators + map + comments."""
@@ -837,8 +1184,8 @@ class StatRepDetailDialog(QDialog):
     def __init__(self, record_id: str, callsign: str,
                  internet_available: bool = True,
                  backbone_url: str = "",
-                 panel_background: str = "#f5f5f5",
-                 panel_foreground: str = "#333333",
+                 module_background: str = "#f5f5f5",
+                 module_foreground: str = "#333333",
                  title_bar_background: str = "#555555",
                  title_bar_foreground: str = "#D2D0CF",
                  data_background: str = "#D2D0CF",
@@ -863,8 +1210,8 @@ class StatRepDetailDialog(QDialog):
         self.callsign = callsign
         self.internet_available = internet_available
         self._backbone_url = backbone_url
-        self._panel_bg = panel_background
-        self._panel_fg = panel_foreground
+        self._module_bg = module_background
+        self._module_fg = module_foreground
         self._title_bg = title_bar_background
         self._title_fg = title_bar_foreground
         self._data_bg = data_background
@@ -899,7 +1246,7 @@ class StatRepDetailDialog(QDialog):
 
     def _setup_ui(self) -> None:
         self.setStyleSheet(
-            f"QDialog {{ background-color:{_DATA_BG}; }}"
+            f"QDialog {{ background-color:{self._module_bg}; }}"
             f"QLabel {{ color:{COLOR_INPUT_TEXT}; background-color: transparent; font-size: 13px; }}"
         )
         main = QVBoxLayout(self)
@@ -914,6 +1261,8 @@ class StatRepDetailDialog(QDialog):
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
         )
         self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, skip_last_seen=True, parent=self)
+        self.contact_memo_edit = self.qrz_info.add_memo_row()
+        self.contact_memo_edit.editingFinished.connect(self._save_contact_memo)
         self.qrz_info.add_statrep_rows(memo_widget=self.memo_edit)
         self.qrz_info.image_width_ready.connect(self._adjust_for_image_width)
         main.addWidget(self.qrz_info)
@@ -1037,23 +1386,24 @@ class StatRepDetailDialog(QDialog):
         _source_map = {1: "RF via JS8Call", 2: "Internet", 3: "Internet Only"}
         source_text  = _source_map.get(int(source), "Unknown")
 
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.qrz_info.lbl_sr_posted.setText(
-            f"<b>Posted:</b>  {row[0]}" if row[0] else "<b>Posted:</b>"
+            f'<span style="{_k}">Posted:</span>  {row[0]}' if row[0] else f'<span style="{_k}">Posted:</span>'
         )
-        self.qrz_info.lbl_sr_source.setText(f"<b>Received via:</b>  {source_text}")
+        self.qrz_info.lbl_sr_source.setText(f'<span style="{_k}">Received via:</span>  {source_text}')
         self.qrz_info.lbl_sr_global_id.setText(
-            f"<b>Global ID:</b>  {global_id}" if global_id else "<b>Global ID:</b>"
+            f'<span style="{_k}">Global ID:</span>  {global_id}' if global_id else f'<span style="{_k}">Global ID:</span>'
         )
         self.qrz_info.lbl_sr_group.setText(
-            f"<b>Group:</b>  {group}" if group else "<b>Group:</b>"
+            f'<span style="{_k}">Group:</span>  {group}' if group else f'<span style="{_k}">Group:</span>'
         )
         self.qrz_info.lbl_sr_grid.setText(
-            f"<b>Grid:</b>  {sr_grid}" if sr_grid else "<b>Grid:</b>"
+            f'<span style="{_k}">Grid:</span>  {sr_grid}' if sr_grid else f'<span style="{_k}">Grid:</span>'
         )
         self.qrz_info.lbl_sr_freqid.setText(
-            f"<b>Freq/ID:</b>  {freq_mhz:.3f}/{sr_id}" if freq_mhz or sr_id else "<b>Freq/ID:</b>"
+            f'<span style="{_k}">Freq/ID:</span>  {freq_mhz:.3f}/{sr_id}' if freq_mhz or sr_id else f'<span style="{_k}">Freq/ID:</span>'
         )
-        self.qrz_info.lbl_sr_delivered.setText("<b>Delivered To:</b>")
+        self.qrz_info.lbl_sr_delivered.setText(f'<span style="{_k}">Delivered To:</span>')
 
         if global_id and self._backbone_url and self.internet_available:
             local_cs = _get_local_callsign()
@@ -1102,8 +1452,9 @@ class StatRepDetailDialog(QDialog):
         parts = text.split(",", 1)
         count_str = parts[0].strip()
         last_seen = parts[1].strip() if len(parts) > 1 else "—"
-        self.qrz_info.lbl_sr_delivered.setText(f"<b>Delivered To:</b>  {count_str} CommStat users")
-        self.qrz_info.lbl_license.setText(f"<b>Last Seen:</b> {last_seen}")
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        self.qrz_info.lbl_sr_delivered.setText(f'<span style="{_k}">Delivered To:</span>  {count_str} CommStat users')
+        self.qrz_info.lbl_license.setText(f'<span style="{_k}">Last Seen:</span> {last_seen}')
 
     def _save_memo(self) -> None:
         """Save memo text to the database on focus-out."""
@@ -1138,7 +1489,7 @@ class StatRepDetailDialog(QDialog):
                 selected = matches[0]
         brevity_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brevity.py")
         if os.path.exists(brevity_path):
-            args = [sys.executable, brevity_path, self._panel_bg, self._panel_fg]
+            args = [sys.executable, brevity_path, self._module_bg, self._module_fg]
             if selected:
                 args.append(selected)
             subprocess.Popen(args)
@@ -1170,7 +1521,7 @@ class StatRepDetailDialog(QDialog):
         from statrep import StatRepDialog
         dlg = StatRepDialog(
             self._tcp_pool, self._connector_manager, self,
-            panel_background=self._panel_bg,
+            module_background=self._module_bg,
         )
         dlg.prefill(self._row_data)
         dlg.exec_()
@@ -1221,10 +1572,24 @@ class StatRepDetailDialog(QDialog):
         self._thread.result_ready.connect(self._on_qrz_result)
         self._thread.start()
 
+    def _save_contact_memo(self) -> None:
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                conn.execute(
+                    "UPDATE qrz SET memo = ? WHERE callsign = ?",
+                    (self.contact_memo_edit.text(), self.callsign)
+                )
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"[StatRepDetailDialog] Contact memo save error: {e}")
+
     def _on_qrz_result(self, result) -> None:
         if not result:
             return
         self.qrz_info.update_data(result)
+        self.contact_memo_edit.blockSignals(True)
+        self.contact_memo_edit.setText(result.get("memo") or "")
+        self.contact_memo_edit.blockSignals(False)
         d = _normalize_qrz(result)
 
         if not self._map_loaded:
@@ -1287,8 +1652,8 @@ class MessageDetailDialog(QDialog):
 
     def __init__(self, callsign: str, message_text: str,
                  internet_available: bool = True,
-                 panel_background: str = "#f5f5f5",
-                 panel_foreground: str = "#333333",
+                 module_background: str = "#f5f5f5",
+                 module_foreground: str = "#333333",
                  data_background: str = "#D2D0CF",
                  program_background: str = "",
                  program_foreground: str = "",
@@ -1305,8 +1670,8 @@ class MessageDetailDialog(QDialog):
         self.callsign = callsign
         self.message_text = message_text
         self.internet_available = internet_available
-        self._panel_bg = panel_background
-        self._panel_fg = panel_foreground
+        self._module_bg = module_background
+        self._module_fg = module_foreground
         self._data_bg = data_background
         self._program_bg = program_background or _PROG_BG
         self._program_fg = program_foreground or _PROG_FG
@@ -1325,7 +1690,7 @@ class MessageDetailDialog(QDialog):
 
     def _setup_ui(self) -> None:
         self.setStyleSheet(
-            f"QDialog {{ background-color:{_DATA_BG}; }}"
+            f"QDialog {{ background-color:{self._module_bg}; }}"
             f"QLabel {{ color:{COLOR_INPUT_TEXT}; background-color: transparent; font-size: 13px; }}"
         )
         main = QVBoxLayout(self)
@@ -1333,6 +1698,8 @@ class MessageDetailDialog(QDialog):
         main.setSpacing(8)
 
         self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, parent=self)
+        self.contact_memo_edit = self.qrz_info.add_memo_row()
+        self.contact_memo_edit.editingFinished.connect(self._save_contact_memo)
         main.addWidget(self.qrz_info)
         main.addWidget(_hsep())
 
@@ -1375,6 +1742,17 @@ class MessageDetailDialog(QDialog):
         btn_row.addWidget(self.btn_close)
 
         main.addLayout(btn_row)
+
+    def _save_contact_memo(self) -> None:
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                conn.execute(
+                    "UPDATE qrz SET memo = ? WHERE callsign = ?",
+                    (self.contact_memo_edit.text(), self.callsign)
+                )
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"[MessageDetailDialog] Contact memo save error: {e}")
 
     def _on_message_clicked(self) -> None:
         from direct_message import DirectMessageDialog
@@ -1424,6 +1802,9 @@ class MessageDetailDialog(QDialog):
         self.msg_text.setHtml(_text_to_html(self.message_text.replace("||", "\n"), self._data_bg))
         self._map_loaded = False
         self.map_view.setHtml("", QUrl("http://localhost/"))
+        self.contact_memo_edit.blockSignals(True)
+        self.contact_memo_edit.clear()
+        self.contact_memo_edit.blockSignals(False)
         self.qrz_info.update_data({"call": self.callsign})
         if self._thread is not None:
             try:
@@ -1450,6 +1831,9 @@ class MessageDetailDialog(QDialog):
         if not result:
             return
         self.qrz_info.update_data(result)
+        self.contact_memo_edit.blockSignals(True)
+        self.contact_memo_edit.setText(result.get("memo") or "")
+        self.contact_memo_edit.blockSignals(False)
         d = _normalize_qrz(result)
         if not self._map_loaded:
             lat, lon = None, None

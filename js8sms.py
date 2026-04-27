@@ -41,7 +41,7 @@ WINDOW_HEIGHT = 360
 
 _PROGRAM_BG = DEFAULT_COLORS['program_background']
 _PROGRAM_FG = DEFAULT_COLORS['program_foreground']
-_PANEL_BG   = DEFAULT_COLORS['panel_background']
+_PANEL_BG   = DEFAULT_COLORS['module_background']
 _DATA_BG    = DEFAULT_COLORS['data_background']
 
 
