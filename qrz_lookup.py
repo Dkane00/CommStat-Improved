@@ -391,7 +391,7 @@ class _QRZInfoSection(QWidget):
         self.lbl_qrz_profile.setOpenExternalLinks(True)
 
         self.lbl_qrz_status = QLabel()
-        self.lbl_qrz_status.setStyleSheet("font-family:Roboto; font-size:13px; font-weight:bold;")
+        self.lbl_qrz_status.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }")
         self.lbl_qrz_status.setWordWrap(True)
         self.lbl_qrz_status.setVisible(False)
 
@@ -421,10 +421,10 @@ class _QRZInfoSection(QWidget):
         right.setSpacing(4)
         self.lbl_image = _ClickableImageLabel()
         self.lbl_image.setAlignment(Qt.AlignTop | Qt.AlignRight)
-        self.lbl_image.setStyleSheet("border:none; padding:0px;")
+        self.lbl_image.setStyleSheet("QLabel { border:none; padding:0px; }")
         self.lbl_moddate = QLabel()
         self.lbl_moddate.setFont(QFont("Roboto"))
-        self.lbl_moddate.setStyleSheet("font-size: 13px; font-weight: normal;")
+        self.lbl_moddate.setStyleSheet("QLabel { font-size: 13px; font-weight: normal; }")
         self.lbl_moddate.setAlignment(Qt.AlignRight)
         moddate_row = QHBoxLayout()
         moddate_row.addStretch()
@@ -736,7 +736,7 @@ class QRZLookupDialog(QDialog):
         self.lbl_status = QLabel()
         self.lbl_status.setFont(QFont("Roboto"))
         self.lbl_status.setStyleSheet(
-            f"color:{self._module_fg}; font-family:Roboto; font-size:13px; font-weight:bold;"
+            f"QLabel {{ color:{self._module_fg}; font-family:Roboto; font-size:13px; font-weight:bold; }}"
         )
         main.addWidget(self.lbl_status)
 
@@ -984,7 +984,7 @@ class JS8MessageDialog(QDialog):
 
         self.lbl_status = QLabel()
         self.lbl_status.setFont(QFont("Roboto"))
-        self.lbl_status.setStyleSheet("color:#888888; font-size:10px; font-weight:normal;")
+        self.lbl_status.setStyleSheet("QLabel { color:#888888; font-size:10px; font-weight:normal; }")
         main.addWidget(self.lbl_status)
 
         self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, parent=self)
@@ -1302,13 +1302,13 @@ class StatRepDetailDialog(QDialog):
             hdr.setAlignment(Qt.AlignCenter)
             hdr.setFont(_lbl_font())
             hdr.setStyleSheet(
-                f"background-color:{self._title_bg}; color:{self._title_fg};"
-                "border-right:1px solid #D2D0CF; border-bottom:1px solid #D2D0CF; padding: 5px 2px;"
+                f"QLabel {{ background-color:{self._title_bg}; color:{self._title_fg};"
+                "border-right:1px solid #D2D0CF; border-bottom:1px solid #D2D0CF; padding: 5px 2px; }}"
             )
             sg_grid.addWidget(hdr, 0, col_idx)
             sq = QLabel()
             sq.setFixedHeight(16)
-            sq.setStyleSheet("background-color:rgb(255,255,255); border-right:1px solid #D2D0CF; border-bottom:1px solid #D2D0CF;")
+            sq.setStyleSheet("QLabel { background-color:rgb(255,255,255); border-right:1px solid #D2D0CF; border-bottom:1px solid #D2D0CF; }")
             sq.setToolTip("No status")
             sg_grid.addWidget(sq, 1, col_idx)
             sg_grid.setColumnStretch(col_idx, 1)
@@ -1443,7 +1443,7 @@ class StatRepDetailDialog(QDialog):
             val = str(row[i + 2]) if row[i + 2] is not None else ""
             sq = self._squares[label_text]
             color_str, tip = self._status_colors.get(val, ("rgb(255,255,255)", "No status"))
-            sq.setStyleSheet(f"background-color:{color_str}; border:1px solid #D2D0CF;")
+            sq.setStyleSheet(f"QLabel {{ background-color:{color_str}; border:1px solid #D2D0CF; }}")
             sq.setToolTip(tip)
 
         self.comments.setHtml(_text_to_html((row[14] or "").replace("||", "\n"), self._data_bg))
