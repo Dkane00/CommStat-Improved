@@ -380,8 +380,8 @@ class _QRZInfoSection(QWidget):
         self.lbl_addr2   = QLabel(); self.lbl_addr2.setFont(_mono_font())
         self.lbl_county  = QLabel(); self.lbl_county.setFont(_mono_font())
         self.lbl_country = QLabel(); self.lbl_country.setFont(_mono_font())
-        self.lbl_license = QLabel(); self.lbl_license.setFont(_mono_font())
-        self.lbl_born    = QLabel(); self.lbl_born.setFont(_mono_font())
+        self.lbl_last_seen = QLabel(); self.lbl_last_seen.setFont(_mono_font())
+        self.lbl_license    = QLabel(); self.lbl_license.setFont(_mono_font())
         self.lbl_grid    = QLabel(); self.lbl_grid.setFont(_mono_font())
         self.lbl_lat     = QLabel(); self.lbl_lat.setFont(_mono_font())
         self.lbl_lon     = QLabel(); self.lbl_lon.setFont(_mono_font())
@@ -390,23 +390,29 @@ class _QRZInfoSection(QWidget):
         self.lbl_qrz_profile = QLabel(); self.lbl_qrz_profile.setFont(_mono_font())
         self.lbl_qrz_profile.setOpenExternalLinks(True)
 
+        self.lbl_qrz_status = QLabel()
+        self.lbl_qrz_status.setStyleSheet("font-family:Roboto; font-size:13px; font-weight:bold;")
+        self.lbl_qrz_status.setWordWrap(True)
+        self.lbl_qrz_status.setVisible(False)
+
         self.last_seen_updated.connect(self._on_last_seen_updated)
 
         grid.addWidget(self.hdr,              0, 0, 1, 2)
-        grid.addWidget(self.lbl_call,         1, 0)
-        grid.addWidget(self.lbl_name,         2, 0)
-        grid.addWidget(self.lbl_license,      2, 1)
-        grid.addWidget(self.lbl_addr1,        3, 0)
-        grid.addWidget(self.lbl_born,         3, 1)
-        grid.addWidget(self.lbl_addr2,        4, 0)
-        grid.addWidget(self.lbl_grid,         4, 1)
-        grid.addWidget(self.lbl_county,       5, 0)
-        grid.addWidget(self.lbl_lat,          5, 1)
-        grid.addWidget(self.lbl_country,      6, 0)
-        grid.addWidget(self.lbl_lon,          6, 1)
-        grid.addWidget(self.lbl_qrz_profile,  7, 0)
-        grid.addWidget(self.lbl_email,        7, 1)
-        grid.setRowStretch(8, 1)
+        grid.addWidget(self.lbl_qrz_status,   1, 0, 1, 2)
+        grid.addWidget(self.lbl_call,         2, 0)
+        grid.addWidget(self.lbl_name,         3, 0)
+        grid.addWidget(self.lbl_last_seen,    3, 1)
+        grid.addWidget(self.lbl_addr1,        4, 0)
+        grid.addWidget(self.lbl_license,      4, 1)
+        grid.addWidget(self.lbl_addr2,        5, 0)
+        grid.addWidget(self.lbl_grid,         5, 1)
+        grid.addWidget(self.lbl_county,       6, 0)
+        grid.addWidget(self.lbl_lat,          6, 1)
+        grid.addWidget(self.lbl_country,      7, 0)
+        grid.addWidget(self.lbl_lon,          7, 1)
+        grid.addWidget(self.lbl_qrz_profile,  8, 0)
+        grid.addWidget(self.lbl_email,        8, 1)
+        grid.setRowStretch(9, 1)
         outer.addLayout(grid, 2)
 
         # ── Column 3 (1/3): image + photo status + moddate ───────────────
@@ -430,7 +436,7 @@ class _QRZInfoSection(QWidget):
 
     def add_memo_row(self) -> QLineEdit:
         """Add a contact-note label, input, and separator spanning all three columns."""
-        self._main_layout.addSpacing(6)
+        self._main_layout.addSpacing(10)
         memo_input = QLineEdit()
         memo_input.setFont(_mono_font())
         memo_input.setMinimumHeight(34)
@@ -440,76 +446,62 @@ class _QRZInfoSection(QWidget):
         )
         memo_input.setPlaceholderText("Add a contact note…")
         self._main_layout.addWidget(memo_input)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color:#cccccc;")
-        self._main_layout.addSpacing(4)
-        self._main_layout.addWidget(sep)
+        self._main_layout.addSpacing(12)
 
         return memo_input
 
-    def add_statrep_rows(self, memo_widget=None) -> None:
+    def add_statrep_rows(self) -> None:
         """Add separator + StatRep fields below the QRZ section, spanning all three columns."""
-        self._grid.setRowStretch(8, 0)
-        spacer = QLabel("")
-        self._grid.addWidget(spacer, 8, 0)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setFrameShadow(QFrame.Sunken)
-        self._main_layout.addWidget(sep)
-        self._main_layout.addSpacing(8)
-
-        sr_row = QHBoxLayout()
-        sr_row.setSpacing(24)
+        self._grid.setRowStretch(9, 0)
 
         sr_grid = QGridLayout()
         sr_grid.setSpacing(2)
         sr_grid.setColumnStretch(0, 1)
         sr_grid.setColumnStretch(1, 1)
+        sr_grid.setColumnStretch(2, 1)
+
+        self.lbl_sr_posted    = QLabel(); self.lbl_sr_posted.setFont(_mono_font())
+        self.lbl_sr_group     = QLabel(); self.lbl_sr_group.setFont(_mono_font())
+        self.lbl_sr_freq      = QLabel(); self.lbl_sr_freq.setFont(_mono_font())
+        self.lbl_sr_sr_id     = QLabel(); self.lbl_sr_sr_id.setFont(_mono_font())
+        self.lbl_sr_global_id = QLabel(); self.lbl_sr_global_id.setFont(_mono_font())
+        self.lbl_sr_grid      = QLabel(); self.lbl_sr_grid.setFont(_mono_font())
+        self.lbl_sr_source    = QLabel(); self.lbl_sr_source.setFont(_mono_font())
+        self.lbl_sr_delivered = QLabel(); self.lbl_sr_delivered.setFont(_mono_font())
 
         sr_hdr = QLabel("Status Report Details")
         sr_hdr.setFont(_lbl_font())
-        sr_grid.addWidget(sr_hdr, 0, 0)
 
-        self.lbl_sr_source    = QLabel(); self.lbl_sr_source.setFont(_mono_font())
-        self.lbl_sr_posted    = QLabel(); self.lbl_sr_posted.setFont(_mono_font())
-        self.lbl_sr_global_id = QLabel(); self.lbl_sr_global_id.setFont(_mono_font())
-        self.lbl_sr_group     = QLabel(); self.lbl_sr_group.setFont(_mono_font())
-        self.lbl_sr_grid      = QLabel(); self.lbl_sr_grid.setFont(_mono_font())
-        self.lbl_sr_freqid    = QLabel(); self.lbl_sr_freqid.setFont(_mono_font())
-        self.lbl_sr_delivered = QLabel(); self.lbl_sr_delivered.setFont(_mono_font())
+        # Row 0: header | Freq:    | Grid:
+        sr_grid.addWidget(sr_hdr,                 0, 0)
+        sr_grid.addWidget(self.lbl_sr_freq,        0, 1)
+        sr_grid.addWidget(self.lbl_sr_grid,        0, 2)
+        # Row 1: Posted: | Statrep ID: | Received via:
+        sr_grid.addWidget(self.lbl_sr_posted,      1, 0)
+        sr_grid.addWidget(self.lbl_sr_sr_id,       1, 1)
+        sr_grid.addWidget(self.lbl_sr_source,      1, 2)
+        # Row 2: Group:  | Global ID:  | Delivered To:
+        sr_grid.addWidget(self.lbl_sr_group,       2, 0)
+        sr_grid.addWidget(self.lbl_sr_global_id,   2, 1)
+        sr_grid.addWidget(self.lbl_sr_delivered,   2, 2)
+        sr_grid.setRowStretch(3, 1)
 
-        sr_grid.addWidget(self.lbl_sr_source,    0, 1)
-        sr_grid.addWidget(self.lbl_sr_posted,    1, 0)
-        sr_grid.addWidget(self.lbl_sr_global_id, 1, 1)
-        sr_grid.addWidget(self.lbl_sr_group,     2, 0)
-        sr_grid.addWidget(self.lbl_sr_grid,      2, 1)
-        sr_grid.addWidget(self.lbl_sr_freqid,    3, 0)
-        sr_grid.addWidget(self.lbl_sr_delivered, 3, 1)
-        sr_grid.setRowStretch(4, 1)
-
-        sr_row.addLayout(sr_grid, 2)
-
-        if memo_widget is not None:
-            sr_right = QVBoxLayout()
-            sr_right.setSpacing(2)
-            memo_lbl = QLabel("Status Report Notes / Memo")
-            memo_lbl.setFont(_lbl_font())
-            sr_right.addWidget(memo_lbl)
-            sr_right.addWidget(memo_widget)
-            sr_row.addLayout(sr_right, 1)
-        else:
-            sr_row.addStretch(1)
-        self._main_layout.addLayout(sr_row)
+        self._main_layout.addLayout(sr_grid)
         self._main_layout.addStretch()
+
+    def set_qrz_status(self, text: str) -> None:
+        self.lbl_qrz_status.setText(text)
+        self.lbl_qrz_status.setVisible(True)
+
+    def clear_qrz_status(self) -> None:
+        self.lbl_qrz_status.setText("")
+        self.lbl_qrz_status.setVisible(False)
 
     # ── Last Seen lookup ──────────────────────────────────────────────────────
 
     def _fetch_last_seen(self, target: str) -> None:
         _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
-        self.lbl_license.setText(f'<span style="{_k}">Last Seen:</span> …')
+        self.lbl_last_seen.setText(f'<span style="{_k}">Last Seen:</span> …')
         threading.Thread(target=self._last_seen_thread, args=(target,), daemon=True).start()
 
     def _last_seen_thread(self, target: str) -> None:
@@ -531,7 +523,7 @@ class _QRZInfoSection(QWidget):
 
     def _on_last_seen_updated(self, value: str) -> None:
         _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
-        self.lbl_license.setText(f'<span style="{_k}">Last Seen:</span> {value}')
+        self.lbl_last_seen.setText(f'<span style="{_k}">Last Seen:</span> {value}')
 
     def update_data(self, data: dict) -> None:
         """Populate all labels from raw QRZ data (API or cached format)."""
@@ -552,17 +544,17 @@ class _QRZInfoSection(QWidget):
         self.lbl_country.setText(f'<span style="{_k}">Country:</span> {d["country"]}' if d["country"] else "")
 
         if d["call"] and not self._skip_last_seen:
-            self.lbl_license.setText(f'<span style="{_k}">Last Seen:</span> —')
+            self.lbl_last_seen.setText(f'<span style="{_k}">Last Seen:</span> —')
             self._fetch_last_seen(d["call"])
 
         if d["license"] and d["expdate"]:
-            self.lbl_born.setText(f'<span style="{_k}">License:</span> {d["license"]} (exp: {d["expdate"]})')
+            self.lbl_license.setText(f'<span style="{_k}">License:</span> {d["license"]} (exp: {d["expdate"]})')
         elif d["expdate"]:
-            self.lbl_born.setText(f'(exp: {d["expdate"]})')
+            self.lbl_license.setText(f'(exp: {d["expdate"]})')
         elif d["license"]:
-            self.lbl_born.setText(f'<span style="{_k}">License:</span> {d["license"]}')
+            self.lbl_license.setText(f'<span style="{_k}">License:</span> {d["license"]}')
         else:
-            self.lbl_born.setText("")
+            self.lbl_license.setText("")
         self.lbl_grid.setText(f'<span style="{_k}">Grid:</span> {d["grid"]}' if d["grid"] else "")
         self.lbl_lat.setText(f'<span style="{_k}">Lat:</span> {d["lat"]}' if d["lat"] else "")
         self.lbl_lon.setText(f'<span style="{_k}">Lon:</span> {d["lon"]}' if d["lon"] else "")
@@ -643,8 +635,11 @@ class _QRZInfoSection(QWidget):
         _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.lbl_county.setText(f"<span style='{_k}'>County:</span>")
         self.lbl_country.setText(f"<span style='{_k}'>Country:</span>")
-        self.lbl_license.setText(f"<span style='{_k}'>Last Seen:</span>")
-        self.lbl_born.setText(f"<span style='{_k}'>License:</span>")
+        if not self._skip_last_seen:
+            self.lbl_last_seen.setText(f"<span style='{_k}'>Last Seen:</span>")
+        else:
+            self.lbl_last_seen.clear()
+        self.lbl_license.setText(f"<span style='{_k}'>License:</span>")
         self.lbl_grid.setText(f"<span style='{_k}'>Grid:</span>")
         self.lbl_lat.setText(f"<span style='{_k}'>Lat:</span>")
         self.lbl_lon.setText(f"<span style='{_k}'>Lon:</span>")
@@ -657,8 +652,9 @@ class _QRZInfoSection(QWidget):
             self._gif_movie.stop()
             self._gif_movie = None
         self.hdr.setText("QRZ API Lookup For:")
+        self.clear_qrz_status()
         for w in (self.lbl_call, self.lbl_name, self.lbl_addr1, self.lbl_addr2,
-                  self.lbl_county, self.lbl_country, self.lbl_license, self.lbl_born,
+                  self.lbl_county, self.lbl_country, self.lbl_last_seen, self.lbl_license,
                   self.lbl_grid, self.lbl_lat, self.lbl_lon, self.lbl_email,
                   self.lbl_qrz_profile, self.lbl_image, self.lbl_moddate):
             w.clear()
@@ -691,7 +687,7 @@ class QRZLookupDialog(QDialog):
         self.setWindowTitle("QRZ Lookup")
         self.setModal(True)
         self.setMinimumSize(825, 500)
-        self.resize(902, 570)
+        self.resize(902, 580)
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._thread: Optional[_QRZThread] = None
@@ -701,7 +697,7 @@ class QRZLookupDialog(QDialog):
     def _setup_ui(self) -> None:
         self.setStyleSheet(
             f"QDialog {{ background-color:{self._module_bg}; }}"
-            f"QLabel {{ color:{COLOR_INPUT_TEXT}; background-color: transparent; font-size: 13px; }}"
+            f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
             f" font-family:'Kode Mono'; font-size:13px; }}"
@@ -739,7 +735,9 @@ class QRZLookupDialog(QDialog):
 
         self.lbl_status = QLabel()
         self.lbl_status.setFont(QFont("Roboto"))
-        self.lbl_status.setStyleSheet("color:#888888; font-size: 10px; font-weight: normal;")
+        self.lbl_status.setStyleSheet(
+            f"color:{self._module_fg}; font-family:Roboto; font-size:13px; font-weight:bold;"
+        )
         main.addWidget(self.lbl_status)
 
         self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, parent=self)
@@ -796,14 +794,46 @@ class QRZLookupDialog(QDialog):
         cs = self.cs_edit.text().strip().upper()
         if not cs:
             return
-        self.lbl_status.setText(f"Looking up {cs}…")
-        self.btn_search.setEnabled(False)
+
+        is_active, username, password = load_qrz_config()
+        cached_any = get_qrz_cached(cs, include_stale=True)
+
         self.qrz_info.clear()
-        self.qrz_info.show_no_data_placeholder()
         self.memo_edit.blockSignals(True)
         self.memo_edit.clear()
         self.memo_edit.blockSignals(False)
-        _, username, password = load_qrz_config()
+
+        if not username:
+            found_str = "found" if cached_any else "NOT found"
+            self.lbl_status.setText(
+                f"QRZ Subscription not configured — {cs} {found_str} in local database"
+            )
+            if cached_any:
+                self.qrz_info.update_data(cached_any)
+                self.memo_edit.blockSignals(True)
+                self.memo_edit.setText(cached_any.get("memo") or "")
+                self.memo_edit.blockSignals(False)
+            else:
+                self.qrz_info.show_no_data_placeholder()
+            return
+
+        if not is_active:
+            found_str = "found" if cached_any else "NOT found"
+            self.lbl_status.setText(
+                f"QRZ Subscription not enabled — {cs} {found_str} in local database"
+            )
+            if cached_any:
+                self.qrz_info.update_data(cached_any)
+                self.memo_edit.blockSignals(True)
+                self.memo_edit.setText(cached_any.get("memo") or "")
+                self.memo_edit.blockSignals(False)
+            else:
+                self.qrz_info.show_no_data_placeholder()
+            return
+
+        self.lbl_status.setText(f"Looking up {cs}…")
+        self.btn_search.setEnabled(False)
+        self.qrz_info.show_no_data_placeholder()
         self._thread = _QRZThread(cs, username, password)
         self._thread.result_ready.connect(self._on_result)
         self._thread.start()
@@ -915,7 +945,7 @@ class JS8MessageDialog(QDialog):
     def _setup_ui(self) -> None:
         self.setStyleSheet(
             f"QDialog {{ background-color:{self._module_bg}; }}"
-            f"QLabel {{ color:{COLOR_INPUT_TEXT}; background-color: transparent; font-size: 13px; }}"
+            f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
             f" font-family:'Kode Mono'; font-size:13px; }}"
@@ -1236,8 +1266,8 @@ class StatRepDetailDialog(QDialog):
         self._statrep_grid: str = ""
         self.setWindowTitle(f"StatRep — {callsign}")
         self.setModal(True)
-        self.setMinimumSize(996, 670)
-        self.resize(996, 730)
+        self.setMinimumSize(996, 680)
+        self.resize(996, 680)
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._setup_ui()
@@ -1247,23 +1277,16 @@ class StatRepDetailDialog(QDialog):
     def _setup_ui(self) -> None:
         self.setStyleSheet(
             f"QDialog {{ background-color:{self._module_bg}; }}"
-            f"QLabel {{ color:{COLOR_INPUT_TEXT}; background-color: transparent; font-size: 13px; }}"
+            f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
         )
         main = QVBoxLayout(self)
         main.setContentsMargins(10, 10, 10, 10)
         main.setSpacing(8)
 
-        self.memo_edit = _MemoTextEdit()
-        self.memo_edit.setPlaceholderText("Add notes…")
-        self.memo_edit.setFont(_mono_font())
-        self.memo_edit.setStyleSheet(
-            f"background-color:{self._data_bg}; color:#000000;"
-            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
-        )
-        self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, skip_last_seen=True, parent=self)
+        self.qrz_info = _QRZInfoSection(hdr_bg=self._program_bg, hdr_fg=self._program_fg, parent=self)
         self.contact_memo_edit = self.qrz_info.add_memo_row()
         self.contact_memo_edit.editingFinished.connect(self._save_contact_memo)
-        self.qrz_info.add_statrep_rows(memo_widget=self.memo_edit)
+        self.qrz_info.add_statrep_rows()
         self.qrz_info.image_width_ready.connect(self._adjust_for_image_width)
         main.addWidget(self.qrz_info)
 
@@ -1284,24 +1307,23 @@ class StatRepDetailDialog(QDialog):
             )
             sg_grid.addWidget(hdr, 0, col_idx)
             sq = QLabel()
-            sq.setFixedHeight(24)
+            sq.setFixedHeight(16)
             sq.setStyleSheet("background-color:rgb(255,255,255); border-right:1px solid #D2D0CF; border-bottom:1px solid #D2D0CF;")
             sq.setToolTip("No status")
             sg_grid.addWidget(sq, 1, col_idx)
             sg_grid.setColumnStretch(col_idx, 1)
             self._squares[label_text] = sq
         main.addWidget(sg_widget)
-        main.addWidget(_hsep())
 
         lower = QHBoxLayout()
         lower.setSpacing(10)
         self.map_view = QWebEngineView()
-        self.map_view.setFixedSize(480, 270)
+        self.map_view.setFixedSize(480, 220)
         lower.addWidget(self.map_view, alignment=Qt.AlignTop)
 
         self.comments = QTextBrowser()
         self.comments.setFont(_mono_font())
-        self.comments.setFixedSize(480, 270)
+        self.comments.setFixedSize(480, 220)
         self.comments.setStyleSheet(
             f"background-color:{self._data_bg}; color:#000000;"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
@@ -1313,9 +1335,13 @@ class StatRepDetailDialog(QDialog):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        brevity_note = QLabel("<b>Brevity Note:</b> Highlight brevity code, then click Brevity button to decode")
-        brevity_note.setStyleSheet("font-family: Roboto; font-size: 10px; font-weight: normal;")
-        btn_row.addWidget(brevity_note)
+
+        self.pin_toggle = _ToggleSwitch()
+        self.pin_toggle.toggled.connect(self._save_pinned)
+        self.lbl_pin = QLabel("Pinned")
+        self.lbl_pin.setFont(_lbl_font())
+        btn_row.addWidget(self.pin_toggle)
+        btn_row.addWidget(self.lbl_pin)
         btn_row.addStretch()
 
         self.btn_delete = _btn("Delete", COLOR_BTN_RED)
@@ -1334,12 +1360,10 @@ class StatRepDetailDialog(QDialog):
         btn_forward.clicked.connect(self._on_forward)
         btn_row.addWidget(btn_forward)
 
-        self.pin_toggle = _ToggleSwitch()
-        self.pin_toggle.toggled.connect(self._save_pinned)
-        self.lbl_pin = QLabel("Pinned")
-        self.lbl_pin.setFont(_lbl_font())
-        btn_row.addWidget(self.pin_toggle)
-        btn_row.addWidget(self.lbl_pin)
+        btn_close = _btn("Close", _COL_CANCEL)
+        btn_close.clicked.connect(self.reject)
+        btn_row.addWidget(btn_close)
+
         main.addLayout(btn_row)
 
     def _adjust_for_image_width(self, img_width: int) -> None:
@@ -1400,8 +1424,11 @@ class StatRepDetailDialog(QDialog):
         self.qrz_info.lbl_sr_grid.setText(
             f'<span style="{_k}">Grid:</span>  {sr_grid}' if sr_grid else f'<span style="{_k}">Grid:</span>'
         )
-        self.qrz_info.lbl_sr_freqid.setText(
-            f'<span style="{_k}">Freq/ID:</span>  {freq_mhz:.3f}/{sr_id}' if freq_mhz or sr_id else f'<span style="{_k}">Freq/ID:</span>'
+        self.qrz_info.lbl_sr_freq.setText(
+            f'<span style="{_k}">Freq:</span>  {freq_mhz:.3f} MHz' if freq_mhz else f'<span style="{_k}">Freq:</span>'
+        )
+        self.qrz_info.lbl_sr_sr_id.setText(
+            f'<span style="{_k}">Statrep ID:</span>  {sr_id}' if sr_id else f'<span style="{_k}">Statrep ID:</span>'
         )
         self.qrz_info.lbl_sr_delivered.setText(f'<span style="{_k}">Delivered To:</span>')
 
@@ -1420,11 +1447,6 @@ class StatRepDetailDialog(QDialog):
             sq.setToolTip(tip)
 
         self.comments.setHtml(_text_to_html((row[14] or "").replace("||", "\n"), self._data_bg))
-
-        self.memo_edit.blockSignals(True)
-        self.memo_edit.setPlainText(row[19] or "")
-        self.memo_edit.blockSignals(False)
-        self.memo_edit.focus_lost.connect(self._save_memo)
 
         self.pin_toggle.blockSignals(True)
         self.pin_toggle.setChecked(bool(row[20]))
@@ -1449,24 +1471,9 @@ class StatRepDetailDialog(QDialog):
     def _on_read_count(self, text: str) -> None:
         if not text:
             return
-        parts = text.split(",", 1)
-        count_str = parts[0].strip()
-        last_seen = parts[1].strip() if len(parts) > 1 else "—"
+        count_str = text.split(",", 1)[0].strip()
         _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.qrz_info.lbl_sr_delivered.setText(f'<span style="{_k}">Delivered To:</span>  {count_str} CommStat users')
-        self.qrz_info.lbl_license.setText(f'<span style="{_k}">Last Seen:</span> {last_seen}')
-
-    def _save_memo(self) -> None:
-        """Save memo text to the database on focus-out."""
-        try:
-            with sqlite3.connect(DB_PATH, timeout=10) as conn:
-                conn.execute(
-                    "UPDATE statrep SET memo = ? WHERE id = ?",
-                    (self.memo_edit.toPlainText(), self._record_id)
-                )
-                conn.commit()
-        except sqlite3.Error as e:
-            print(f"[StatRepDetailDialog] Memo save error: {e}")
 
     def _save_pinned(self, checked: bool) -> None:
         """Save pinned state to the database and notify the main window."""
@@ -1560,14 +1567,37 @@ class StatRepDetailDialog(QDialog):
         self.accept()
 
     def _start_qrz(self) -> None:
-        cached = get_qrz_cached(self.callsign)
-        if cached:
-            self._on_qrz_result(cached)
-            return
+        cached_fresh = get_qrz_cached(self.callsign)
+        cached_any   = get_qrz_cached(self.callsign, include_stale=True)
         is_active, username, password = load_qrz_config()
-        if not is_active:
-            self.qrz_info.show_no_data_placeholder()
+
+        if not username:
+            found_str = "found" if cached_any else "NOT found"
+            self.qrz_info.set_qrz_status(
+                f"QRZ Subscription not configured — {self.callsign} {found_str} in local database"
+            )
+            if cached_any:
+                self._on_qrz_result(cached_any)
+            else:
+                self.qrz_info.show_no_data_placeholder()
             return
+
+        if not is_active:
+            found_str = "found" if cached_any else "NOT found"
+            self.qrz_info.set_qrz_status(
+                f"QRZ Subscription not enabled — {self.callsign} {found_str} in local database"
+            )
+            if cached_any:
+                self._on_qrz_result(cached_any)
+            else:
+                self.qrz_info.show_no_data_placeholder()
+            return
+
+        if cached_fresh:
+            self._on_qrz_result(cached_fresh)
+            return
+
+        # No fresh cache (missing or stale) — live lookup; QRZClient handles stale refresh
         self._thread = _QRZThread(self.callsign, username, password)
         self._thread.result_ready.connect(self._on_qrz_result)
         self._thread.start()
@@ -1681,8 +1711,8 @@ class MessageDetailDialog(QDialog):
         self._deleted_any = False
         self.setWindowTitle(f"Message — {callsign}")
         self.setModal(True)
-        self.setMinimumSize(996, 460)
-        self.resize(996, 520)
+        self.setMinimumSize(996, 560)
+        self.resize(996, 570)
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._setup_ui()
@@ -1691,7 +1721,7 @@ class MessageDetailDialog(QDialog):
     def _setup_ui(self) -> None:
         self.setStyleSheet(
             f"QDialog {{ background-color:{self._module_bg}; }}"
-            f"QLabel {{ color:{COLOR_INPUT_TEXT}; background-color: transparent; font-size: 13px; }}"
+            f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
         )
         main = QVBoxLayout(self)
         main.setContentsMargins(10, 10, 10, 10)
@@ -1701,17 +1731,16 @@ class MessageDetailDialog(QDialog):
         self.contact_memo_edit = self.qrz_info.add_memo_row()
         self.contact_memo_edit.editingFinished.connect(self._save_contact_memo)
         main.addWidget(self.qrz_info)
-        main.addWidget(_hsep())
 
         lower = QHBoxLayout()
         lower.setSpacing(10)
         self.map_view = QWebEngineView()
-        self.map_view.setFixedSize(480, 230)
+        self.map_view.setFixedSize(480, 220)
         lower.addWidget(self.map_view, alignment=Qt.AlignTop)
 
         self.msg_text = QTextBrowser()
         self.msg_text.setFont(_mono_font())
-        self.msg_text.setFixedSize(480, 230)
+        self.msg_text.setFixedSize(480, 220)
         self.msg_text.setStyleSheet(
             f"background-color:{self._data_bg}; border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
         )
@@ -1815,14 +1844,37 @@ class MessageDetailDialog(QDialog):
         self._start_qrz()
 
     def _start_qrz(self) -> None:
-        cached = get_qrz_cached(self.callsign)
-        if cached:
-            self._on_qrz_result(cached)
-            return
+        cached_fresh = get_qrz_cached(self.callsign)
+        cached_any   = get_qrz_cached(self.callsign, include_stale=True)
         is_active, username, password = load_qrz_config()
-        if not is_active:
-            self.qrz_info.show_no_data_placeholder()
+
+        if not username:
+            found_str = "found" if cached_any else "NOT found"
+            self.qrz_info.set_qrz_status(
+                f"QRZ Subscription not configured — {self.callsign} {found_str} in local database"
+            )
+            if cached_any:
+                self._on_qrz_result(cached_any)
+            else:
+                self.qrz_info.show_no_data_placeholder()
             return
+
+        if not is_active:
+            found_str = "found" if cached_any else "NOT found"
+            self.qrz_info.set_qrz_status(
+                f"QRZ Subscription not enabled — {self.callsign} {found_str} in local database"
+            )
+            if cached_any:
+                self._on_qrz_result(cached_any)
+            else:
+                self.qrz_info.show_no_data_placeholder()
+            return
+
+        if cached_fresh:
+            self._on_qrz_result(cached_fresh)
+            return
+
+        # No fresh cache (missing or stale) — live lookup; QRZClient handles stale refresh
         self._thread = _QRZThread(self.callsign, username, password)
         self._thread.result_ready.connect(self._on_qrz_result)
         self._thread.start()

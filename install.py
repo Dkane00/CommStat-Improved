@@ -110,7 +110,7 @@ def install(package):
     print(f"\nERROR: Could not install '{package}'.")
     print("  This may be due to a network issue or a restricted Python environment.")
     print("  Try manually: pip3 install " + package + " --user --break-system-packages")
-    print("  For help, post this screen to: https://groups.io/g/CommStat")
+    print("  For help, join the community support channel: https://t.me/+3k3n7O8a1yI1N2E5")
     sys.exit(1)
 
 

@@ -80,10 +80,12 @@ def load_qrz_credentials() -> Tuple[Optional[str], Optional[str]]:
     return username, password
 
 
-def get_qrz_cached(callsign: str) -> Optional[Dict]:
+def get_qrz_cached(callsign: str, include_stale: bool = False) -> Optional[Dict]:
     """Return cached QRZ data for *callsign* without creating a full client.
 
-    Returns a dict (same shape as QRZClient._get_cached) or None on miss/expiry.
+    Returns a dict (same shape as QRZClient._get_cached) or None on miss.
+    When include_stale=True, returns the record even if older than CACHE_DAYS
+    (used to display existing data when subscription is inactive).
     """
     try:
         with sqlite3.connect(DB_PATH, timeout=10) as conn:
@@ -99,6 +101,9 @@ def get_qrz_cached(callsign: str) -> Optional[Dict]:
                 age_days = (datetime.now(timezone.utc) - cached_date).days
                 if age_days < CACHE_DAYS:
                     qrz_log(f"Cache hit for {cs} (age: {age_days} days)")
+                    return dict(row)
+                if include_stale:
+                    qrz_log(f"Returning stale cache for {cs} (age: {age_days} days)")
                     return dict(row)
     except Exception:
         pass
@@ -205,7 +210,7 @@ class QRZClient:
             data.get("class"),       # dict key access — "class" is valid here
             email, data.get("image"), data.get("areacode"),
             data.get("timezone"), data.get("born"), data.get("moddate"),
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         )
 
         try:

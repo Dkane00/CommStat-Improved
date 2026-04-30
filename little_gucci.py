@@ -70,6 +70,7 @@ from js8_tcp_client import TCPConnectionPool
 from js8_connectors import JS8ConnectorsDialog
 from id_utils import generate_time_based_id
 from constants import *
+from help import HelpDialog
 
 
 # =============================================================================
@@ -1787,6 +1788,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Menubar items
         create_action(self.menubar, "QRZ", "qrz_lookup", self._on_qrz_lookup)
+        create_action(self.menubar, "Help", "help", self._on_help)
         create_action(self.menubar, "Exit", "exit", qApp.quit)
 
         # Add status bar
@@ -3884,6 +3886,10 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             ])
         else:
             QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find brevity.py")
+
+    def _on_help(self) -> None:
+        dlg = HelpDialog(self)
+        dlg.exec_()
 
     def _on_qrz_lookup(self) -> None:
         """Open standalone QRZ Lookup dialog (Tools menu)."""

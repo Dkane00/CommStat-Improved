@@ -88,8 +88,8 @@ DEFAULT_COLORS: Dict[str, str] = {
     'feed_background': '#454545',
     'feed_foreground': '#00FF00',
     # Module / dialog background
-    'module_background': '#DDDD00',
-    'module_foreground': '#223322',
+    'module_background': '#323334',
+    'module_foreground': '#ffffff',
 }
 
 # =============================================================================
