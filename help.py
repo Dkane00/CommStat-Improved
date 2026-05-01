@@ -19,7 +19,7 @@ class HelpDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Help")
-        self.setFixedSize(300, 200)
+        self.setFixedSize(370, 170)
         self.setWindowFlags(
             Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint |
             Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
@@ -35,28 +35,40 @@ class HelpDialog(QtWidgets.QDialog):
 
         self.setStyleSheet(f"background-color: {_PANEL_BG};")
 
-        title = QtWidgets.QLabel("HELP")
+        title = QtWidgets.QLabel("JOIN THE TELEGRAM COMMUNITY")
         title.setStyleSheet(
             f"font-family: 'Roboto Slab'; font-size: 16px; font-weight: 900;"
             f"background-color: {_PROG_BG}; color: {_PROG_FG}; padding: 9px 0px;"
         )
-        title.setAlignment(Qt.AlignLeft)
+        title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        rows = [
-            ("Apr-28 02:40", False),
-            ("W5TTA",        True),
-            ("@MAGNET",      False),
-            ("My Location",  False),
-        ]
-        for text, bold in rows:
-            lbl = QtWidgets.QLabel(text)
-            weight = "bold" if bold else "normal"
-            lbl.setStyleSheet(
-                f"font-family: Roboto; font-size: 13px; font-weight: {weight};"
-                f"color: #333333; background: transparent;"
-            )
-            lbl.setAlignment(Qt.AlignLeft)
-            layout.addWidget(lbl)
+        body_style = (
+            "font-family: Roboto; font-size: 13px; font-weight: normal;"
+            "color: #333333; background: transparent;"
+        )
+
+        msg = QtWidgets.QLabel("Click this link to join the Telegram community.")
+        msg.setStyleSheet(body_style)
+        msg.setAlignment(Qt.AlignCenter)
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        layout.addSpacing(2)
+
+        link = QtWidgets.QLabel(
+            '<a href="https://t.me/+3k3n7O8a1yI1N2E5">'
+            'https://t.me/+3k3n7O8a1yI1N2E5</a>'
+        )
+        link.setOpenExternalLinks(True)
+        link.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        link.setStyleSheet(body_style)
+        link.setAlignment(Qt.AlignCenter)
+        link.setWordWrap(True)
+        layout.addWidget(link)
 
         layout.addStretch()
+
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn, alignment=Qt.AlignCenter)

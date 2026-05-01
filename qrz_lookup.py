@@ -713,7 +713,7 @@ class QRZLookupDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color: {self._program_bg}; color: {self._program_fg}; "
-            "font-size: 16px; padding-top: 9px; padding-bottom: 9px; }}"
+            "font-size: 16px; padding-top: 9px; padding-bottom: 9px; }"
         )
         main.addWidget(title)
 
@@ -729,6 +729,7 @@ class QRZLookupDialog(QDialog):
 
         self.btn_search = _btn("Search", COLOR_BTN_BLUE)
         self.btn_search.setFixedWidth(90)
+        self.btn_search.setAutoDefault(False)
         self.btn_search.clicked.connect(self._search)
         row.addWidget(self.btn_search)
         main.addLayout(row)
@@ -796,7 +797,8 @@ class QRZLookupDialog(QDialog):
             return
 
         is_active, username, password = load_qrz_config()
-        cached_any = get_qrz_cached(cs, include_stale=True)
+        cached_fresh = get_qrz_cached(cs)
+        cached_any   = cached_fresh or get_qrz_cached(cs, include_stale=True)
 
         self.qrz_info.clear()
         self.memo_edit.blockSignals(True)
@@ -829,6 +831,14 @@ class QRZLookupDialog(QDialog):
                 self.memo_edit.blockSignals(False)
             else:
                 self.qrz_info.show_no_data_placeholder()
+            return
+
+        if cached_fresh:
+            self.lbl_status.setText("")
+            self.qrz_info.update_data(cached_fresh)
+            self.memo_edit.blockSignals(True)
+            self.memo_edit.setText(cached_fresh.get("memo") or "")
+            self.memo_edit.blockSignals(False)
             return
 
         self.lbl_status.setText(f"Looking up {cs}…")
@@ -963,7 +973,7 @@ class JS8MessageDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color: {self._program_bg}; color: {self._program_fg}; "
-            "font-size: 16px; padding-top: 9px; padding-bottom: 9px; }}"
+            "font-size: 16px; padding-top: 9px; padding-bottom: 9px; }"
         )
         main.addWidget(title)
 
@@ -978,6 +988,7 @@ class JS8MessageDialog(QDialog):
         search_row.addWidget(self.cs_edit)
         self.btn_search = _btn("Search", COLOR_BTN_BLUE)
         self.btn_search.setFixedWidth(90)
+        self.btn_search.setAutoDefault(False)
         self.btn_search.clicked.connect(self._search)
         search_row.addWidget(self.btn_search)
         main.addLayout(search_row)
@@ -1303,7 +1314,7 @@ class StatRepDetailDialog(QDialog):
             hdr.setFont(_lbl_font())
             hdr.setStyleSheet(
                 f"QLabel {{ background-color:{self._title_bg}; color:{self._title_fg};"
-                "border-right:1px solid #D2D0CF; border-bottom:1px solid #D2D0CF; padding: 5px 2px; }}"
+                "border-right:1px solid #D2D0CF; border-bottom:1px solid #D2D0CF; padding: 5px 2px; }"
             )
             sg_grid.addWidget(hdr, 0, col_idx)
             sq = QLabel()
@@ -1568,7 +1579,7 @@ class StatRepDetailDialog(QDialog):
 
     def _start_qrz(self) -> None:
         cached_fresh = get_qrz_cached(self.callsign)
-        cached_any   = get_qrz_cached(self.callsign, include_stale=True)
+        cached_any   = cached_fresh or get_qrz_cached(self.callsign, include_stale=True)
         is_active, username, password = load_qrz_config()
 
         if not username:
@@ -1845,7 +1856,7 @@ class MessageDetailDialog(QDialog):
 
     def _start_qrz(self) -> None:
         cached_fresh = get_qrz_cached(self.callsign)
-        cached_any   = get_qrz_cached(self.callsign, include_stale=True)
+        cached_any   = cached_fresh or get_qrz_cached(self.callsign, include_stale=True)
         is_active, username, password = load_qrz_config()
 
         if not username:

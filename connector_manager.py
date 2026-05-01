@@ -8,14 +8,22 @@ Manages database operations for JS8Call TCP connectors.
 Supports unlimited connectors with one designated as default.
 """
 
+import logging
 import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # Constants
 DATABASE_FILE = "traffic.db3"
 DEFAULT_TCP_PORT = 2442
 DEFAULT_SERVER = "127.0.0.1"
+
+_CONNECTOR_COLS = (
+    "id, rig_name, tcp_port, server, state, comment, "
+    "date_added, is_default, enabled"
+)
 
 
 class ConnectorManager:
@@ -49,7 +57,7 @@ class ConnectorManager:
                 """)
                 conn.commit()
         except sqlite3.Error as e:
-            print(f"Error initializing js8_connectors table: {e}")
+            logger.error("Error initializing js8_connectors table: %s", e)
 
     def get_all_connectors(self, enabled_only: bool = False) -> List[Dict]:
         """
@@ -67,22 +75,19 @@ class ConnectorManager:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 if enabled_only:
-                    cursor.execute("""
-                        SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
-                        FROM js8_connectors
-                        WHERE enabled = 1
-                        ORDER BY is_default DESC, rig_name ASC
-                    """)
+                    cursor.execute(
+                        f"SELECT {_CONNECTOR_COLS} FROM js8_connectors "
+                        "WHERE enabled = 1 ORDER BY is_default DESC, rig_name ASC"
+                    )
                 else:
-                    cursor.execute("""
-                        SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
-                        FROM js8_connectors
-                        ORDER BY is_default DESC, rig_name ASC
-                    """)
+                    cursor.execute(
+                        f"SELECT {_CONNECTOR_COLS} FROM js8_connectors "
+                        "ORDER BY is_default DESC, rig_name ASC"
+                    )
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
         except sqlite3.Error as e:
-            print(f"Error getting connectors: {e}")
+            logger.error("Error getting connectors: %s", e)
             return []
 
     def get_connector_by_id(self, connector_id: int) -> Optional[Dict]:
@@ -99,15 +104,14 @@ class ConnectorManager:
             with sqlite3.connect(self.db_path, timeout=10) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
-                    FROM js8_connectors
-                    WHERE id = ?
-                """, (connector_id,))
+                cursor.execute(
+                    f"SELECT {_CONNECTOR_COLS} FROM js8_connectors WHERE id = ?",
+                    (connector_id,)
+                )
                 row = cursor.fetchone()
                 return dict(row) if row else None
         except sqlite3.Error as e:
-            print(f"Error getting connector by ID: {e}")
+            logger.error("Error getting connector by ID: %s", e)
             return None
 
     def get_connector_by_name(self, rig_name: str) -> Optional[Dict]:
@@ -124,15 +128,14 @@ class ConnectorManager:
             with sqlite3.connect(self.db_path, timeout=10) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
-                    FROM js8_connectors
-                    WHERE rig_name = ?
-                """, (rig_name,))
+                cursor.execute(
+                    f"SELECT {_CONNECTOR_COLS} FROM js8_connectors WHERE rig_name = ?",
+                    (rig_name,)
+                )
                 row = cursor.fetchone()
                 return dict(row) if row else None
         except sqlite3.Error as e:
-            print(f"Error getting connector by name: {e}")
+            logger.error("Error getting connector by name: %s", e)
             return None
 
     def get_default_connector(self) -> Optional[Dict]:
@@ -146,15 +149,13 @@ class ConnectorManager:
             with sqlite3.connect(self.db_path, timeout=10) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT id, rig_name, tcp_port, server, state, comment, date_added, is_default, enabled
-                    FROM js8_connectors
-                    WHERE is_default = 1
-                """)
+                cursor.execute(
+                    f"SELECT {_CONNECTOR_COLS} FROM js8_connectors WHERE is_default = 1"
+                )
                 row = cursor.fetchone()
                 return dict(row) if row else None
         except sqlite3.Error as e:
-            print(f"Error getting default connector: {e}")
+            logger.error("Error getting default connector: %s", e)
             return None
 
     def add_connector(
@@ -183,7 +184,7 @@ class ConnectorManager:
         # Validate rig_name
         rig_name = rig_name.strip()
         if not rig_name:
-            print("Cannot add connector: rig name is required")
+            logger.warning("Cannot add connector: rig name is required")
             return False
 
         # Clean state (uppercase, max 2 chars)
@@ -192,6 +193,15 @@ class ConnectorManager:
         try:
             with sqlite3.connect(self.db_path, timeout=10) as conn:
                 cursor = conn.cursor()
+
+                # Enforce unique server + port combination
+                cursor.execute(
+                    "SELECT COUNT(*) FROM js8_connectors WHERE server = ? AND tcp_port = ?",
+                    (server, tcp_port)
+                )
+                if cursor.fetchone()[0] > 0:
+                    logger.warning("Cannot add connector: %s:%s already in use", server, tcp_port)
+                    return False
 
                 # If setting as default, clear existing default first
                 if set_as_default:
@@ -213,14 +223,14 @@ class ConnectorManager:
                 """, (rig_name, tcp_port, state, comment, date_added, is_default, server))
 
                 conn.commit()
-                print(f"Added connector: {rig_name} on {server}:{tcp_port}")
+                logger.info("Added connector: %s on %s:%s", rig_name, server, tcp_port)
                 return True
 
         except sqlite3.IntegrityError:
-            print(f"Cannot add connector: rig name '{rig_name}' already exists")
+            logger.warning("Cannot add connector: rig name '%s' already exists", rig_name)
             return False
         except sqlite3.Error as e:
-            print(f"Error adding connector: {e}")
+            logger.error("Error adding connector: %s", e)
             return False
 
     def update_connector(
@@ -248,7 +258,7 @@ class ConnectorManager:
         """
         rig_name = rig_name.strip()
         if not rig_name:
-            print("Cannot update connector: rig name is required")
+            logger.warning("Cannot update connector: rig name is required")
             return False
 
         # Clean state (uppercase, max 2 chars)
@@ -258,6 +268,16 @@ class ConnectorManager:
         try:
             with sqlite3.connect(self.db_path, timeout=10) as conn:
                 cursor = conn.cursor()
+
+                # Enforce unique server + port combination (excluding this connector)
+                cursor.execute(
+                    "SELECT COUNT(*) FROM js8_connectors WHERE server = ? AND tcp_port = ? AND id != ?",
+                    (server, tcp_port, connector_id)
+                )
+                if cursor.fetchone()[0] > 0:
+                    logger.warning("Cannot update connector: %s:%s already in use", server, tcp_port)
+                    return False
+
                 cursor.execute("""
                     UPDATE js8_connectors
                     SET rig_name = ?, tcp_port = ?, state = ?, comment = ?, server = ?
@@ -266,17 +286,17 @@ class ConnectorManager:
                 conn.commit()
 
                 if cursor.rowcount > 0:
-                    print(f"Updated connector ID {connector_id}")
+                    logger.info("Updated connector ID %s", connector_id)
                     return True
                 else:
-                    print(f"Connector ID {connector_id} not found")
+                    logger.warning("Connector ID %s not found", connector_id)
                     return False
 
         except sqlite3.IntegrityError:
-            print(f"Cannot update: rig name '{rig_name}' already exists")
+            logger.warning("Cannot update: rig name '%s' already exists", rig_name)
             return False
         except sqlite3.Error as e:
-            print(f"Error updating connector: {e}")
+            logger.error("Error updating connector: %s", e)
             return False
 
     def remove_connector(self, connector_id: int) -> bool:
@@ -302,18 +322,18 @@ class ConnectorManager:
                 )
                 row = cursor.fetchone()
                 if not row:
-                    print(f"Connector ID {connector_id} not found")
+                    logger.warning("Connector ID %s not found", connector_id)
                     return False
 
                 if row[0] == 1:
-                    print("Cannot remove the default connector")
+                    logger.warning("Cannot remove the default connector")
                     return False
 
                 # Check if this is the last connector
                 cursor.execute("SELECT COUNT(*) FROM js8_connectors")
                 count = cursor.fetchone()[0]
                 if count <= 1:
-                    print("Cannot remove the last connector")
+                    logger.warning("Cannot remove the last connector")
                     return False
 
                 # Remove the connector
@@ -323,11 +343,11 @@ class ConnectorManager:
                 )
                 conn.commit()
 
-                print(f"Removed connector ID {connector_id}")
+                logger.info("Removed connector ID %s", connector_id)
                 return True
 
         except sqlite3.Error as e:
-            print(f"Error removing connector: {e}")
+            logger.error("Error removing connector: %s", e)
             return False
 
     def set_default(self, connector_id: int) -> bool:
@@ -355,14 +375,14 @@ class ConnectorManager:
                 conn.commit()
 
                 if cursor.rowcount > 0:
-                    print(f"Set connector ID {connector_id} as default")
+                    logger.info("Set connector ID %s as default", connector_id)
                     return True
                 else:
-                    print(f"Connector ID {connector_id} not found")
+                    logger.warning("Connector ID %s not found", connector_id)
                     return False
 
         except sqlite3.Error as e:
-            print(f"Error setting default connector: {e}")
+            logger.error("Error setting default connector: %s", e)
             return False
 
     def get_connector_count(self) -> int:
@@ -378,7 +398,7 @@ class ConnectorManager:
                 cursor.execute("SELECT COUNT(*) FROM js8_connectors")
                 return cursor.fetchone()[0]
         except sqlite3.Error as e:
-            print(f"Error getting connector count: {e}")
+            logger.error("Error getting connector count: %s", e)
             return 0
 
     def has_connectors(self) -> bool:
@@ -412,14 +432,14 @@ class ConnectorManager:
 
                 if cursor.rowcount > 0:
                     status = "enabled" if enabled else "disabled"
-                    print(f"Connector ID {connector_id} {status}")
+                    logger.info("Connector ID %s %s", connector_id, status)
                     return True
                 else:
-                    print(f"Connector ID {connector_id} not found")
+                    logger.warning("Connector ID %s not found", connector_id)
                     return False
 
         except sqlite3.Error as e:
-            print(f"Error setting connector enabled state: {e}")
+            logger.error("Error setting connector enabled state: %s", e)
             return False
 
     def is_enabled(self, connector_id: int) -> bool:

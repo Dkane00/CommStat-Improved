@@ -1,10 +1,11 @@
-# Copyright (c) 2025 Manuel Ochoa
+# Copyright (c) 2025, 2026 Manuel Ochoa
 # This file is part of CommStat.
 # Licensed under the GNU General Public License v3.0.
 """
-groups.py - Manage Groups Dialog
+user_settings.py - User Settings Management Dialog
 
-Displays all groups in a table with Add, Edit, and Delete actions.
+Displays the user's callsign, grid square, and state in a single-row table
+with Add, Edit, and Delete actions.  At most one entry is allowed.
 Editing is done inline directly in the table row.
 """
 
@@ -40,29 +41,29 @@ _COL_CLOSE  = "#555555"
 _COL_SAVE   = "#28a745"
 _COL_CANCEL = "#555555"
 
-_WIN_W = 520
-_WIN_H = 400
+_WIN_W      = 520
+_WIN_H      = 260
 
-_TABLE_COLS = ["Group Name", "Comment"]
+_TABLE_COLS = ["Callsign", "Grid Square", "State"]
 
 
 # ── Dialog ─────────────────────────────────────────────────────────────────────
 
-class GroupsDialog(QDialog):
-    """Manage Groups dialog — add, edit, and delete groups with inline row editing."""
+class UserSettingsDialog(QDialog):
+    """User Settings dialog — callsign, grid square, and state; one entry max."""
 
-    def __init__(self, db_manager, parent=None):
+    def __init__(self, db, parent=None):
         super().__init__(parent)
-        self.db = db_manager
+        self.db = db
 
         self._in_edit_mode: bool = False
         self._edit_row: int = -1
         self._adding: bool = False
-        self._edit_name: str = ""
-        self._iw_name: Optional[QLineEdit] = None
-        self._iw_comment: Optional[QLineEdit] = None
+        self._iw_callsign: Optional[QLineEdit] = None
+        self._iw_grid: Optional[QLineEdit] = None
+        self._iw_state: Optional[QLineEdit] = None
 
-        self.setWindowTitle("Groups")
+        self.setWindowTitle("User Settings")
         self.setWindowFlags(
             Qt.Window |
             Qt.CustomizeWindowHint |
@@ -90,7 +91,7 @@ class GroupsDialog(QDialog):
         body.setSpacing(10)
 
         # ── Title ─────────────────────────────────────────────────────────────
-        title_lbl = QLabel("GROUPS")
+        title_lbl = QLabel("USER SETTINGS")
         title_lbl.setAlignment(Qt.AlignCenter)
         title_lbl.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title_lbl.setFixedHeight(36)
@@ -110,10 +111,13 @@ class GroupsDialog(QDialog):
         self.table.setShowGrid(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(False)
+        self.table.setMinimumHeight(100)
+        self.table.setMaximumHeight(120)
 
         hh = self.table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(0, QHeaderView.Stretch)
         hh.setSectionResizeMode(1, QHeaderView.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.Stretch)
 
         self.table.setStyleSheet(
             f"QTableWidget {{ background-color:{_DATA_BG}; alternate-background-color:{_DATA_BG};"
@@ -128,15 +132,6 @@ class GroupsDialog(QDialog):
         self.table.selectionModel().selectionChanged.connect(self._on_selection_changed)
         self.table.doubleClicked.connect(self._on_edit)
         body.addWidget(self.table)
-
-        # ── Note ──────────────────────────────────────────────────────────────
-        note = QLabel(
-            f"<b><span style='color:#AA0000'>Note:</span></b>"
-            f" <span style='color:{_PANEL_FG}'>The @ symbol is not required"
-            f" (e.g., enter MAGNET, not @MAGNET)</span>"
-        )
-        note.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; }")
-        body.addWidget(note)
 
         # ── Action buttons ────────────────────────────────────────────────────
         btn_row = QHBoxLayout()
@@ -176,19 +171,17 @@ class GroupsDialog(QDialog):
     def _load(self) -> None:
         self._in_edit_mode = False
         self._edit_row = -1
-        self._edit_name = ""
-        groups = self.db.get_all_groups_details()
+        callsign, grid, state = self.db.get_user_settings()
         self.table.setRowCount(0)
         mono = QtGui.QFont("Kode Mono")
 
-        for g in groups:
-            row = self.table.rowCount()
-            self.table.insertRow(row)
-            for col, val in enumerate([g["name"], g["comment"]]):
+        if callsign:
+            self.table.insertRow(0)
+            for col, val in enumerate([callsign, grid, state]):
                 item = QTableWidgetItem(val)
                 item.setFont(mono)
                 item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-                self.table.setItem(row, col, item)
+                self.table.setItem(0, col, item)
 
         self._on_selection_changed()
 
@@ -197,8 +190,9 @@ class GroupsDialog(QDialog):
     def _on_selection_changed(self) -> None:
         if self._in_edit_mode:
             return
+        has_row = self.table.rowCount() > 0
         has_sel = bool(self.table.selectedItems())
-        self.btn_add.setEnabled(True)
+        self.btn_add.setEnabled(not has_row)
         self.btn_edit.setEnabled(has_sel)
         self.btn_delete.setEnabled(has_sel)
 
@@ -209,34 +203,29 @@ class GroupsDialog(QDialog):
         self._edit_row = row
         self._adding = adding
 
-        if adding:
-            name_val = ""
-            comment_val = ""
-        else:
-            name_item = self.table.item(row, 0)
-            comment_item = self.table.item(row, 1)
-            name_val = name_item.text() if name_item else ""
-            comment_val = comment_item.text() if comment_item else ""
-            self._edit_name = name_val
+        callsign = "" if adding else (self.table.item(row, 0).text() if self.table.item(row, 0) else "")
+        grid     = "" if adding else (self.table.item(row, 1).text() if self.table.item(row, 1) else "")
+        state    = "" if adding else (self.table.item(row, 2).text() if self.table.item(row, 2) else "")
 
-        self._iw_name = make_input(
-            placeholder="Group name (max 15 chars)",
-            default=name_val,
-            max_len=15,
+        self._iw_callsign = make_input(placeholder="Your callsign", max_len=12)
+        self._iw_callsign.setText(callsign)
+        self._iw_callsign.textChanged.connect(
+            lambda t: self._iw_callsign.setText(t.upper()) if t != t.upper() else None
         )
-        self._iw_name.textChanged.connect(
-            lambda t: self._iw_name.setText(t.upper()) if t != t.upper() else None
-        )
-        self._iw_name.textChanged.connect(lambda _: self._on_inline_changed())
+        self._iw_callsign.textChanged.connect(lambda _: self._on_inline_changed())
 
-        self._iw_comment = make_input(
-            placeholder="Optional description",
-            default=comment_val,
-            max_len=80,
+        self._iw_grid = make_input(placeholder="e.g. EM83cv", max_len=6)
+        self._iw_grid.setText(grid)
+
+        self._iw_state = make_input(placeholder="e.g. TX", max_len=6)
+        self._iw_state.setText(state)
+        self._iw_state.textChanged.connect(
+            lambda t: self._iw_state.setText(t.upper()) if t != t.upper() else None
         )
 
-        self.table.setCellWidget(row, 0, self._iw_name)
-        self.table.setCellWidget(row, 1, self._iw_comment)
+        self.table.setCellWidget(row, 0, self._iw_callsign)
+        self.table.setCellWidget(row, 1, self._iw_grid)
+        self.table.setCellWidget(row, 2, self._iw_state)
         self.table.setRowHeight(row, 34)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
 
@@ -248,50 +237,38 @@ class GroupsDialog(QDialog):
         self.btn_close.setEnabled(False)
 
         self._on_inline_changed()
-        self._iw_name.setFocus()
+        self._iw_callsign.setFocus()
 
     def _on_inline_changed(self) -> None:
         if not self._in_edit_mode:
             return
-        has_name = bool(self._iw_name and self._iw_name.text().strip())
-        self.btn_save.setEnabled(has_name)
+        has_callsign = bool(self._iw_callsign and self._iw_callsign.text().strip())
+        self.btn_save.setEnabled(has_callsign)
 
     def _exit_edit_mode(self, save: bool) -> None:
         row = self._edit_row
 
         if save:
-            if self._adding:
-                raw = self._iw_name.text().strip()
-                name = raw.lstrip("@").strip().upper()
-                if not name:
-                    QMessageBox.warning(self, "Groups", "Group name is required.")
-                    return
-                comment = self._iw_comment.text().strip()
-                ok = self.db.add_group(name, comment, "", "")
-                if not ok:
-                    QMessageBox.warning(
-                        self, "Groups",
-                        "Could not add group. The name may already exist."
-                    )
-                    return
+            callsign = self._iw_callsign.text().strip().upper()
+            if not callsign:
+                QMessageBox.warning(self, "User Settings", "Callsign is required.")
+                return
+            raw_grid = self._iw_grid.text().strip()
+            if len(raw_grid) == 6:
+                grid = raw_grid[:2].upper() + raw_grid[2:4] + raw_grid[4:].lower()
             else:
-                raw = self._iw_name.text().strip()
-                new_name = raw.lstrip("@").strip().upper()
-                if not new_name:
-                    QMessageBox.warning(self, "Groups", "Group name is required.")
-                    return
-                comment = self._iw_comment.text().strip()
-                ok = self.db.update_group_full(self._edit_name, new_name, comment)
-                if not ok:
-                    QMessageBox.critical(self, "Error", "Could not update group.")
-                    return
+                grid = raw_grid.upper()
+            state = self._iw_state.text().strip().upper()
+            ok = self.db.set_user_settings(callsign, grid, state)
+            if not ok:
+                QMessageBox.critical(self, "Error", "Could not save user settings.")
+                return
 
-        for col in range(2):
+        for col in range(3):
             self.table.removeCellWidget(row, col)
 
-        self._iw_name = self._iw_comment = None
+        self._iw_callsign = self._iw_grid = self._iw_state = None
         self._in_edit_mode = False
-        self._edit_name = ""
 
         self.table.setRowHeight(row, self.table.verticalHeader().defaultSectionSize())
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -310,44 +287,22 @@ class GroupsDialog(QDialog):
     def _on_add(self) -> None:
         if self._in_edit_mode:
             return
-        new_row = self.table.rowCount()
-        self.table.insertRow(new_row)
-        self._enter_edit_mode(row=new_row, adding=True)
+        self.table.insertRow(0)
+        self._enter_edit_mode(row=0, adding=True)
 
     def _on_edit(self) -> None:
-        if self._in_edit_mode:
+        if self._in_edit_mode or self.table.rowCount() == 0:
             return
-        row = self.table.currentRow()
-        if row < 0:
-            return
-        self._enter_edit_mode(row=row, adding=False)
+        self._enter_edit_mode(row=0, adding=False)
 
     def _on_delete(self) -> None:
-        if self._in_edit_mode:
-            return
-        row = self.table.currentRow()
-        if row < 0:
-            return
-        name_item = self.table.item(row, 0)
-        name = name_item.text() if name_item else ""
-        if not name:
-            return
         reply = QMessageBox.question(
-            self, "Delete Group",
-            f"Delete group '{name}'?",
+            self, "Delete User Settings",
+            "Delete user settings?",
             QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel,
+            QMessageBox.Cancel
         )
         if reply != QMessageBox.Yes:
             return
-        if not self.db.remove_group(name):
-            QMessageBox.critical(self, "Error", "Could not delete group.")
-            return
+        self.db.set_user_settings("", "", "")
         self._load()
-
-
-if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    print("This dialog requires a DatabaseManager instance.")
-    sys.exit(1)

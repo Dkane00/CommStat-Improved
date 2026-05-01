@@ -13,9 +13,14 @@ from typing import Dict
 # Application Identity
 # =============================================================================
 
-VERSION = "4.0.8"
+VERSION = "4.1"
+
+# When True, dialog handlers reload their module before opening so source
+# edits take effect without restarting CommStat. Leave False for releases.
+DEV_RELOAD_DIALOGS = True
+
 WINDOW_TITLE = f"CommStat (v{VERSION}) by N0DDK"
-WINDOW_SIZE = (1440, 832)
+WINDOW_SIZE = (1360, 768)
 CONFIG_FILE = "config.ini"
 ICON_FILE = "radiation-32.png"
 DATABASE_FILE = "traffic.db3"
@@ -63,13 +68,15 @@ COLOR_ALERT_TEXT = "#ffffff"
 
 DEFAULT_COLORS: Dict[str, str] = {
     # Main window
-    #'program_background': '#A52A2A',       # Maroon
-'program_background': '#000000',       # Maroon
+    'program_background': '#A52A2A',       # Maroon
+    #'program_background': '#DDDDDD',       # testing black
     'program_foreground': '#FFFFFF',
     'menu_background': '#3050CC',          # Blue
     'menu_foreground': '#FFFFFF',
     'title_bar_background': '#F07800',     # Orange
     'title_bar_foreground': '#FFFFFF',
+    #'title_bar_background': '#FFFF00',     # Testing
+    #'title_bar_foreground': '#000000',
     # News feed marquee
     'newsfeed_background': '#242424',      # Dark gray
     'newsfeed_foreground': '#00FF00',      # Green text
@@ -82,14 +89,14 @@ DEFAULT_COLORS: Dict[str, str] = {
     'condition_red': '#DC3534',            # Critical / emergency
     'condition_gray': '#6C757D',           # Unknown / no data
     # Data tables
-    'data_background': '#F8F6F4',          # Cream
+    'data_background': '#F5EDD7',          # Cream was F8F6F4
     'data_foreground': '#000000',
     # Live feed display
-    'feed_background': '#454545',
-    'feed_foreground': '#00FF00',
+    'feed_background': '#000000',
+    'feed_foreground': '#FFFFFF',
     # Module / dialog background
-    'module_background': '#323334',
-    'module_foreground': '#ffffff',
+    'module_background': '#E4E4E4',
+    'module_foreground': '#242424',
 }
 
 # =============================================================================

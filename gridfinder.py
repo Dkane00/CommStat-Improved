@@ -4,7 +4,7 @@ import pandas as pd
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
-    QStatusBar, QCompleter, QPushButton, QMessageBox,
+    QStatusBar, QCompleter, QMessageBox, QHeaderView,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
@@ -13,26 +13,18 @@ from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_BTN_RED, COLOR_BTN_CYAN,
 )
+from ui_helpers import make_button
 
 _PROG_BG  = DEFAULT_COLORS.get("program_background",   "#000000")
 _PROG_FG  = DEFAULT_COLORS.get("program_foreground",   "#FFFFFF")
+_PANEL_BG = DEFAULT_COLORS.get("module_background",    "#DDDDDD")
+_PANEL_FG = DEFAULT_COLORS.get("module_foreground",    "#000000")
 _TITLE_BG = DEFAULT_COLORS.get("title_bar_background", "#F07800")
 _TITLE_FG = DEFAULT_COLORS.get("title_bar_foreground", "#FFFFFF")
+_DATA_BG  = DEFAULT_COLORS.get("data_background",      "#F8F6F4")
+_DATA_FG  = DEFAULT_COLORS.get("data_foreground",      "#000000")
 
 _COL_CANCEL = "#555555"
-
-
-def _btn(label: str, color: str, w: int = 120) -> QPushButton:
-    b = QPushButton(label)
-    b.setFixedWidth(w)
-    b.setFocusPolicy(Qt.NoFocus)
-    b.setStyleSheet(
-        f"QPushButton {{ background-color:{color}; color:#ffffff; font-weight:bold;"
-        f" font-family:Roboto; font-size:15px; padding:4px 8px; border:none; border-radius:4px; }}"
-        f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
-        f"QPushButton:pressed {{ background-color:{color}; }}"
-    )
-    return b
 
 
 def format_grid(grid: str) -> str:
@@ -118,7 +110,7 @@ class GridFinderApp(QMainWindow):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color: {_PROG_BG}; color: {_PROG_FG}; "
-            "font-size: 16px; padding-top: 9px; padding-bottom: 9px; }}"
+            f"font-size: 16px; padding-top: 9px; padding-bottom: 9px; }}"
         )
         layout.addWidget(title)
 
@@ -160,9 +152,10 @@ class GridFinderApp(QMainWindow):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSortingEnabled(True)
         self.table.setFocusPolicy(Qt.NoFocus)
-        self.table.setColumnWidth(0, 230)
-        self.table.setColumnWidth(1, 180)
-        self.table.setColumnWidth(2, 90)
+        hh = self.table.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.Interactive)
+        hh.setSectionResizeMode(2, QHeaderView.Interactive)
         layout.addWidget(self.table)
 
         # Button row
@@ -170,13 +163,13 @@ class GridFinderApp(QMainWindow):
         btn_row.setSpacing(8)
         btn_row.addStretch()
 
-        self.clear_btn = _btn("Clear", COLOR_BTN_RED)
+        self.clear_btn = make_button("Clear", COLOR_BTN_RED)
         btn_row.addWidget(self.clear_btn)
 
-        self.copy_btn = _btn("Copy", COLOR_BTN_CYAN)
+        self.copy_btn = make_button("Copy", COLOR_BTN_CYAN)
         btn_row.addWidget(self.copy_btn)
 
-        self.cancel_btn = _btn("Cancel", _COL_CANCEL)
+        self.cancel_btn = make_button("Cancel", _COL_CANCEL)
         btn_row.addWidget(self.cancel_btn)
 
         layout.addLayout(btn_row)
@@ -198,22 +191,22 @@ class GridFinderApp(QMainWindow):
 
     def _apply_stylesheet(self):
         self.setStyleSheet(f"""
-            QMainWindow {{ background-color: {self.data_bg}; }}
-            QWidget {{ background-color: {self.data_bg}; color: {COLOR_INPUT_TEXT}; }}
-            QLabel {{ background-color: transparent; color: {COLOR_INPUT_TEXT}; font-size: 13px; }}
+            QMainWindow {{ background-color: {_PANEL_BG}; }}
+            QWidget {{ background-color: {_PANEL_BG}; color: {_PANEL_FG}; }}
+            QLabel {{ background-color: transparent; color: {_PANEL_FG}; font-size: 13px; }}
             QLineEdit {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px;
                 padding: 4px; font-family: 'Kode Mono'; font-size: 13px;
             }}
             QTableWidget {{
-                background-color: {self.data_bg}; color: {self.data_fg};
+                background-color: {_DATA_BG}; color: {_DATA_FG};
                 border: 1px solid {COLOR_INPUT_BORDER};
                 font-family: 'Kode Mono'; font-size: 13px;
                 gridline-color: #cccccc;
             }}
             QTableWidget::item {{
-                background-color: {self.data_bg}; color: {self.data_fg}; padding: 2px;
+                background-color: {_DATA_BG}; color: {_DATA_FG}; padding: 2px;
             }}
             QTableWidget::item:selected {{
                 background-color: #cce5ff; color: #000000;
@@ -224,10 +217,23 @@ class GridFinderApp(QMainWindow):
                 padding: 4px; font-family: Roboto; font-size: 13px; font-weight: bold;
             }}
             QStatusBar {{
-                background-color: {self.data_bg}; color: {COLOR_INPUT_TEXT};
+                background-color: {_PANEL_BG}; color: {_PANEL_FG};
                 font-family: Roboto; font-size: 13px;
             }}
         """)
+
+    # ── Layout helpers ────────────────────────────────────────────────────────
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_column_widths()
+
+    def _update_column_widths(self):
+        w = self.table.viewport().width()
+        quarter = max(60, int(w * 0.25))
+        self.table.setColumnWidth(1, quarter)  # State: 25%
+        self.table.setColumnWidth(2, quarter)  # Grid:  25%
+        # City (col 0) fills the remainder via QHeaderView.Stretch
 
     # ── Event handlers ────────────────────────────────────────────────────────
 
@@ -271,7 +277,7 @@ class GridFinderApp(QMainWindow):
             self.table.setItem(i, 2, QTableWidgetItem(format_grid(row['MGrid'])))
 
         self.table.setSortingEnabled(True)
-        self.table.resizeColumnsToContents()
+        self._update_column_widths()
         self.status_bar.showMessage(f"{len(df)} result(s) found.", 5000)
 
     def _on_row_clicked(self, index):

@@ -13,7 +13,7 @@
 
 
 """
-CommStat v2.5.1 - Rebuilt with best practices
+CommStat v4.0.8 - Rebuilt with best practices
 
 A PyQt5 application for monitoring JS8Call communications,
 displaying status reports, messages, and live data feeds.
@@ -62,8 +62,8 @@ from groups import GroupsDialog
 from js8mail import JS8MailDialog
 from js8sms import JS8SMSDialog
 from direct_message import DirectMessageDialog
-from message import Ui_FormMessage
-from alert import Ui_FormAlert
+from group_message import GroupMessageDialog
+from alert import AlertDialog
 from statrep import StatRepDialog
 from connector_manager import ConnectorManager
 from js8_tcp_client import TCPConnectionPool
@@ -71,6 +71,8 @@ from js8_connectors import JS8ConnectorsDialog
 from id_utils import generate_time_based_id
 from constants import *
 from help import HelpDialog
+from user_settings import UserSettingsDialog
+from qrz_settings import QRZSettingsDialog
 
 
 # =============================================================================
@@ -1162,6 +1164,17 @@ class DatabaseManager:
             return cursor.rowcount > 0
         return self._execute(op, False)
 
+    def update_group_full(self, old_name: str, new_name: str, comment: str = "") -> bool:
+        """Rename a group and update its comment. Returns True if successful."""
+        def op(cursor, conn):
+            cursor.execute(
+                "UPDATE groups SET name = ?, comment = ? WHERE name = ?",
+                (new_name.strip().upper(), comment.strip(), old_name.strip().upper())
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        return self._execute(op, False)
+
     def get_group_details(self, group_name: str) -> Optional[Dict]:
         """Get full details of a group."""
         def op(cursor, conn):
@@ -1405,9 +1418,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.max_feed_messages = 500  # Limit buffer size
         self._hide_live_feed: bool = False          # Session-only; resets on restart
         self._hide_internet_statrep: bool = False   # Session-only; resets on restart
+        self._hide_green_pins: bool = False         # Session-only; resets on restart
 
-        # Initiate TCP connections (Connecting... messages come via status_message signal)
-        self.tcp_pool.connect_all()
+        # Run startup status checks and initiate TCP connections.
+        # Order: User Settings -> Groups -> JS8 Connectors -> QRZ Settings.
+        self._log_startup_status()
 
         # Map state
         self.map_loaded = False
@@ -1552,6 +1567,49 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             print("Internet connectivity: Not available (will retry in 30 minutes)")
 
+    def _log_startup(self, line: str) -> None:
+        """Log a startup status line to console (no timestamp) and live feed (timestamped)."""
+        print(line)
+        utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
+        self._add_to_feed(f"{utc_str}\t{line}", "")
+
+    def _log_startup_status(self) -> None:
+        """Emit startup status messages and initiate TCP connections.
+
+        Order: User Settings, Groups, JS8 Connectors (and connection attempts),
+        QRZ Settings.
+        """
+        # User settings (controls table)
+        callsign, grid, state = self.db.get_user_settings()
+        if callsign:
+            self._log_startup(f"[User Settings Found] {callsign}, {grid}, {state}")
+        else:
+            self._log_startup("[User Settings NOT Found] Go to Menu -> Config -> User Settings")
+
+        # Groups (stored with @ prefix in DB; displayed without)
+        group_names = [g.lstrip('@') for g in self.db.get_all_groups()]
+        if not group_names:
+            self._log_startup("[Groups NOT Found] Go to Menu -> Config -> Manage Groups")
+        elif len(group_names) == 1:
+            self._log_startup(f"[Group Found] {group_names[0]}")
+        else:
+            self._log_startup(f"[Groups Found] {', '.join(group_names)}")
+
+        # QRZ settings
+        qrz_username, _, _ = self.db.get_qrz_settings()
+        if qrz_username:
+            self._log_startup("[QRZ Settings Found]")
+        else:
+            self._log_startup("[QRZ Settings NOT Found] Go to Menu -> Config -> QRZ Settings")
+
+        # JS8 connectors — only log NOT Found if none configured.
+        # Existing TCP "Attempting to connect" / "Connected" messages cover the rest.
+        if not self.connector_manager.get_all_connectors(enabled_only=False):
+            self._log_startup("[JS8 Connectors NOT Found] Go to Menu -> Config -> JS8 Connectors")
+        # Initiate TCP connections (status messages emitted via status_message signal).
+        # Disabled connectors get a single attempt; enabled connectors auto-reconnect.
+        self.tcp_pool.connect_all()
+
     def _retry_internet_check(self) -> None:
         """Retry internet connectivity check (called by timer)."""
         was_available = self._internet_available
@@ -1620,42 +1678,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Define menu actions: (name, text, handler)
         menu_items = [
-            ("js8_connectors", "JS8 Connectors", self._on_js8_connectors),
-            ("qrz_enable", "QRZ Settings", self._on_qrz_enable),
-            ("user_settings", "User Settings", self._on_user_settings),
-            None,  # Separator
+            ("user_settings",  "User Settings",  self._on_user_settings),
+            ("manage_groups",  "Manage Groups",   self._on_manage_groups),
+            ("js8_connectors", "JS8 Connectors",  self._on_js8_connectors),
+            ("qrz_enable",     "QRZ Settings",    self._on_qrz_enable),
         ]
 
         # Create actions for dropdown menu
         self.actions: Dict[str, QtWidgets.QAction] = {}
         for item in menu_items:
-            if item is None:
-                self.menu.addSeparator()
-            else:
-                name, text, handler = item
-                action = QtWidgets.QAction(text, self)
-                action.triggered.connect(handler)
-                self.menu.addAction(action)
-                self.actions[name] = action
+            name, text, handler = item
+            action = QtWidgets.QAction(text, self)
+            action.triggered.connect(handler)
+            self.menu.addAction(action)
+            self.actions[name] = action
 
-        # Groups section inside Config menu
-        groups_header = QtWidgets.QAction("GROUPS", self)
-        groups_header.setEnabled(False)
-        self.menu.addAction(groups_header)
         self.groups_menu = self.menu
-
-        # Add Manage Groups option
-        manage_groups_action = QtWidgets.QAction("Manage Groups", self)
-        manage_groups_action.triggered.connect(self._on_manage_groups)
-        self.groups_menu.addAction(manage_groups_action)
-        self.actions["manage_groups"] = manage_groups_action
-
-        # Add Show Groups option
-        show_groups_action = QtWidgets.QAction("Show Groups", self)
-        show_groups_action.triggered.connect(self._on_show_groups)
-        self.groups_menu.addAction(show_groups_action)
-        self.actions["show_groups"] = show_groups_action
-
         self.groups_menu.addSeparator()
 
         # Populate group checkboxes (will be called after menu setup)
@@ -1670,9 +1708,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.transmit_menu.addAction(hybrid_lbl)
 
         for name, text, handler in [
-            ("statrep",      "Status Report", self._on_statrep),
-            ("group_alert",  "Alert",         self._on_group_alert),
-            ("send_message", "Group Message", self._on_send_message),
+            ("statrep",      "Status Report",        self._on_statrep),
+            ("send_message", "Group Message",         self._on_send_message),
+            ("group_alert",  "Group/Callsign Alert",  self._on_group_alert),
         ]:
             action = QtWidgets.QAction(text, self)
             action.triggered.connect(handler)
@@ -1693,11 +1731,6 @@ class MainWindow(QtWidgets.QMainWindow):
         section_lbl = QtWidgets.QAction("GRID DOWN TOOLS", self)
         section_lbl.setEnabled(False)
         self.transmit_menu.addAction(section_lbl)
-
-        js8msg_action = QtWidgets.QAction("JS8 Message", self)
-        js8msg_action.triggered.connect(self._on_js8_message)
-        self.transmit_menu.addAction(js8msg_action)
-        self.actions["js8_message"] = js8msg_action
 
         for name, text, handler in [
             ("js8email", "JS8 Email", self._on_js8email),
@@ -1750,14 +1783,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.filter_menu.addAction(statrep_messages_label)
 
         self.hide_internet_statrep_checkbox = self._create_menu_checkbox(
-            self.filter_menu, "Hide Internet feed",
+            self.filter_menu, "Hide Internet Feed",
             False, self._on_toggle_hide_internet_statrep)
+
+        self.hide_green_pins_checkbox = self._create_menu_checkbox(
+            self.filter_menu, "Hide Green Pins",
+            False, self._on_toggle_hide_green_pins)
 
         # Per-group checkboxes are inserted here dynamically after DB is ready
         self.filter_group_actions: Dict[str, QtWidgets.QAction] = {}
 
         self.show_every_group_checkbox = self._create_menu_checkbox(
-            self.filter_menu, "Show All Groups",
+            self.filter_menu, "Show Other Groups",
             self.config.get_show_every_group(), self._on_toggle_show_every_group)
         # Keep a reference to the QWidgetAction so insertAction() can use it as anchor
         self.show_every_group_action = self.filter_menu.actions()[-1]
@@ -1789,17 +1826,20 @@ class MainWindow(QtWidgets.QMainWindow):
         # Menubar items
         create_action(self.menubar, "QRZ", "qrz_lookup", self._on_qrz_lookup)
         create_action(self.menubar, "Help", "help", self._on_help)
-        create_action(self.menubar, "Exit", "exit", qApp.quit)
+        create_action(self.menubar, "Exit" + " " * 10, "exit", qApp.quit)
+        create_action(self.menubar, "What's New", "whats_new", self._on_whats_new)
 
         # Add status bar
         self.statusbar = QtWidgets.QStatusBar(self)
         self.setStatusBar(self.statusbar)
+        self.statusbar.setStyleSheet(
+            "QStatusBar, QStatusBar QLabel, QStatusBar QPushButton {"
+            " font-family: Roboto; font-size: 12px; font-weight: normal; }"
+        )
 
         # Map view toggle buttons (left side of status bar)
-        font_tiny = QtGui.QFont("Roboto", 9)
         for label, mode in [("Map", "map"), ("Images", "images"), ("Alerts", "alerts"), ("Contacts", "contacts")]:
             btn = QtWidgets.QPushButton(label)
-            btn.setFont(font_tiny)
             btn.setFixedHeight(18)
             btn.setFixedWidth(70)
             btn.setCursor(Qt.PointingHandCursor)
@@ -1808,7 +1848,6 @@ class MainWindow(QtWidgets.QMainWindow):
             setattr(self, f"_btn_{mode}", btn)
 
         hint_label = QtWidgets.QLabel(" < Click to Change View")
-        hint_label.setFont(font_tiny)
         self.statusbar.addWidget(hint_label)
 
         # Add "Rig Status:" label (no sunken effect, permanent on right)
@@ -1919,16 +1958,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         self.last20_button.clicked.connect(self._on_last20_clicked)
         self.header_layout.addWidget(self.last20_button)
-
-        # Equal stretches on both sides to center "What's New" between Last 20 and Time
-        self.header_layout.addStretch()
-
-        # What's New hyperlink
-        self.whats_new_label = QtWidgets.QLabel(self.header_widget)
-        self.whats_new_label.setText('<a href="https://commstat-improved.com/new-features.php" style="color: white; text-decoration: underline;">What\'s New</a>')
-        self.whats_new_label.setFont(font)
-        self.whats_new_label.setOpenExternalLinks(True)
-        self.header_layout.addWidget(self.whats_new_label)
 
         self.header_layout.addStretch()
 
@@ -2827,7 +2856,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         import re
         from datetime import datetime, timezone
-        from id_utils import generate_time_based_id
         from typing import Optional
 
         try:
@@ -3240,28 +3268,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if not hasattr(self, 'feed_text'):
             return
 
-        # Build config warnings — shown regardless of feed content
-        warnings = []
-
-        if not self.connector_manager.get_all_connectors():
-            warnings.append("No JS8Call connectors configured. Use Menu > JS8 Connectors to add a connection.")
-
-        qrz_username, _, _qrz_active = self.db.get_qrz_settings()
-        if not qrz_username:
-            warnings.append("No QRZ settings configured. Use Menu > QRZ Settings to add your QRZ credentials.")
-
-        user_callsign, _, __ = self.db.get_user_settings()
-        if not user_callsign:
-            warnings.append("No user settings configured. Use Menu > User Settings to set your callsign.")
-
-        if not self.db.get_all_groups():
-            warnings.append("No groups configured. Use Menu > Groups > Manage Groups to add a group.")
-
         if not self.feed_messages:
-            if warnings:
-                self.feed_text.setPlainText('\n'.join(warnings))
-            else:
-                self.feed_text.setPlainText("Waiting for JS8Call traffic...")
+            self.feed_text.setPlainText("Waiting for JS8Call traffic...")
             return
 
         # Filter messages based on settings
@@ -3273,11 +3281,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 and '@ALLCALL CQ' not in msg.upper()
             ]
 
-        # Join messages (already in newest-first order), append any config warnings
-        feed_text = '\n'.join(messages)
-        if warnings:
-            feed_text += '\n\n' + '\n'.join(warnings)
-        self.feed_text.setPlainText(feed_text)
+        # Join messages (already in newest-first order)
+        self.feed_text.setPlainText('\n'.join(messages))
 
     def _setup_message_table(self) -> None:
         """Create the message data table."""
@@ -3462,6 +3467,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 )
                 dlg.cs_edit.setText(callsign)
                 dlg._search()
+                dlg.msg_edit.setFocus()
                 dlg.exec_()
                 self.contacts_table.viewport().setFocus()
         elif col == 10:
@@ -3618,6 +3624,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     iframe = folium.IFrame(html, width=120, height=78)
                     popup = folium.Popup(iframe, min_width=80, max_width=120)
 
+                    # Skip green pins when filter is active
+                    if self._hide_green_pins and status == "1":
+                        continue
+
                     # Determine pin color and size
                     if status == "1":
                         color = "green"
@@ -3744,7 +3754,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                     data = json.loads(result)
                     self.map_center = (data['lat'], data['lng'])
                     self.map_zoom = data['zoom']
-                except:
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                     pass
             if callback:
                 callback()
@@ -3887,14 +3897,32 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         else:
             QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find brevity.py")
 
+    def _resolve_dialog_class(self, module_name: str, class_name: str):
+        """Return a dialog class, reloading its module first when DEV_RELOAD_DIALOGS is set.
+
+        Allows iterating on dialog source without restarting CommStat. Safe only for
+        self-contained dialog modules opened from menu actions — other modules holding
+        references to the previous class will not pick up the reload.
+        """
+        import importlib
+        module = importlib.import_module(module_name)
+        if DEV_RELOAD_DIALOGS:
+            module = importlib.reload(module)
+        return getattr(module, class_name)
+
     def _on_help(self) -> None:
-        dlg = HelpDialog(self)
+        HelpDialogCls = self._resolve_dialog_class("help", "HelpDialog")
+        dlg = HelpDialogCls(self)
         dlg.exec_()
+
+    def _on_whats_new(self) -> None:
+        """Open the What's New page in the user's browser."""
+        QDesktopServices.openUrl(QUrl("https://commstat-improved.com/new-features.php"))
 
     def _on_qrz_lookup(self) -> None:
         """Open standalone QRZ Lookup dialog (Tools menu)."""
-        from qrz_lookup import QRZLookupDialog
-        dlg = QRZLookupDialog(
+        QRZLookupDialogCls = self._resolve_dialog_class("qrz_lookup", "QRZLookupDialog")
+        dlg = QRZLookupDialogCls(
             module_background=self.config.get_color('module_background'),
             module_foreground=self.config.get_color('module_foreground'),
             program_background=self.config.get_color('program_background'),
@@ -4013,10 +4041,16 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             _, label_status = self.rig_status_widgets[rig_name]
             if is_connected:
                 label_status.setText(" Connected ")
-                label_status.setStyleSheet("background-color: #00dd00; color: black;")
+                label_status.setStyleSheet(
+                    "background-color: #00dd00; color: black;"
+                    " font-family: Roboto; font-size: 12px; font-weight: normal;"
+                )
             else:
                 label_status.setText(" Disconnected ")
-                label_status.setStyleSheet("background-color: #dd0000; color: white;")
+                label_status.setStyleSheet(
+                    "background-color: #dd0000; color: white;"
+                    " font-family: Roboto; font-size: 12px; font-weight: normal;"
+                )
 
     def _tick_newsfeed(self) -> None:
         """Timer-driven tick for news feed animation."""
@@ -4175,17 +4209,20 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
     def _on_js8email(self) -> None:
         """Open JS8 Email window."""
-        dialog = JS8MailDialog(self.tcp_pool, self.connector_manager, self)
+        Cls = self._resolve_dialog_class("js8mail", "JS8MailDialog")
+        dialog = Cls(self.tcp_pool, self.connector_manager, self)
         dialog.exec_()
 
     def _on_js8sms(self) -> None:
         """Open JS8 SMS window."""
-        dialog = JS8SMSDialog(self.tcp_pool, self.connector_manager, self)
+        Cls = self._resolve_dialog_class("js8sms", "JS8SMSDialog")
+        dialog = Cls(self.tcp_pool, self.connector_manager, self)
         dialog.exec_()
 
     def _on_statrep(self) -> None:
         """Open StatRep window."""
-        dialog = StatRepDialog(
+        Cls = self._resolve_dialog_class("statrep", "StatRepDialog")
+        dialog = Cls(
             self.tcp_pool, self.connector_manager, self,
             module_background=self.config.get_color('module_background'),
             data_background=self.config.get_color('data_background')
@@ -4194,20 +4231,20 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
     def _on_send_message(self) -> None:
         """Open Send Message window."""
-        dialog = QtWidgets.QDialog(self)
-        dialog.ui = Ui_FormMessage(self.tcp_pool, self.connector_manager, self._load_message_data)
-        dialog.ui.setupUi(dialog)
+        Cls = self._resolve_dialog_class("group_message", "GroupMessageDialog")
+        dialog = Cls(self.tcp_pool, self.connector_manager, self._load_message_data, parent=self)
         dialog.exec_()
 
     def _on_direct_message(self) -> None:
         """Open Direct Message window."""
-        dialog = DirectMessageDialog(self.tcp_pool, self.connector_manager, parent=self)
+        Cls = self._resolve_dialog_class("direct_message", "DirectMessageDialog")
+        dialog = Cls(self.tcp_pool, self.connector_manager, parent=self)
         dialog.exec_()
 
     def _on_js8_message(self) -> None:
         """Open JS8 Message dialog (RF transmit with QRZ lookup)."""
-        from qrz_lookup import JS8MessageDialog
-        dlg = JS8MessageDialog(
+        Cls = self._resolve_dialog_class("qrz_lookup", "JS8MessageDialog")
+        dlg = Cls(
             program_background=self.config.get_color('program_background'),
             program_foreground=self.config.get_color('program_foreground'),
             module_background=self.config.get_color('module_background'),
@@ -4220,14 +4257,14 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
     def _on_group_alert(self) -> None:
         """Open Group Alert window."""
-        dialog = QtWidgets.QDialog(self)
-        dialog.ui = Ui_FormAlert(self.tcp_pool, self.connector_manager, self._trigger_show_alerts)
-        dialog.ui.setupUi(dialog)
+        Cls = self._resolve_dialog_class("alert", "AlertDialog")
+        dialog = Cls(self.tcp_pool, self.connector_manager, self._trigger_show_alerts, parent=self)
         dialog.exec_()
 
     def _on_filter(self) -> None:
         """Open Display Filter window."""
-        dialog = FilterDialog(self.config.filter_settings, self)
+        Cls = self._resolve_dialog_class("filter", "FilterDialog")
+        dialog = Cls(self.config.filter_settings, self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             # Update filter settings directly
             self.config.filter_settings = dialog.get_filters()
@@ -4267,6 +4304,11 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         """Show only RF-sourced (source=1) statreps. Session-only — resets on restart."""
         self._hide_internet_statrep = checked
         self._load_statrep_data()
+
+    def _on_toggle_hide_green_pins(self, checked: bool) -> None:
+        """Hide green (all-clear) pins from the map. Session-only — resets on restart."""
+        self._hide_green_pins = checked
+        self._save_map_position(callback=self._load_map)
 
     def _on_toggle_hide_live_feed(self, checked: bool) -> None:
         """Hide/show the live feed. Session-only — resets on restart."""
@@ -4500,7 +4542,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
     def _on_manage_groups(self) -> None:
         """Open Manage Groups window."""
-        dialog = GroupsDialog(self.db, self)
+        Cls = self._resolve_dialog_class("groups", "GroupsDialog")
+        dialog = Cls(self.db, self)
         dialog.exec_()
         self._populate_groups_menu()
         self._populate_filter_groups_menu()
@@ -4510,71 +4553,6 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         self.config.set_unchecked_groups(pruned)
         self._refresh_all_data()
 
-    def _on_show_groups(self) -> None:
-        """Show Groups dialog displaying all groups in a table."""
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("Groups")
-        dialog.setMinimumSize(700, 400)
-        dialog.setWindowFlags(
-            Qt.Window |
-            Qt.CustomizeWindowHint |
-            Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint
-        )
-
-        layout = QtWidgets.QVBoxLayout(dialog)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        # Create table widget
-        table = QtWidgets.QTableWidget()
-        table.setColumnCount(5)
-        table.setHorizontalHeaderLabels(["Group Name", "Comment", "URL #1", "URL #2", "Date Added"])
-        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        table.setAlternatingRowColors(True)
-        table.horizontalHeader().setStretchLastSection(True)
-
-        # Get all groups
-        groups = self.db.get_all_groups_details()
-        table.setRowCount(len(groups))
-
-        for row, group in enumerate(groups):
-            # Group Name
-            name_item = QtWidgets.QTableWidgetItem(group["name"])
-            table.setItem(row, 0, name_item)
-
-            # Comment
-            comment_item = QtWidgets.QTableWidgetItem(group["comment"])
-            table.setItem(row, 1, comment_item)
-
-            # Helper to create URL table item
-            def create_url_item(url):
-                if url:
-                    item = QtWidgets.QTableWidgetItem("Link" if len(url) > 30 else url)
-                    item.setToolTip(url)
-                    item.setForeground(QtGui.QColor("#0066CC"))
-                else:
-                    item = QtWidgets.QTableWidgetItem("")
-                return item
-
-            table.setItem(row, 2, create_url_item(group["url1"]))
-            table.setItem(row, 3, create_url_item(group["url2"]))
-
-            # Date Added
-            date_item = QtWidgets.QTableWidgetItem(group["date_added"])
-            table.setItem(row, 4, date_item)
-
-        # Resize columns to content
-        table.resizeColumnsToContents()
-
-        layout.addWidget(table)
-
-        # Close button
-        close_btn = QtWidgets.QPushButton("Close")
-        close_btn.clicked.connect(dialog.close)
-        layout.addWidget(close_btn, alignment=Qt.AlignCenter)
-
-        dialog.exec_()
 
     def _create_menu_checkbox(self, menu, label: str, is_checked: bool, handler) -> QtWidgets.QCheckBox:
         """Create a styled checkbox as a menu item and add it to the given menu."""
@@ -4664,7 +4642,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
     def _on_js8_connectors(self) -> None:
         """Open JS8 Connectors management window."""
-        dialog = JS8ConnectorsDialog(self.connector_manager, self.tcp_pool, self)
+        Cls = self._resolve_dialog_class("js8_connectors", "JS8ConnectorsDialog")
+        dialog = Cls(self.connector_manager, self.tcp_pool, self)
         dialog.exec_()
 
     def _handle_connection_changed(self, rig_name: str, is_connected: bool) -> None:
@@ -4917,28 +4896,6 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
         # Update display
         self._update_feed_display()
-
-    def _generate_time_based_srid(self, utc_datetime: Optional[str] = None) -> str:
-        """
-        Generate a time-based SRid from UTC datetime string.
-
-        Args:
-            utc_datetime: Optional UTC datetime string in format "YYYY-MM-DD   HH:MM:SS"
-                         If None, uses current UTC time.
-
-        Returns:
-            3-character time-based ID (e.g., "A12", "Q47")
-        """
-        from id_utils import generate_time_based_id
-        from datetime import datetime, timezone
-
-        if utc_datetime:
-            # Parse datetime string (format: "YYYY-MM-DD   HH:MM:SS")
-            dt_str = utc_datetime.replace("   ", " ").strip()
-            dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-            return generate_time_based_id(dt)
-        else:
-            return generate_time_based_id()
 
     def _preprocess_message_value(self, value: str, from_call: str) -> str:
         """
@@ -5559,155 +5516,16 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         return msg_type
 
     def _on_qrz_enable(self) -> None:
-        """Open QRZ Enable dialog for managing QRZ.com credentials."""
-        # Get current settings
-        username, password, is_active = self.db.get_qrz_settings()
-
-        # Create dialog
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("QRZ Enable")
-        dialog.setFixedWidth(400)
-        layout = QtWidgets.QVBoxLayout(dialog)
-
-        # Warning message
-        warning_label = QtWidgets.QLabel(
-            "NOTE: You must have a QRZ XML subscription for this feature to work.\n"
-            "Visit qrz.com to subscribe."
-        )
-        warning_label.setStyleSheet("color: #FF6600; font-weight: bold;")
-        warning_label.setWordWrap(True)
-        layout.addWidget(warning_label)
-
-        layout.addSpacing(10)
-
-        # Enable checkbox
-        enable_checkbox = QtWidgets.QCheckBox("Enable QRZ Lookups")
-        enable_checkbox.setChecked(is_active)
-        layout.addWidget(enable_checkbox)
-
-        layout.addSpacing(10)
-
-        # Form layout for credentials
-        form_layout = QtWidgets.QFormLayout()
-
-        username_input = QtWidgets.QLineEdit()
-        username_input.setText(username)
-        username_input.setPlaceholderText("QRZ.com callsign")
-        form_layout.addRow("Username:", username_input)
-
-        password_input = QtWidgets.QLineEdit()
-        password_input.setText(password)
-        password_input.setPlaceholderText("QRZ.com password")
-        password_input.setEchoMode(QtWidgets.QLineEdit.Password)
-        form_layout.addRow("Password:", password_input)
-
-        layout.addLayout(form_layout)
-
-        layout.addSpacing(20)
-
-        # Buttons
-        button_layout = QtWidgets.QHBoxLayout()
-        save_btn = QtWidgets.QPushButton("Save")
-        cancel_btn = QtWidgets.QPushButton("Cancel")
-
-        save_btn.clicked.connect(dialog.accept)
-        cancel_btn.clicked.connect(dialog.reject)
-
-        button_layout.addStretch()
-        button_layout.addWidget(save_btn)
-        button_layout.addWidget(cancel_btn)
-        layout.addLayout(button_layout)
-
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            # Save settings
-            new_username = username_input.text().strip()
-            new_password = password_input.text()
-            new_active = enable_checkbox.isChecked()
-
-            if self.db.set_qrz_settings(new_username, new_password, new_active):
-                status = "enabled" if new_active else "disabled"
-                QtWidgets.QMessageBox.information(
-                    self, "QRZ Settings",
-                    f"QRZ settings saved. Lookups are {status}."
-                )
-            else:
-                QtWidgets.QMessageBox.warning(
-                    self, "Error",
-                    "Failed to save QRZ settings."
-                )
+        """Open QRZ Settings dialog."""
+        Cls = self._resolve_dialog_class("qrz_settings", "QRZSettingsDialog")
+        dlg = Cls(self.db, parent=self)
+        dlg.exec_()
 
     def _on_user_settings(self) -> None:
-        """Open User Settings dialog for editing default callsign, grid, and state."""
-        callsign, grid, state = self.db.get_user_settings()
-
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("User Settings")
-        dialog.setFixedWidth(400)
-        layout = QtWidgets.QVBoxLayout(dialog)
-
-        # Info message
-        info_label = QtWidgets.QLabel(
-            "These settings are used when INTERNET ONLY is selected as the Rig."
-        )
-        info_label.setStyleSheet("color: #000000;")
-        info_label.setWordWrap(True)
-        layout.addWidget(info_label)
-
-        layout.addSpacing(10)
-
-        # Form fields
-        form_layout = QtWidgets.QFormLayout()
-
-        callsign_input = QtWidgets.QLineEdit()
-        callsign_input.setText(callsign)
-        callsign_input.setMaxLength(12)
-        callsign_input.setPlaceholderText("Your callsign")
-        callsign_input.textChanged.connect(lambda t: callsign_input.setText(t.upper()) or callsign_input.setCursorPosition(len(t)))
-        form_layout.addRow("Callsign:", callsign_input)
-
-        grid_input = QtWidgets.QLineEdit()
-        grid_input.setText(grid)
-        grid_input.setMaxLength(6)
-        grid_input.setPlaceholderText("Grid square (e.g. EM83cv)")
-        form_layout.addRow("Grid Square:", grid_input)
-
-        state_input = QtWidgets.QLineEdit()
-        state_input.setText(state)
-        state_input.setMaxLength(6)
-        state_input.setPlaceholderText("State/region code")
-        state_input.textChanged.connect(lambda t: state_input.setText(t.upper()) or state_input.setCursorPosition(len(t)))
-        form_layout.addRow("State:", state_input)
-
-        layout.addLayout(form_layout)
-        layout.addSpacing(20)
-
-        # Buttons
-        button_layout = QtWidgets.QHBoxLayout()
-        save_btn = QtWidgets.QPushButton("Save")
-        cancel_btn = QtWidgets.QPushButton("Cancel")
-        save_btn.clicked.connect(dialog.accept)
-        cancel_btn.clicked.connect(dialog.reject)
-        button_layout.addStretch()
-        button_layout.addWidget(save_btn)
-        button_layout.addWidget(cancel_btn)
-        layout.addLayout(button_layout)
-
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            new_callsign = callsign_input.text().strip().upper()
-            raw_grid = grid_input.text().strip()
-            if len(raw_grid) == 6:
-                new_grid = raw_grid[:2].upper() + raw_grid[2:4] + raw_grid[4:].lower()
-            else:
-                new_grid = raw_grid.upper()
-            new_state = state_input.text().strip().upper()
-            if self.db.set_user_settings(new_callsign, new_grid, new_state):
-                QtWidgets.QMessageBox.information(
-                    self, "User Settings", "Settings saved."
-                )
-            else:
-                QtWidgets.QMessageBox.warning(
-                    self, "Error", "Failed to save settings."
-                )
+        """Open User Settings dialog."""
+        Cls = self._resolve_dialog_class("user_settings", "UserSettingsDialog")
+        dlg = Cls(self.db, parent=self)
+        dlg.exec_()
 
     def _show_image_dialog(
         self,

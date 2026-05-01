@@ -26,6 +26,7 @@ from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_BTN_BLUE, COLOR_BTN_CYAN,
 )
+from ui_helpers import make_button, label_font, mono_font
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -46,32 +47,6 @@ _PROG_FG = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
 _DATA_BG = DEFAULT_COLORS.get("data_background",    "#F8F6F4")
 
 _COL_CANCEL = "#555555"
-
-
-# =============================================================================
-# Helpers
-# =============================================================================
-
-def _lbl_font() -> QtGui.QFont:
-    return QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
-
-
-def _mono_font() -> QtGui.QFont:
-    return QtGui.QFont("Kode Mono")
-
-
-def _btn(label: str, color: str, min_w: int = 90) -> QtWidgets.QPushButton:
-    b = QtWidgets.QPushButton(label)
-    b.setMinimumWidth(min_w)
-    b.setStyleSheet(
-        f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
-        f" padding:6px 14px; border-radius:4px; font-family:Roboto; font-size:15px;"
-        f" font-weight:bold; }}"
-        f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
-        f"QPushButton:pressed {{ background-color:{color}; }}"
-        f"QPushButton:disabled {{ background-color:#cccccc; color:#888888; }}"
-    )
-    return b
 
 
 # =============================================================================
@@ -151,14 +126,14 @@ class DirectMessageDialog(QDialog):
 
         # Callsign row
         callsign_label = QtWidgets.QLabel("Callsign:")
-        callsign_label.setFont(_lbl_font())
+        callsign_label.setFont(label_font())
         layout.addWidget(callsign_label)
 
         callsign_row = QtWidgets.QHBoxLayout()
         callsign_row.setSpacing(8)
 
         self.callsign_input = QtWidgets.QLineEdit()
-        self.callsign_input.setFont(_mono_font())
+        self.callsign_input.setFont(mono_font())
         self.callsign_input.setFixedWidth(120)
         self.callsign_input.setMinimumHeight(28)
         self.callsign_input.setMaxLength(12)
@@ -167,11 +142,11 @@ class DirectMessageDialog(QDialog):
         callsign_row.addWidget(self.callsign_input)
 
         ls_title = QtWidgets.QLabel("Last Seen:")
-        ls_title.setFont(_lbl_font())
+        ls_title.setFont(label_font())
         callsign_row.addWidget(ls_title)
 
         self.last_seen_label = QtWidgets.QLabel("—")
-        self.last_seen_label.setFont(_mono_font())
+        self.last_seen_label.setFont(mono_font())
         callsign_row.addWidget(self.last_seen_label)
         callsign_row.addStretch()
         layout.addLayout(callsign_row)
@@ -184,11 +159,11 @@ class DirectMessageDialog(QDialog):
 
         # Message
         message_label = QtWidgets.QLabel("Message:")
-        message_label.setFont(_lbl_font())
+        message_label.setFont(label_font())
         layout.addWidget(message_label)
 
         self.message_box = QtWidgets.QPlainTextEdit()
-        self.message_box.setFont(_mono_font())
+        self.message_box.setFont(mono_font())
         font_metrics = QtGui.QFontMetrics(self.message_box.font())
         self.message_box.setMinimumHeight(font_metrics.lineSpacing() * 8 + 16)
         self.message_box.setSizePolicy(
@@ -200,15 +175,15 @@ class DirectMessageDialog(QDialog):
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.addStretch()
 
-        self.clear_btn = _btn("Clear", COLOR_BTN_CYAN)
+        self.clear_btn = make_button("Clear", COLOR_BTN_CYAN)
         self.clear_btn.clicked.connect(self._on_clear)
         btn_row.addWidget(self.clear_btn)
 
-        self.send_btn = _btn("Send", COLOR_BTN_BLUE)
+        self.send_btn = make_button("Send", COLOR_BTN_BLUE)
         self.send_btn.clicked.connect(self._on_send)
         btn_row.addWidget(self.send_btn)
 
-        self.cancel_btn = _btn("Cancel", _COL_CANCEL)
+        self.cancel_btn = make_button("Cancel", _COL_CANCEL)
         self.cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(self.cancel_btn)
 

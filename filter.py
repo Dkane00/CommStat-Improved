@@ -14,12 +14,13 @@ from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QDateEdit, QPushButton,
+    QLabel, QDateEdit,
 )
 
 from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER, COLOR_BTN_GREEN,
 )
+from ui_helpers import make_button, label_font
 
 _PROG_BG = DEFAULT_COLORS.get("program_background", "#000000")
 _PROG_FG = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
@@ -27,22 +28,6 @@ _DATA_BG = DEFAULT_COLORS.get("data_background",    "#F8F6F4")
 
 _COL_SAVE   = COLOR_BTN_GREEN
 _COL_CANCEL = "#555555"
-
-
-def _lbl_font() -> QtGui.QFont:
-    return QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
-
-
-def _btn(label: str, color: str) -> QPushButton:
-    b = QPushButton(label)
-    b.setStyleSheet(
-        f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
-        f" padding:6px 14px; border-radius:4px; font-family:Roboto; font-size:15px;"
-        f" font-weight:bold; }}"
-        f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
-        f"QPushButton:pressed {{ background-color:{color}; }}"
-    )
-    return b
 
 
 class FilterDialog(QDialog):
@@ -103,7 +88,7 @@ class FilterDialog(QDialog):
         date_row.setSpacing(8)
 
         start_lbl = QLabel("Start Date:")
-        start_lbl.setFont(_lbl_font())
+        start_lbl.setFont(label_font())
         date_row.addWidget(start_lbl)
 
         self.start_date = QDateEdit()
@@ -115,7 +100,7 @@ class FilterDialog(QDialog):
         date_row.addSpacing(12)
 
         end_lbl = QLabel("End Date:")
-        end_lbl.setFont(_lbl_font())
+        end_lbl.setFont(label_font())
         date_row.addWidget(end_lbl)
 
         self.end_date = QDateEdit()
@@ -133,11 +118,11 @@ class FilterDialog(QDialog):
         button_row = QHBoxLayout()
         button_row.addStretch()
 
-        self.save_btn = _btn("Save", _COL_SAVE)
+        self.save_btn = make_button("Save", _COL_SAVE)
         self.save_btn.clicked.connect(self._save_filter)
         button_row.addWidget(self.save_btn)
 
-        self.cancel_btn = _btn("Cancel", _COL_CANCEL)
+        self.cancel_btn = make_button("Cancel", _COL_CANCEL)
         self.cancel_btn.clicked.connect(self.reject)
         button_row.addWidget(self.cancel_btn)
 

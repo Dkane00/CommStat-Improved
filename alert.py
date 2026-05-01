@@ -1,11 +1,10 @@
 # Copyright (c) 2025 Manuel Ochoa
 # This file is part of CommStat.
 # Licensed under the GNU General Public License v3.0.
-# AI Assistance: Claude (Anthropic), ChatGPT (OpenAI)
-
 """
-Group Alert Dialog for CommStat
-Allows creating and transmitting group alerts via JS8Call.
+alert.py - Group Alert Dialog
+
+Allows creating and transmitting group callsign alerts via JS8Call.
 """
 
 import base64
@@ -20,13 +19,19 @@ from typing import Optional, TYPE_CHECKING
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDateTime
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout,
+    QLabel, QLineEdit, QComboBox,
+    QMessageBox,
+)
 
 from constants import (
-    DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
+    DEFAULT_COLORS, COLOR_INPUT_BORDER,
     COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
-    COLOR_ERROR, COLOR_BTN_BLUE, COLOR_BTN_CYAN,
+    COLOR_BTN_BLUE, COLOR_BTN_CYAN,
 )
+from id_utils import generate_time_based_id
+from ui_helpers import make_button, label_font
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -40,20 +45,23 @@ if TYPE_CHECKING:
 MIN_CALLSIGN_LENGTH = 4
 MAX_CALLSIGN_LENGTH = 8
 MAX_TITLE_LENGTH    = 20
-MAX_MESSAGE_LENGTH  = 80
+MAX_MESSAGE_LENGTH  = 67
 DATABASE_FILE       = "traffic.db3"
-CONFIG_FILE         = "config.ini"
 
 _BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
-_DATAFEED = _BACKBONE + "/datafeed-808585.php"
+_DATAFEED  = _BACKBONE + "/datafeed-808585.php"
 
 INTERNET_RIG = "INTERNET ONLY"
 
-_PROG_BG = DEFAULT_COLORS.get("program_background", "#000000")
-_PROG_FG = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
-_DATA_BG = DEFAULT_COLORS.get("data_background",    "#F8F6F4")
+_PROG_BG  = DEFAULT_COLORS.get("program_background",   "#A52A2A")
+_PROG_FG  = DEFAULT_COLORS.get("program_foreground",   "#FFFFFF")
+_PANEL_BG = DEFAULT_COLORS.get("module_background",    "#DDDDDD")
+_PANEL_FG = DEFAULT_COLORS.get("module_foreground",    "#FFFFFF")
 
 _COL_CANCEL = "#555555"
+
+_WIN_W = 640
+_WIN_H = 360
 
 CALLSIGN_PATTERN = re.compile(r'[A-Z0-9]{1,3}[0-9][A-Z]{1,3}')
 
@@ -64,34 +72,18 @@ COLOR_OPTIONS = [
     ("Black",  4, "#000000", "#ffffff"),
 ]
 
+_READONLY_STYLE = (
+    f"QLineEdit {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT};"
+    f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
+    f" padding:2px 6px; font-family:'Kode Mono'; font-size:13px; }}"
+)
+
 
 # =============================================================================
 # Helpers
 # =============================================================================
 
-def _lbl_font() -> QtGui.QFont:
-    return QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
-
-
-def _mono_font() -> QtGui.QFont:
-    return QtGui.QFont("Kode Mono")
-
-
-def _btn(label: str, color: str, min_w: int = 100) -> QtWidgets.QPushButton:
-    b = QtWidgets.QPushButton(label)
-    b.setMinimumWidth(min_w)
-    b.setStyleSheet(
-        f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
-        f" padding:6px 14px; border-radius:4px; font-family:Roboto; font-size:15px;"
-        f" font-weight:bold; }}"
-        f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
-        f"QPushButton:pressed {{ background-color:{color}; }}"
-        f"QPushButton:disabled {{ background-color:#cccccc; color:#888888; }}"
-    )
-    return b
-
-
-def make_uppercase(field: QtWidgets.QLineEdit) -> None:
+def make_uppercase(field: QLineEdit) -> None:
     def to_upper(text):
         if text != text.upper():
             pos = field.cursorPosition()
@@ -103,238 +95,46 @@ def make_uppercase(field: QtWidgets.QLineEdit) -> None:
 
 
 # =============================================================================
-# Alert Form
+# Dialog
 # =============================================================================
 
-class Ui_FormAlert:
-    """Alert form for creating and transmitting group alerts."""
+class AlertDialog(QDialog):
+    """Group Alert dialog — create and transmit callsign alerts via JS8Call."""
 
     def __init__(
         self,
         tcp_pool: "TCPConnectionPool" = None,
         connector_manager: "ConnectorManager" = None,
         on_alert_saved: callable = None,
+        parent=None,
     ):
-        self.tcp_pool = tcp_pool
-        self.connector_manager = connector_manager
-        self.on_alert_saved = on_alert_saved
-        self.MainWindow: Optional[QtWidgets.QWidget] = None
-        self.callsign: str = ""
-        self.grid: str = ""
+        super().__init__(parent)
+        self.tcp_pool            = tcp_pool
+        self.connector_manager   = connector_manager
+        self.on_alert_saved      = on_alert_saved
+        self.callsign: str       = ""
+        self.grid: str           = ""
         self.selected_group: str = ""
-        self.alert_id: str = ""
-        self._pending_message: str = ""
+        self.alert_id: str       = ""
+        self._pending_message: str  = ""
         self._pending_callsign: str = ""
 
-    def setupUi(self, FormAlert: QtWidgets.QWidget) -> None:
-        self.MainWindow = FormAlert
-        FormAlert.setWindowTitle("Group Alert")
-        FormAlert.setFixedSize(900, 415)
-
+        self.setWindowTitle("Alerts")
+        self.setWindowFlags(
+            QtCore.Qt.Window |
+            QtCore.Qt.CustomizeWindowHint |
+            QtCore.Qt.WindowTitleHint |
+            QtCore.Qt.WindowCloseButtonHint |
+            QtCore.Qt.WindowStaysOnTopHint
+        )
+        self.setFixedSize(_WIN_W, _WIN_H)
         if os.path.exists("radiation-32.png"):
-            FormAlert.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
 
-        _readonly_style = (
-            f"background-color: {COLOR_DISABLED_BG}; color: {COLOR_DISABLED_TEXT}; "
-            f"border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px; "
-            "font-family: 'Kode Mono'; font-size: 13px;"
-        )
-
-        FormAlert.setStyleSheet(f"""
-            QWidget {{ background-color: {_DATA_BG}; }}
-            QLabel {{ color: {COLOR_INPUT_TEXT}; font-size: 13px; }}
-            QLineEdit {{
-                background-color: white; color: {COLOR_INPUT_TEXT};
-                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
-                font-family: 'Kode Mono'; font-size: 13px;
-            }}
-            QComboBox {{
-                background-color: white; color: {COLOR_INPUT_TEXT};
-                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
-                font-family: 'Kode Mono'; font-size: 13px;
-            }}
-            QComboBox:disabled {{
-                background-color: {COLOR_DISABLED_BG}; color: {COLOR_DISABLED_TEXT};
-                border: 1px solid {COLOR_INPUT_BORDER};
-            }}
-            QComboBox QAbstractItemView {{
-                background-color: white; color: {COLOR_INPUT_TEXT};
-                selection-background-color: #cce5ff; selection-color: #000000;
-            }}
-        """)
-
-        layout = QtWidgets.QVBoxLayout(FormAlert)
-        layout.setSpacing(10)
-        layout.setContentsMargins(15, 15, 15, 15)
-
-        # ── Title ──────────────────────────────────────────────────────────────
-        title = QtWidgets.QLabel("GROUP ALERT")
-        title.setAlignment(QtCore.Qt.AlignCenter)
-        title.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
-        title.setFixedHeight(36)
-        title.setStyleSheet(
-            f"QLabel {{ background-color: {_PROG_BG}; color: {_PROG_FG}; "
-            "font-size: 16px; padding-top: 9px; padding-bottom: 9px; }}"
-        )
-        layout.addWidget(title)
-
-        # ── Settings row ───────────────────────────────────────────────────────
-        def _labeled_col(lbl_text, widget):
-            col = QtWidgets.QVBoxLayout()
-            col.setSpacing(2)
-            lbl = QtWidgets.QLabel(lbl_text)
-            lbl.setFont(_lbl_font())
-            col.addWidget(lbl)
-            col.addWidget(widget)
-            return col
-
-        settings_row = QtWidgets.QHBoxLayout()
-        settings_row.setSpacing(12)
-
-        settings_lbl = QtWidgets.QLabel("Settings:")
-        settings_lbl.setFont(_lbl_font())
-        settings_row.addWidget(settings_lbl)
-
-        self.rig_combo = QtWidgets.QComboBox()
-        settings_row.addLayout(_labeled_col("Rig:", self.rig_combo))
-
-        self.mode_combo = QtWidgets.QComboBox()
-        self.mode_combo.addItem("Slow", 4)
-        self.mode_combo.addItem("Normal", 0)
-        self.mode_combo.addItem("Fast", 1)
-        self.mode_combo.addItem("Turbo", 2)
-        self.mode_combo.addItem("Ultra", 8)
-        settings_row.addLayout(_labeled_col("Mode:", self.mode_combo))
-
-        self.freq_field = QtWidgets.QLineEdit()
-        self.freq_field.setReadOnly(True)
-        self.freq_field.setFixedWidth(90)
-        self.freq_field.setStyleSheet(_readonly_style)
-        settings_row.addLayout(_labeled_col("Freq:", self.freq_field))
-
-        self.delivery_combo = QtWidgets.QComboBox()
-        self.delivery_combo.addItem("Maximum Reach")
-        self.delivery_combo.addItem("Limited Reach")
-        settings_row.addLayout(_labeled_col("Delivery:", self.delivery_combo))
-
-        settings_row.addStretch()
-        layout.addLayout(settings_row)
-
-        # ── Target row ─────────────────────────────────────────────────────────
-        target_row = QtWidgets.QHBoxLayout()
-        target_row.setSpacing(8)
-
-        target_lbl = QtWidgets.QLabel("Target:")
-        target_lbl.setFont(_lbl_font())
-        target_row.addWidget(target_lbl)
-
-        self.group_combo = QtWidgets.QComboBox()
-        self.group_combo.setMinimumWidth(150)
-        target_row.addWidget(self.group_combo)
-
-        or_lbl = QtWidgets.QLabel("OR Callsign")
-        or_lbl.setFont(_lbl_font())
-        target_row.addWidget(or_lbl)
-
-        self.target_call_field = QtWidgets.QLineEdit()
-        self.target_call_field.setMaxLength(12)
-        self.target_call_field.setPlaceholderText("e.g. N0CALL")
-        self.target_call_field.setFixedWidth(130)
-        target_row.addWidget(self.target_call_field)
-        target_row.addStretch()
-        layout.addLayout(target_row)
-
-        # ── From Callsign row ──────────────────────────────────────────────────
-        callsign_row = QtWidgets.QHBoxLayout()
-        callsign_row.setSpacing(8)
-
-        cs_lbl = QtWidgets.QLabel("From Callsign:")
-        cs_lbl.setFont(_lbl_font())
-        callsign_row.addWidget(cs_lbl)
-
-        self.callsign_field = QtWidgets.QLineEdit()
-        self.callsign_field.setMaxLength(MAX_CALLSIGN_LENGTH)
-        self.callsign_field.setReadOnly(True)
-        self.callsign_field.setFixedWidth(110)
-        self.callsign_field.setStyleSheet(_readonly_style)
-        callsign_row.addWidget(self.callsign_field)
-        callsign_row.addStretch()
-        layout.addLayout(callsign_row)
-
-        # ── Color combo (functional, not displayed) ────────────────────────────
-        self.color_combo = QtWidgets.QComboBox()
-        for name, value, _bg, _fg in COLOR_OPTIONS:
-            self.color_combo.addItem(name, value)
-        self.color_combo.setCurrentIndex(0)
-        self.color_samples = []
-
-        # ── Title field row ────────────────────────────────────────────────────
-        title_row = QtWidgets.QHBoxLayout()
-        title_row.setSpacing(8)
-
-        title_input_lbl = QtWidgets.QLabel("Title:")
-        title_input_lbl.setFont(_lbl_font())
-        title_input_lbl.setFixedWidth(110)
-        title_row.addWidget(title_input_lbl)
-
-        self.title_field = QtWidgets.QLineEdit()
-        self.title_field.setMaxLength(MAX_TITLE_LENGTH)
-        self.title_field.setFixedWidth(230)
-        title_row.addWidget(self.title_field)
-        title_row.addStretch()
-        layout.addLayout(title_row)
-
-        # ── Message field row ──────────────────────────────────────────────────
-        message_row = QtWidgets.QHBoxLayout()
-        message_row.setSpacing(8)
-
-        message_lbl = QtWidgets.QLabel("Message:")
-        message_lbl.setFont(_lbl_font())
-        message_lbl.setFixedWidth(110)
-        message_row.addWidget(message_lbl)
-
-        self.message_field = QtWidgets.QLineEdit()
-        self.message_field.setMaxLength(MAX_MESSAGE_LENGTH)
-        message_row.addWidget(self.message_field)
-        layout.addLayout(message_row)
-
-        # ── Notes ──────────────────────────────────────────────────────────────
-        _note_style = (
-            f"color: {COLOR_ERROR}; font-family: Roboto; font-size: 10px; font-weight: bold;"
-        )
-
-        note_lbl = QtWidgets.QLabel("Title: 20 chars max. Message: 80 chars max.")
-        note_lbl.setStyleSheet(_note_style)
-        layout.addWidget(note_lbl)
-
-        legend_lbl = QtWidgets.QLabel("Delivery: Maximum Reach = RF + Internet | Limited Reach = RF Only")
-        legend_lbl.setStyleSheet(_note_style)
-        layout.addWidget(legend_lbl)
-
-        layout.addStretch()
-
-        # ── Buttons ────────────────────────────────────────────────────────────
-        btn_row = QtWidgets.QHBoxLayout()
-        btn_row.addStretch()
-
-        self.save_button = _btn("Save Only", COLOR_BTN_CYAN)
-        self.save_button.clicked.connect(self._save_only)
-        btn_row.addWidget(self.save_button)
-
-        self.transmit_button = _btn("Transmit", COLOR_BTN_BLUE)
-        self.transmit_button.clicked.connect(self._transmit)
-        btn_row.addWidget(self.transmit_button)
-
-        self.cancel_button = _btn("Cancel", _COL_CANCEL)
-        self.cancel_button.clicked.connect(self.MainWindow.close)
-        btn_row.addWidget(self.cancel_button)
-
-        layout.addLayout(btn_row)
-
-        QtCore.QMetaObject.connectSlotsByName(FormAlert)
-
+        self._setup_ui()
         self._generate_alert_id()
         self._load_config()
+        self._load_rigs()
 
         self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
@@ -342,15 +142,148 @@ class Ui_FormAlert:
         self.target_call_field.textChanged.connect(self._on_target_callsign_changed)
         make_uppercase(self.target_call_field)
 
-        self._load_rigs()
+    # =========================================================================
+    # UI Construction
+    # =========================================================================
 
-        FormAlert.setWindowFlags(
-            QtCore.Qt.Window |
-            QtCore.Qt.CustomizeWindowHint |
-            QtCore.Qt.WindowTitleHint |
-            QtCore.Qt.WindowCloseButtonHint |
-            QtCore.Qt.WindowStaysOnTopHint
+    def _setup_ui(self) -> None:
+        self.setStyleSheet(
+            f"QDialog {{ background-color:{_PANEL_BG}; }}"
+            f"QLabel {{ font-family:Roboto; font-size:13px; color:{_PANEL_FG}; }}"
+            f"QLineEdit {{ background-color:white; color:#333333; border:1px solid #cccccc;"
+            f" border-radius:4px; padding:2px 6px; font-family:'Kode Mono'; font-size:13px; }}"
+            f"QLineEdit:focus {{ border:1px solid #007bff; }}"
+            f"QComboBox {{ background-color:white; color:#333333; border:1px solid #cccccc;"
+            f" border-radius:4px; padding:2px 4px; font-family:'Kode Mono'; font-size:13px; }}"
+            f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG};"
+            f" color:{COLOR_DISABLED_TEXT}; }}"
+            f"QComboBox QAbstractItemView {{ background-color:white; color:#333333;"
+            f" selection-background-color:#cce5ff; selection-color:#000000; }}"
         )
+
+        body = QVBoxLayout(self)
+        body.setContentsMargins(15, 15, 15, 15)
+        body.setSpacing(10)
+
+        # ── Title ─────────────────────────────────────────────────────────────
+        title_lbl = QLabel("GROUP ALERT / CALLSIGN ALERT")
+        title_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        title_lbl.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
+        title_lbl.setFixedHeight(36)
+        title_lbl.setStyleSheet(
+            f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
+            f" padding-top:9px; padding-bottom:9px; }}"
+        )
+        body.addWidget(title_lbl)
+
+        # ── Settings row ──────────────────────────────────────────────────────
+        def _labeled_col(lbl_text, widget):
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            lbl = QLabel(lbl_text)
+            lbl.setFont(label_font())
+            col.addWidget(lbl)
+            col.addWidget(widget)
+            return col
+
+        settings_row = QHBoxLayout()
+        settings_row.setSpacing(12)
+
+        self.rig_combo = QComboBox()
+        settings_row.addLayout(_labeled_col("Rig:", self.rig_combo))
+
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("Slow",   4)
+        self.mode_combo.addItem("Normal", 0)
+        self.mode_combo.addItem("Fast",   1)
+        self.mode_combo.addItem("Turbo",  2)
+        self.mode_combo.addItem("Ultra",  8)
+        settings_row.addLayout(_labeled_col("Mode:", self.mode_combo))
+
+        self.freq_field = QLineEdit()
+        self.freq_field.setReadOnly(True)
+        self.freq_field.setFixedWidth(90)
+        settings_row.addLayout(_labeled_col("Freq:", self.freq_field))
+
+        self.delivery_combo = QComboBox()
+        self.delivery_combo.addItem("Maximum Reach")
+        self.delivery_combo.addItem("Limited Reach")
+        settings_row.addLayout(_labeled_col("Delivery:", self.delivery_combo))
+
+        settings_row.addStretch()
+        body.addLayout(settings_row)
+
+        # ── Target ────────────────────────────────────────────────────────────
+        target_lbl = QLabel("Target:")
+        target_lbl.setFont(label_font())
+        body.addWidget(target_lbl)
+
+        target_row = QHBoxLayout()
+        target_row.setSpacing(8)
+
+        self.group_combo = QComboBox()
+        self.group_combo.setMinimumWidth(150)
+        target_row.addWidget(self.group_combo)
+
+        or_lbl = QLabel("OR Callsign")
+        or_lbl.setFont(label_font())
+        target_row.addWidget(or_lbl)
+
+        self.target_call_field = QLineEdit()
+        self.target_call_field.setMaxLength(12)
+        self.target_call_field.setPlaceholderText("e.g. N0CALL")
+        self.target_call_field.setFixedWidth(150)
+        target_row.addWidget(self.target_call_field)
+        target_row.addStretch()
+        body.addLayout(target_row)
+
+        # ── Color combo (functional, not displayed) ───────────────────────────
+        self.color_combo = QComboBox()
+        for name, value, _bg, _fg in COLOR_OPTIONS:
+            self.color_combo.addItem(name, value)
+        self.color_combo.setCurrentIndex(0)
+
+        # ── Title field ───────────────────────────────────────────────────────
+        title_input_lbl = QLabel("Title:")
+        title_input_lbl.setFont(label_font())
+        body.addWidget(title_input_lbl)
+
+        self.title_field = QLineEdit()
+        self.title_field.setMaxLength(MAX_TITLE_LENGTH)
+        self.title_field.setPlaceholderText("20 characters max")
+        body.addWidget(self.title_field)
+
+        # ── Message field ─────────────────────────────────────────────────────
+        message_lbl = QLabel("Message:")
+        message_lbl.setFont(label_font())
+        body.addWidget(message_lbl)
+
+        self.message_field = QLineEdit()
+        self.message_field.setMaxLength(MAX_MESSAGE_LENGTH)
+        self.message_field.setPlaceholderText("67 characters max")
+        body.addWidget(self.message_field)
+
+        body.addStretch()
+
+        # ── Buttons ───────────────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+
+        self.save_button = make_button("Save Only", COLOR_BTN_CYAN, min_w=100)
+        self.save_button.clicked.connect(self._save_only)
+        btn_row.addWidget(self.save_button)
+
+        self.transmit_button = make_button("Transmit", COLOR_BTN_BLUE, min_w=100)
+        self.transmit_button.clicked.connect(self._transmit)
+        btn_row.addWidget(self.transmit_button)
+
+        self.cancel_button = make_button("Cancel", _COL_CANCEL, min_w=100)
+        self.cancel_button.clicked.connect(self.close)
+        btn_row.addWidget(self.cancel_button)
+
+        body.addLayout(btn_row)
 
     # =========================================================================
     # Config / DB
@@ -388,49 +321,39 @@ class Ui_FormAlert:
     def _on_rig_changed(self, rig_name: str) -> None:
         if not rig_name or "(disconnected)" in rig_name:
             self.callsign = ""
-            self.callsign_field.setText("")
-            if hasattr(self, 'freq_field'):
-                self.freq_field.setText("")
+            self.freq_field.setText("")
             return
 
         is_internet = (rig_name == INTERNET_RIG)
-        if hasattr(self, 'delivery_combo'):
-            self.delivery_combo.blockSignals(True)
-            self.delivery_combo.clear()
-            self.delivery_combo.addItem("Maximum Reach")
-            if not is_internet:
-                self.delivery_combo.addItem("Limited Reach")
-            self.delivery_combo.blockSignals(False)
+        self.delivery_combo.blockSignals(True)
+        self.delivery_combo.clear()
+        self.delivery_combo.addItem("Maximum Reach")
+        if not is_internet:
+            self.delivery_combo.addItem("Limited Reach")
+        self.delivery_combo.blockSignals(False)
 
         if rig_name == INTERNET_RIG:
-            callsign = self._get_internet_callsign()
-            self.callsign = callsign
-            self.callsign_field.setText(callsign)
-            if hasattr(self, 'freq_field'):
-                self.freq_field.setText("")
-            if hasattr(self, 'mode_combo'):
-                self.mode_combo.setEnabled(False)
+            self.callsign = self._get_internet_callsign()
+            self.freq_field.setText("")
+            self.mode_combo.setEnabled(False)
             return
 
-        if hasattr(self, 'mode_combo'):
-            self.mode_combo.setEnabled(True)
+        self.mode_combo.setEnabled(True)
 
         if not self.tcp_pool:
             return
 
         client = self.tcp_pool.get_client(rig_name)
         if client and client.is_connected():
-            if hasattr(self, 'mode_combo'):
-                speed_name = (client.speed_name or "").upper()
-                mode_map = {"SLOW": 0, "NORMAL": 1, "FAST": 2, "TURBO": 3, "ULTRA": 4}
-                idx = mode_map.get(speed_name, 1)
-                self.mode_combo.blockSignals(True)
-                self.mode_combo.setCurrentIndex(idx)
-                self.mode_combo.blockSignals(False)
+            speed_name = (client.speed_name or "").upper()
+            mode_map = {"SLOW": 0, "NORMAL": 1, "FAST": 2, "TURBO": 3, "ULTRA": 4}
+            idx = mode_map.get(speed_name, 1)
+            self.mode_combo.blockSignals(True)
+            self.mode_combo.setCurrentIndex(idx)
+            self.mode_combo.blockSignals(False)
 
-            if hasattr(self, 'freq_field'):
-                frequency = client.frequency
-                self.freq_field.setText(f"{frequency:.3f}" if frequency else "")
+            frequency = client.frequency
+            self.freq_field.setText(f"{frequency:.3f}" if frequency else "")
 
             try:
                 client.callsign_received.disconnect(self._on_callsign_received)
@@ -439,13 +362,11 @@ class Ui_FormAlert:
             client.callsign_received.connect(self._on_callsign_received)
             client.get_callsign()
         else:
-            if hasattr(self, 'freq_field'):
-                self.freq_field.setText("")
+            self.freq_field.setText("")
 
     def _on_callsign_received(self, rig_name: str, callsign: str) -> None:
         if self.rig_combo.currentText() == rig_name:
             self.callsign = callsign
-            self.callsign_field.setText(callsign)
 
     def _get_internet_callsign(self) -> str:
         try:
@@ -512,7 +433,7 @@ class Ui_FormAlert:
         return ""
 
     def _show_error(self, message: str) -> None:
-        msg = QMessageBox()
+        msg = QMessageBox(self)
         msg.setWindowTitle("CommStat Error")
         msg.setText(message)
         msg.setIcon(QMessageBox.Critical)
@@ -520,7 +441,7 @@ class Ui_FormAlert:
         msg.exec_()
 
     def _show_info(self, message: str) -> None:
-        msg = QMessageBox()
+        msg = QMessageBox(self)
         msg.setWindowTitle("CommStat TX")
         msg.setText(message)
         msg.setIcon(QMessageBox.Information)
@@ -554,7 +475,7 @@ class Ui_FormAlert:
             return None
 
         if validate_callsign:
-            call = self.callsign_field.text().upper()
+            call = self.callsign.upper()
             if len(call) < MIN_CALLSIGN_LENGTH:
                 self._show_error("Callsign too short (minimum 4 characters)")
                 return None
@@ -570,7 +491,6 @@ class Ui_FormAlert:
         return (call, color_value, title, message)
 
     def _generate_alert_id(self) -> None:
-        from id_utils import generate_time_based_id
         self.alert_id = generate_time_based_id()
 
     def _build_message(self, callsign: str, color: int, title: str, message: str) -> str:
@@ -597,7 +517,7 @@ class Ui_FormAlert:
 
     def _save_to_database(self, callsign: str, color: int, title: str, message: str,
                           frequency: int = 0, db: int = 30) -> None:
-        now = QDateTime.currentDateTime()
+        now          = QDateTime.currentDateTime()
         datetime_str = now.toUTC().toString("yyyy-MM-dd HH:mm:ss")
         date_only    = now.toUTC().toString("yyyy-MM-dd")
         target       = self._get_target()
@@ -623,12 +543,27 @@ class Ui_FormAlert:
                 self._submit_to_backbone_async(frequency, callsign, alert_data, datetime_str)
 
     def _save_only(self) -> None:
+        if self.rig_combo.currentText() == INTERNET_RIG:
+            self.callsign = self._get_internet_callsign()
+            if not self.callsign:
+                self._show_error(
+                    "No callsign configured.\n\n"
+                    "Please set your callsign in Settings → User Settings."
+                )
+                return
+        elif not self.callsign:
+            self._show_error(
+                "Callsign not yet received from the rig.\n\n"
+                "Please wait a moment and try again."
+            )
+            return
+
         result = self._validate_input(validate_callsign=True)
         if result is None:
             return
         callsign, color, title, message = result
         self._save_to_database(callsign, color, title, message)
-        self.MainWindow.close()
+        self.close()
         if self.on_alert_saved:
             self.on_alert_saved()
 
@@ -653,7 +588,7 @@ class Ui_FormAlert:
             self._save_to_database(callsign, color, title, message, frequency=0)
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
             self._submit_to_backbone_async(0, callsign, self._pending_message, now)
-            self.MainWindow.close()
+            self.close()
             if self.on_alert_saved:
                 self.on_alert_saved()
             return
@@ -669,6 +604,13 @@ class Ui_FormAlert:
         client = self.tcp_pool.get_client(rig_name)
         if not client or not client.is_connected():
             self._show_error("Cannot transmit: not connected to rig")
+            return
+
+        if not callsign:
+            self._show_error(
+                "Callsign not yet received from the rig.\n\n"
+                "Please wait a moment and try again."
+            )
             return
 
         self._pending_message       = self._build_message(callsign, color, title, message)
@@ -696,8 +638,8 @@ class Ui_FormAlert:
                 pass
 
         if selected_call:
-            QtWidgets.QMessageBox.critical(
-                self.MainWindow, "ERROR",
+            QMessageBox.critical(
+                self, "ERROR",
                 f"JS8Call has {selected_call} selected.\n\n"
                 "Go to JS8Call and click the \"Deselect\" button."
             )
@@ -731,11 +673,15 @@ class Ui_FormAlert:
                 self._pending_alert_message,
                 frequency,
             )
-            self.MainWindow.close()
+            self.close()
             if self.on_alert_saved:
                 self.on_alert_saved()
         except Exception as e:
             self._show_error(f"Failed to transmit alert: {e}")
+
+
+# Keep legacy name so any other import sites don't break immediately
+Ui_FormAlert = AlertDialog
 
 
 if __name__ == "__main__":
@@ -748,8 +694,6 @@ if __name__ == "__main__":
     tcp_pool = TCPConnectionPool(connector_manager)
     tcp_pool.connect_all()
 
-    FormAlert = QtWidgets.QWidget()
-    ui = Ui_FormAlert(tcp_pool, connector_manager)
-    ui.setupUi(FormAlert)
-    FormAlert.show()
+    dlg = AlertDialog(tcp_pool, connector_manager)
+    dlg.exec_()
     sys.exit(app.exec_())

@@ -20,8 +20,8 @@ from constants import (
     COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
     COLOR_BTN_BLUE, COLOR_BTN_RED,
-    COLOR_ERROR,
 )
+from ui_helpers import make_button
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -39,10 +39,10 @@ MAX_MESSAGE_LENGTH = 67
 WINDOW_WIDTH = 560
 WINDOW_HEIGHT = 360
 
-_PROGRAM_BG = DEFAULT_COLORS['program_background']
-_PROGRAM_FG = DEFAULT_COLORS['program_foreground']
-_PANEL_BG   = DEFAULT_COLORS['module_background']
-_DATA_BG    = DEFAULT_COLORS['data_background']
+_PROG_BG  = DEFAULT_COLORS.get("program_background",   "#A52A2A")
+_PROG_FG  = DEFAULT_COLORS.get("program_foreground",   "#FFFFFF")
+_PANEL_BG = DEFAULT_COLORS.get("module_background",    "#DDDDDD")
+_PANEL_FG = DEFAULT_COLORS.get("module_foreground",    "#FFFFFF")
 
 
 # =============================================================================
@@ -84,25 +84,19 @@ class JS8SMSDialog(QDialog):
 
     def _setup_ui(self) -> None:
         """Build the user interface."""
-        self.setStyleSheet(f"""
-            QDialog {{ background-color: {_PANEL_BG}; }}
-            QLabel {{ color: {COLOR_INPUT_TEXT}; font-size: 13px; }}
-            QLineEdit {{
-                background-color: white; color: {COLOR_INPUT_TEXT};
-                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
-                font-family: 'Kode Mono'; font-size: 13px;
-            }}
-            QComboBox {{
-                background-color: white; color: {COLOR_INPUT_TEXT};
-                border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
-                font-family: 'Kode Mono'; font-size: 13px;
-            }}
-            QComboBox:disabled {{ background-color: {COLOR_DISABLED_BG}; color: {COLOR_DISABLED_TEXT}; }}
-            QComboBox QAbstractItemView {{
-                background-color: white; color: {COLOR_INPUT_TEXT};
-                selection-background-color: #0078d7; selection-color: white;
-            }}
-        """)
+        self.setStyleSheet(
+            f"QDialog {{ background-color:{_PANEL_BG}; }}"
+            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}"
+            f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT}; }}"
+            f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" selection-background-color:#cce5ff; selection-color:#000000; }}"
+        )
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(2)
@@ -114,145 +108,109 @@ class JS8SMSDialog(QDialog):
         title.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title.setFixedHeight(36)
         title.setStyleSheet(
-            f"QLabel {{ background-color: {_PROGRAM_BG}; color: {_PROGRAM_FG}; "
-            "font-size: 16px; padding-top: 9px; padding-bottom: 9px; }}"
+            f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
+            f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
-        layout.addSpacing(30)
+
+        # Warning (below title)
+        warning = QtWidgets.QLabel("Sending SMS depends on APRS services being available.")
+        warning.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        layout.addWidget(warning)
 
         # Rig / Mode / Frequency row
+        def _labeled_col(lbl_text, ctrl):
+            col = QtWidgets.QVBoxLayout()
+            col.setSpacing(2)
+            lbl = QtWidgets.QLabel(lbl_text)
+            lbl.setStyleSheet(
+                "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+            )
+            col.addWidget(lbl)
+            col.addWidget(ctrl)
+            return col
+
         rig_row = QtWidgets.QHBoxLayout()
         rig_row.setSpacing(8)
 
-        rig_label = QtWidgets.QLabel("Rig:")
-        _lbl_font = QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
-        rig_label.setFont(_lbl_font)
-        rig_row.addWidget(rig_label)
-
         self.rig_combo = QtWidgets.QComboBox()
-        _km_font = QtGui.QFont("Kode Mono")
-        self.rig_combo.setFont(_km_font)
         self.rig_combo.setMinimumWidth(140)
         self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
-        rig_row.addWidget(self.rig_combo)
-
-        mode_label = QtWidgets.QLabel("Mode:")
-        mode_label.setFont(_lbl_font)
-        rig_row.addWidget(mode_label)
+        rig_row.addLayout(_labeled_col("Rig:", self.rig_combo))
 
         self.mode_combo = QtWidgets.QComboBox()
-        self.mode_combo.setFont(_km_font)
         self.mode_combo.addItem("Slow", 4)
         self.mode_combo.addItem("Normal", 0)
         self.mode_combo.addItem("Fast", 1)
         self.mode_combo.addItem("Turbo", 2)
         self.mode_combo.addItem("Ultra", 8)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
-        rig_row.addWidget(self.mode_combo)
-
-        freq_label = QtWidgets.QLabel("Freq:")
-        freq_label.setFont(_lbl_font)
-        rig_row.addWidget(freq_label)
+        rig_row.addLayout(_labeled_col("Mode:", self.mode_combo))
 
         self.freq_field = QtWidgets.QLineEdit()
-        self.freq_field.setFont(_km_font)
         self.freq_field.setFixedWidth(80)
         self.freq_field.setReadOnly(True)
         self.freq_field.setStyleSheet(
-            f"background-color: white; color: {COLOR_INPUT_TEXT}; "
-            f"border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;"
-            " font-family: 'Kode Mono'; font-size: 13px;"
+            f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
+            f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
         )
-        rig_row.addWidget(self.freq_field)
+        rig_row.addLayout(_labeled_col("Freq:", self.freq_field))
+
         rig_row.addStretch()
         layout.addLayout(rig_row)
 
-        # Warning
-        warning = QtWidgets.QLabel("Sending SMS depends on APRS services being available.")
-        warning.setAlignment(Qt.AlignLeft)
-        warning.setFixedHeight(30)
-        warning.setStyleSheet(f"color: {COLOR_INPUT_TEXT}; font-family: Roboto; font-weight: normal;")
-        layout.addWidget(warning)
-
         # Phone number
-        phone_group = QtWidgets.QVBoxLayout()
-        phone_group.setSpacing(4)
         phone_label = QtWidgets.QLabel("Phone Number:")
-        phone_label.setFont(_lbl_font)
-        phone_group.addWidget(phone_label)
+        phone_label.setStyleSheet(
+            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+        )
+        layout.addWidget(phone_label)
         self.phone_field = QtWidgets.QLineEdit()
-        self.phone_field.setFont(_km_font)
         self.phone_field.setMinimumHeight(30)
         self.phone_field.setInputMask("999-999-9999")
         self.phone_field.setPlaceholderText("xxx-xxx-xxxx")
-        phone_group.addWidget(self.phone_field)
-        layout.addLayout(phone_group)
+        layout.addWidget(self.phone_field)
 
         # Message
-        msg_group = QtWidgets.QVBoxLayout()
-        msg_group.setSpacing(4)
         message_label = QtWidgets.QLabel("Text Message:")
-        message_label.setFont(_lbl_font)
-        msg_group.addWidget(message_label)
+        message_label.setStyleSheet(
+            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+        )
+        layout.addWidget(message_label)
         self.message_field = QtWidgets.QLineEdit()
-        self.message_field.setFont(_km_font)
         self.message_field.setMinimumHeight(30)
         self.message_field.setMaxLength(MAX_MESSAGE_LENGTH)
-        self.message_field.setPlaceholderText("Your message here (max 67 characters)")
+        self.message_field.setPlaceholderText("Your message here (67 characters max)")
         self.message_field.textChanged.connect(self._force_uppercase_message)
-        msg_group.addWidget(self.message_field)
-        layout.addLayout(msg_group)
+        layout.addWidget(self.message_field)
 
         # Note
         note = QtWidgets.QLabel(
-            "Recipients must often opt-in on the SMS gateway before delivery will work.\n"
+            "Recipients must often opt-in on the SMS gateway before delivery will work. "
             "SMS delivery is highly unreliable."
         )
-        note.setAlignment(Qt.AlignLeft)
-        note.setFixedHeight(34)
-        note.setStyleSheet(f"color: {COLOR_INPUT_TEXT}; font-family: Roboto; font-weight: normal;")
+        note.setWordWrap(True)
+        note.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
         layout.addWidget(note)
 
-        layout.addSpacing(12)
+        layout.addStretch()
 
         # Button row
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.setSpacing(8)
         btn_row.addStretch()
 
-        self.btn_transmit = QtWidgets.QPushButton("Transmit")
-        self.btn_transmit.setStyleSheet(self._button_style(COLOR_BTN_BLUE))
-        self.btn_transmit.setMinimumWidth(100)
+        self.btn_transmit = make_button("Transmit", COLOR_BTN_BLUE, min_w=100)
         self.btn_transmit.clicked.connect(self._on_transmit)
         btn_row.addWidget(self.btn_transmit)
 
-        btn_cancel = QtWidgets.QPushButton("Cancel")
-        btn_cancel.setStyleSheet(self._button_style(COLOR_BTN_RED))
-        btn_cancel.setMinimumWidth(100)
+        btn_cancel = make_button("Cancel", COLOR_BTN_RED, min_w=100)
         btn_cancel.clicked.connect(self.close)
         btn_row.addWidget(btn_cancel)
 
         layout.addLayout(btn_row)
-
-    def _button_style(self, color: str) -> str:
-        return f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                border: none;
-                padding: 8px 12px;
-                border-radius: 4px;
-                font-family: Roboto;
-                font-size: 13px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: {color}cc;
-            }}
-            QPushButton:pressed {{
-                background-color: {color}99;
-            }}
-        """
 
     def _force_uppercase_message(self, text: str) -> None:
         upper = text.upper()

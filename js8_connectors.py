@@ -2,11 +2,11 @@
 # This file is part of CommStat.
 # Licensed under the GNU General Public License v3.0.
 """
-js8_connectors2.py - JS8 Connectors Management Dialog
+js8_connectors.py - JS8 Connectors Management Dialog
 
-Modern rewrite of the JS8 Connectors dialog. Displays a table of configured
-JS8Call TCP connectors with Add, Edit, Delete, and Reconnect actions.
-Supports connections to JS8Call instances on remote computers via the Server field.
+Displays a table of configured JS8Call TCP connectors with Add, Edit, Delete,
+and Reconnect actions. Editing is done inline directly in the table row.
+The Status column (index 4) is live and read-only — never replaced with a widget.
 """
 
 import os
@@ -15,19 +15,21 @@ from typing import Optional
 from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
-    QHeaderView, QFrame, QMessageBox, QAbstractItemView,
+    QDialog, QVBoxLayout, QHBoxLayout,
+    QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
+    QHeaderView, QMessageBox, QAbstractItemView,
 )
 
 from connector_manager import ConnectorManager, DEFAULT_SERVER, DEFAULT_TCP_PORT
 from constants import DEFAULT_COLORS
+from ui_helpers import make_button, make_input, mono_font
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 _PROG_BG   = DEFAULT_COLORS.get("program_background",   "#A52A2A")
 _PROG_FG   = DEFAULT_COLORS.get("program_foreground",   "#FFFFFF")
 _PANEL_BG  = DEFAULT_COLORS.get("module_background",    "#DDDDDD")
+_PANEL_FG  = DEFAULT_COLORS.get("module_foreground",    "#FFFFFF")
 _TITLE_BG  = DEFAULT_COLORS.get("title_bar_background", "#F07800")
 _TITLE_FG  = DEFAULT_COLORS.get("title_bar_foreground", "#FFFFFF")
 _DATA_BG   = DEFAULT_COLORS.get("data_background",      "#F8F6F4")
@@ -41,56 +43,16 @@ _COL_CLOSE      = "#555555"
 _COL_SAVE       = "#28a745"
 _COL_CANCEL     = "#555555"
 
-_COL_CONNECTED    = "#1a7f37"   # dark green text
-_COL_DISCONNECTED = "#cc0000"   # red text
-_COL_DISABLED     = "#888888"   # gray text
+_COL_CONNECTED    = "#1a7f37"
+_COL_DISCONNECTED = "#cc0000"
+_COL_DISABLED     = "#888888"
 
-_WIN_W          = 620
-_WIN_H_LIST     = 400           # height when form is hidden
-_WIN_H_FORM     = 660           # height when form is visible
+_WIN_W = 620
+_WIN_H = 350
 
 _TABLE_COLS = ["Rig Name", "Server", "Port", "State", "Status", "Comment"]
 
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-def _btn(label: str, color: str, min_w: int = 90) -> QPushButton:
-    b = QPushButton(label)
-    b.setMinimumWidth(min_w)
-    b.setStyleSheet(
-        f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
-        f" padding:6px 14px; border-radius:4px; font-family:Roboto; font-size:15px;"
-        f" font-weight:bold; }}"
-        f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
-        f"QPushButton:pressed {{ background-color:{color}; }}"
-        f"QPushButton:disabled {{ background-color:#cccccc; color:#888888; }}"
-    )
-    return b
-
-
-def _lbl_font(bold: bool = True) -> QtGui.QFont:
-    return QtGui.QFont("Roboto", -1, QtGui.QFont.Bold if bold else QtGui.QFont.Normal)
-
-
-def _mono_font() -> QtGui.QFont:
-    return QtGui.QFont("Kode Mono")
-
-
-def _input(placeholder: str = "", default: str = "", max_len: int = 0) -> QLineEdit:
-    e = QLineEdit()
-    if placeholder:
-        e.setPlaceholderText(placeholder)
-    if default:
-        e.setText(default)
-    if max_len:
-        e.setMaxLength(max_len)
-    e.setMinimumHeight(30)
-    e.setStyleSheet(
-        "QLineEdit { background-color:white; color:#333333; border:1px solid #cccccc;"
-        " border-radius:4px; padding:2px 6px; font-family:'Kode Mono'; font-size:13px; }"
-        "QLineEdit:focus { border:1px solid #007bff; }"
-    )
-    return e
+_STATUS_COL = 4   # live read-only column — never gets setCellWidget
 
 
 # ── Dialog ─────────────────────────────────────────────────────────────────────
@@ -98,16 +60,20 @@ def _input(placeholder: str = "", default: str = "", max_len: int = 0) -> QLineE
 class JS8ConnectorsDialog(QDialog):
     """JS8 Connectors management dialog — list, add, edit, delete, reconnect."""
 
-    def __init__(
-        self,
-        connector_manager: ConnectorManager,
-        tcp_pool,
-        parent=None
-    ):
+    def __init__(self, connector_manager: ConnectorManager, tcp_pool, parent=None):
         super().__init__(parent)
         self.connector_manager = connector_manager
         self.tcp_pool = tcp_pool
-        self._edit_id: Optional[int] = None   # None = adding, int = editing
+
+        self._edit_id: Optional[int] = None
+        self._in_edit_mode: bool = False
+        self._edit_row: int = -1
+        self._adding: bool = False
+        self._iw_rig:     Optional[QLineEdit] = None
+        self._iw_server:  Optional[QLineEdit] = None
+        self._iw_port:    Optional[QLineEdit] = None
+        self._iw_state:   Optional[QLineEdit] = None
+        self._iw_comment: Optional[QLineEdit] = None
 
         self.setWindowTitle("JS8 Connectors")
         self.setWindowFlags(
@@ -117,14 +83,13 @@ class JS8ConnectorsDialog(QDialog):
             Qt.WindowCloseButtonHint |
             Qt.WindowStaysOnTopHint
         )
-        self.setFixedSize(_WIN_W, _WIN_H_LIST)
+        self.setFixedSize(_WIN_W, _WIN_H)
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
 
         self._setup_ui()
         self._load_connectors()
 
-        # Refresh table whenever any connection state changes (async connect/disconnect)
         if self.tcp_pool and hasattr(self.tcp_pool, "any_connection_changed"):
             self.tcp_pool.any_connection_changed.connect(self._on_connection_changed)
 
@@ -147,7 +112,8 @@ class JS8ConnectorsDialog(QDialog):
         title_lbl.setFixedHeight(36)
         title_lbl.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            " font-size:16px; padding-top:9px; padding-bottom:9px; }}"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
+            f" padding-top:9px; padding-bottom:9px; }}"
         )
         body.addWidget(title_lbl)
 
@@ -162,14 +128,13 @@ class JS8ConnectorsDialog(QDialog):
         self.table.setAlternatingRowColors(True)
         self.table.setMinimumHeight(160)
 
-        # Header style
         hh = self.table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Rig Name
-        hh.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Server
-        hh.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Port
-        hh.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # State
-        hh.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Status
-        hh.setSectionResizeMode(5, QHeaderView.Stretch)           # Comment
+        hh.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(5, QHeaderView.Stretch)
 
         self.table.setStyleSheet(
             f"QTableWidget {{ background-color:{_DATA_BG}; alternate-background-color:{_DATA_BG};"
@@ -189,134 +154,72 @@ class JS8ConnectorsDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
-        self.btn_add       = _btn("Add",       _COL_ADD,       80)
-        self.btn_edit      = _btn("Edit",      _COL_EDIT,      80)
-        self.btn_delete    = _btn("Delete",    _COL_DELETE,    80)
-        self.btn_reconnect = _btn("Reconnect", _COL_RECONNECT, 100)
-        self.btn_close     = _btn("Close",     _COL_CLOSE,     80)
+        self.btn_add       = make_button("Add",       _COL_ADD,       80)
+        self.btn_edit      = make_button("Edit",      _COL_EDIT,      80)
+        self.btn_delete    = make_button("Delete",    _COL_DELETE,    80)
+        self.btn_reconnect = make_button("Reconnect", _COL_RECONNECT, 100)
+        self.btn_save      = make_button("Save",      _COL_SAVE,      80)
+        self.btn_cancel    = make_button("Cancel",    _COL_CANCEL,    80)
+        self.btn_close     = make_button("Close",     _COL_CLOSE,     80)
 
         self.btn_edit.setEnabled(False)
         self.btn_delete.setEnabled(False)
         self.btn_reconnect.setEnabled(False)
+        self.btn_save.setVisible(False)
+        self.btn_cancel.setVisible(False)
+        self.btn_save.setEnabled(False)
 
         self.btn_add.clicked.connect(self._on_add)
         self.btn_edit.clicked.connect(self._on_edit)
         self.btn_delete.clicked.connect(self._on_delete)
         self.btn_reconnect.clicked.connect(self._on_reconnect)
+        self.btn_save.clicked.connect(lambda: self._exit_edit_mode(save=True))
+        self.btn_cancel.clicked.connect(lambda: self._exit_edit_mode(save=False))
         self.btn_close.clicked.connect(self.accept)
 
         btn_row.addWidget(self.btn_add)
         btn_row.addWidget(self.btn_edit)
         btn_row.addWidget(self.btn_delete)
         btn_row.addWidget(self.btn_reconnect)
+        btn_row.addWidget(self.btn_save)
+        btn_row.addWidget(self.btn_cancel)
         btn_row.addStretch()
         btn_row.addWidget(self.btn_close)
         body.addLayout(btn_row)
 
-        # ── Add/Edit form (hidden by default) ─────────────────────────────────
-        self.form_frame = QFrame()
-        self.form_frame.setFrameShape(QFrame.StyledPanel)
-        self.form_frame.setStyleSheet(
-            f"QFrame {{ background-color:#f9f9f9; border:1px solid #cccccc;"
-            f" border-radius:6px; }}"
-        )
-        form_layout = QVBoxLayout(self.form_frame)
-        form_layout.setContentsMargins(14, 10, 14, 10)
-        form_layout.setSpacing(8)
-
-        self.form_title_lbl = QLabel("Add Connector")
-        self.form_title_lbl.setFont(_lbl_font(bold=True))
-        self.form_title_lbl.setStyleSheet(f"color:{_PROG_BG}; border:none;")
-        form_layout.addWidget(self.form_title_lbl)
-
-        grid = QGridLayout()
-        grid.setSpacing(6)
-        grid.setColumnStretch(1, 1)
-
-        def _row_label(text: str) -> QLabel:
-            lbl = QLabel(text)
-            lbl.setFont(_lbl_font(bold=True))
-            lbl.setStyleSheet("color:#333333; border:none;")
-            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            return lbl
-
-        self.f_rig     = _input("e.g. IC-7300, FTDX10", max_len=20)
-        self.f_server  = _input(default=DEFAULT_SERVER)
-        self.f_port    = _input(default=str(DEFAULT_TCP_PORT), max_len=5)
-        self.f_state   = _input("e.g. TX", max_len=2)
-        self.f_comment = _input("Optional Description", max_len=60)
-
-        self.f_state.textChanged.connect(
-            lambda t: self.f_state.setText(t.upper()) if t != t.upper() else None
-        )
-
-        grid.addWidget(_row_label("Rig Name:"), 0, 0)
-        grid.addWidget(self.f_rig,              0, 1)
-        grid.addWidget(_row_label("Server:"),   1, 0)
-        grid.addWidget(self.f_server,           1, 1)
-        grid.addWidget(_row_label("Port:"),     2, 0)
-        grid.addWidget(self.f_port,             2, 1)
-        grid.addWidget(_row_label("State:"),    3, 0)
-        grid.addWidget(self.f_state,            3, 1)
-        grid.addWidget(_row_label("Comment:"),  4, 0)
-        grid.addWidget(self.f_comment,          4, 1)
-
-        form_layout.addLayout(grid)
-
-        # Form action buttons
-        form_btn_row = QHBoxLayout()
-        form_btn_row.setSpacing(8)
-        self.btn_save   = _btn("Save Connector", _COL_SAVE,   130)
-        self.btn_cancel = _btn("Cancel",         _COL_CANCEL,  80)
-        self.btn_save.setEnabled(False)
-        self.btn_save.clicked.connect(self._on_save)
-        self.btn_cancel.clicked.connect(self._on_cancel)
-        form_btn_row.addStretch()
-        form_btn_row.addWidget(self.btn_save)
-        form_btn_row.addWidget(self.btn_cancel)
-        form_layout.addLayout(form_btn_row)
-
-        self.form_frame.setVisible(False)
-        body.addWidget(self.form_frame)
-
         # ── Tip / Note ────────────────────────────────────────────────────────
         tip_lbl = QLabel(
-            "<i><b><span style='color:#AA0000'>Tip:</span></b> Enable both TCP settings"
-            " in JS8Call under File &gt; Settings &gt; Reporting</i><br>"
-            "<i><b><span style='color:#AA0000'>Note:</span></b> Each connector requires"
-            " a unique port</i>"
+            f"<b><span style='color:#AA0000'>Tip:</span></b>"
+            f" <span style='color:{_PANEL_FG}'>Enable both TCP settings"
+            f" in JS8Call under File &gt; Settings &gt; Reporting</span><br>"
+            f"<b><span style='color:#AA0000'>Edit:</span></b>"
+            f" <span style='color:{_PANEL_FG}'>Increase TCP Max Connections by 1</span><br>"
+            f"<b><span style='color:#AA0000'>Note:</span></b>"
+            f" <span style='color:{_PANEL_FG}'>Each connector requires a unique IP address and port combination</span>"
         )
-        tip_lbl.setFont(_lbl_font(bold=False))
         tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet("color:#333333;")
         body.addWidget(tip_lbl)
-
-        # Wire up save-button enable/disable
-        self.f_rig.textChanged.connect(self._on_form_changed)
-        self.f_port.textChanged.connect(self._on_form_changed)
 
     # ── Data loading ───────────────────────────────────────────────────────────
 
     def _load_connectors(self) -> None:
-        """Reload the connector table from the database."""
         connectors = self.connector_manager.get_all_connectors()
         status_map: dict = {}
         if self.tcp_pool and hasattr(self.tcp_pool, "get_connection_status"):
             status_map = self.tcp_pool.get_connection_status()
 
         self.table.setRowCount(0)
-        mono = _mono_font()
+        mono = mono_font()
 
         for row_idx, conn in enumerate(connectors):
             self.table.insertRow(row_idx)
 
-            is_default = bool(conn.get("is_default", 0))
             is_enabled = bool(conn.get("enabled", 1))
-            rig        = conn.get("rig_name", "")
-            server     = conn.get("server",   DEFAULT_SERVER)
-            port       = str(conn.get("tcp_port", DEFAULT_TCP_PORT))
-            state      = conn.get("state",    "") or ""
-            comment    = conn.get("comment",  "") or ""
+            rig     = conn.get("rig_name", "")
+            server  = conn.get("server",   DEFAULT_SERVER)
+            port    = str(conn.get("tcp_port", DEFAULT_TCP_PORT))
+            state   = conn.get("state",    "") or ""
+            comment = conn.get("comment",  "") or ""
 
             if not is_enabled:
                 status_text  = "Disabled"
@@ -328,20 +231,14 @@ class JS8ConnectorsDialog(QDialog):
                 status_text  = "Disconnected"
                 status_color = _COL_DISCONNECTED
 
-            cell_font = mono
-            values = [rig, server, port, state, status_text, comment]
-
-            for col_idx, val in enumerate(values):
+            for col_idx, val in enumerate([rig, server, port, state, status_text, comment]):
                 item = QTableWidgetItem(val)
-                item.setFont(cell_font)
+                item.setFont(mono)
                 item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-
-                if col_idx == 4:   # Status column — colored text
+                if col_idx == _STATUS_COL:
                     item.setForeground(QtGui.QColor(status_color))
-
                 self.table.setItem(row_idx, col_idx, item)
 
-            # Store connector id in row's first item UserRole
             self.table.item(row_idx, 0).setData(Qt.UserRole, conn["id"])
 
         self._on_selection_changed()
@@ -349,6 +246,8 @@ class JS8ConnectorsDialog(QDialog):
     # ── Selection ──────────────────────────────────────────────────────────────
 
     def _on_selection_changed(self) -> None:
+        if self._in_edit_mode:
+            return
         has_sel = bool(self.table.selectedItems())
         self.btn_edit.setEnabled(has_sel)
         self.btn_delete.setEnabled(has_sel)
@@ -361,96 +260,162 @@ class JS8ConnectorsDialog(QDialog):
         item = self.table.item(row, 0)
         return item.data(Qt.UserRole) if item else None
 
-    # ── Form helpers ───────────────────────────────────────────────────────────
+    # ── Inline edit ────────────────────────────────────────────────────────────
 
-    def _show_form(self, title: str) -> None:
-        self.form_title_lbl.setText(title)
-        self.form_frame.setVisible(True)
-        self.setFixedSize(_WIN_W, _WIN_H_FORM)
-        self.f_rig.setFocus()
+    def _enter_edit_mode(self, row: int, adding: bool) -> None:
+        self._in_edit_mode = True
+        self._edit_row = row
+        self._adding = adding
 
-    def _hide_form(self) -> None:
-        self.form_frame.setVisible(False)
-        self.setFixedSize(_WIN_W, _WIN_H_LIST)
+        def _cell(col):
+            item = self.table.item(row, col)
+            return item.text() if item else ""
+
+        self._iw_rig     = make_input(placeholder="e.g. IC-7300, FTDX10", max_len=20)
+        self._iw_server  = make_input(default=DEFAULT_SERVER)
+        self._iw_port    = make_input(default=str(DEFAULT_TCP_PORT), max_len=5)
+        self._iw_state   = make_input(placeholder="e.g. TX", max_len=2)
+        self._iw_comment = make_input(placeholder="Optional Description", max_len=60)
+
+        self._iw_rig.setText("" if adding else _cell(0))
+        self._iw_server.setText(_cell(1) if not adding and _cell(1) else DEFAULT_SERVER)
+        self._iw_port.setText(_cell(2) if not adding and _cell(2) else str(DEFAULT_TCP_PORT))
+        self._iw_state.setText("" if adding else _cell(3))
+        self._iw_comment.setText("" if adding else _cell(5))
+
+        self._iw_state.textChanged.connect(
+            lambda t: self._iw_state.setText(t.upper()) if t != t.upper() else None
+        )
+        self._iw_rig.textChanged.connect(lambda _: self._on_inline_changed())
+        self._iw_port.textChanged.connect(lambda _: self._on_inline_changed())
+
+        # Install on all columns except the live Status column
+        self.table.setCellWidget(row, 0, self._iw_rig)
+        self.table.setCellWidget(row, 1, self._iw_server)
+        self.table.setCellWidget(row, 2, self._iw_port)
+        self.table.setCellWidget(row, 3, self._iw_state)
+        # col 4 (_STATUS_COL) intentionally skipped
+        self.table.setCellWidget(row, 5, self._iw_comment)
+        self.table.setRowHeight(row, 34)
+        self.table.setSelectionMode(QAbstractItemView.NoSelection)
+
+        self.btn_add.setVisible(False)
+        self.btn_edit.setVisible(False)
+        self.btn_delete.setVisible(False)
+        self.btn_reconnect.setVisible(False)
+        self.btn_save.setVisible(True)
+        self.btn_cancel.setVisible(True)
+        self.btn_close.setEnabled(False)
+
+        self._on_inline_changed()
+        self._iw_rig.setFocus()
+
+    def _on_inline_changed(self) -> None:
+        if not self._in_edit_mode:
+            return
+        rig_ok  = bool(self._iw_rig and self._iw_rig.text().strip())
+        port_ok = bool(self._iw_port and self._iw_port.text().strip().isdigit())
+        self.btn_save.setEnabled(rig_ok and port_ok)
+
+    def _exit_edit_mode(self, save: bool) -> None:
+        row = self._edit_row
+
+        if save:
+            rig      = self._iw_rig.text().strip()
+            server   = self._iw_server.text().strip() or DEFAULT_SERVER
+            port_str = self._iw_port.text().strip()
+            state    = self._iw_state.text().strip().upper()[:2]
+            comment  = self._iw_comment.text().strip()
+
+            if not rig:
+                QMessageBox.warning(self, "JS8 Connectors", "Rig name is required.")
+                return
+            if not port_str.isdigit():
+                QMessageBox.warning(self, "JS8 Connectors", "Port must be a number.")
+                return
+            port = int(port_str)
+
+            if self._edit_id is None:
+                ok = self.connector_manager.add_connector(
+                    rig_name=rig, tcp_port=port, state=state,
+                    comment=comment, server=server
+                )
+                action = "add"
+            else:
+                ok = self.connector_manager.update_connector(
+                    connector_id=self._edit_id, rig_name=rig,
+                    tcp_port=port, state=state, comment=comment, server=server
+                )
+                action = "update"
+
+            if not ok:
+                QMessageBox.critical(
+                    self, "Error",
+                    f"Could not {action} connector.\n"
+                    "Rig name or IP address/port combination may already be in use."
+                )
+                return
+
+            if self.tcp_pool and hasattr(self.tcp_pool, "refresh_connections"):
+                self.tcp_pool.refresh_connections()
+
+        # Remove cell widgets — skip Status column
+        for col in [0, 1, 2, 3, 5]:
+            self.table.removeCellWidget(row, col)
+
+        self._iw_rig = self._iw_server = self._iw_port = None
+        self._iw_state = self._iw_comment = None
+        self._in_edit_mode = False
         self._edit_id = None
 
-    def _clear_form(self) -> None:
-        self.f_rig.clear()
-        self.f_server.setText(DEFAULT_SERVER)
-        self.f_port.setText(str(DEFAULT_TCP_PORT))
-        self.f_state.clear()
-        self.f_comment.clear()
+        self.table.setRowHeight(row, self.table.verticalHeader().defaultSectionSize())
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
 
-    def _on_form_changed(self) -> None:
-        rig_ok  = bool(self.f_rig.text().strip())
-        port_ok = self.f_port.text().strip().isdigit()
-        self.btn_save.setEnabled(rig_ok and port_ok)
+        self.btn_add.setVisible(True)
+        self.btn_edit.setVisible(True)
+        self.btn_delete.setVisible(True)
+        self.btn_reconnect.setVisible(True)
+        self.btn_save.setVisible(False)
+        self.btn_cancel.setVisible(False)
+        self.btn_close.setEnabled(True)
+
+        self._load_connectors()
 
     # ── Actions ────────────────────────────────────────────────────────────────
 
     def _on_add(self) -> None:
+        if self._in_edit_mode:
+            return
+        connectors = self.connector_manager.get_all_connectors()
+        if len(connectors) >= 3:
+            QMessageBox.warning(self, "Limit Reached", "Maximum 3 connectors allowed.")
+            return
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        # Placeholder Status item so col 4 is never None during inline edit
+        status_item = QTableWidgetItem("—")
+        status_item.setFont(mono_font())
+        status_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+        status_item.setForeground(QtGui.QColor(_COL_DISABLED))
+        self.table.setItem(row, _STATUS_COL, status_item)
         self._edit_id = None
-        self._clear_form()
-        self._show_form("Add Connector")
+        self._enter_edit_mode(row=row, adding=True)
 
     def _on_edit(self) -> None:
+        if self._in_edit_mode:
+            return
         cid = self._selected_connector_id()
         if cid is None:
             return
-        conn = self.connector_manager.get_connector_by_id(cid)
-        if not conn:
-            return
         self._edit_id = cid
-        self.f_rig.setText(conn.get("rig_name", ""))
-        self.f_server.setText(conn.get("server", DEFAULT_SERVER) or DEFAULT_SERVER)
-        self.f_port.setText(str(conn.get("tcp_port", DEFAULT_TCP_PORT)))
-        self.f_state.setText(conn.get("state", "") or "")
-        self.f_comment.setText(conn.get("comment", "") or "")
-        self._show_form("Edit Connector")
-
-    def _on_cancel(self) -> None:
-        self._hide_form()
-
-    def _on_save(self) -> None:
-        rig     = self.f_rig.text().strip()
-        server  = self.f_server.text().strip() or DEFAULT_SERVER
-        port    = int(self.f_port.text().strip())
-        state   = self.f_state.text().strip().upper()[:2]
-        comment = self.f_comment.text().strip()
-
-        if self._edit_id is None:
-            ok = self.connector_manager.add_connector(
-                rig_name=rig, tcp_port=port, state=state,
-                comment=comment, server=server
-            )
-            action = "add"
-        else:
-            ok = self.connector_manager.update_connector(
-                connector_id=self._edit_id, rig_name=rig,
-                tcp_port=port, state=state, comment=comment, server=server
-            )
-            action = "update"
-
-        if ok:
-            if self.tcp_pool and hasattr(self.tcp_pool, "refresh_connections"):
-                self.tcp_pool.refresh_connections()
-            self._hide_form()
-            self._load_connectors()
-        else:
-            QMessageBox.critical(
-                self, "Error",
-                f"Could not {action} connector.\n"
-                "Rig name may already be in use."
-            )
+        self._enter_edit_mode(row=self.table.currentRow(), adding=False)
 
     def _on_delete(self) -> None:
         cid = self._selected_connector_id()
         if cid is None:
             return
-
         row  = self.table.currentRow()
         name = self.table.item(row, 0).text() if self.table.item(row, 0) else "this connector"
-
         reply = QMessageBox.question(
             self, "Delete Connector",
             f"Delete connector '{name}'?",
@@ -459,7 +424,6 @@ class JS8ConnectorsDialog(QDialog):
         )
         if reply != QMessageBox.Yes:
             return
-
         ok = self.connector_manager.remove_connector(cid)
         if ok:
             if self.tcp_pool and hasattr(self.tcp_pool, "refresh_connections"):
@@ -472,9 +436,55 @@ class JS8ConnectorsDialog(QDialog):
                 "You cannot delete the default connector or the last connector."
             )
 
-    def _on_connection_changed(self, _rig_name: str, _connected: bool) -> None:
-        """Refresh table when any TCP connection state changes."""
+    def _on_reconnect(self) -> None:
+        cid = self._selected_connector_id()
+        if cid is None:
+            return
+        self.connector_manager.set_enabled(cid, True)
+        if self.tcp_pool and hasattr(self.tcp_pool, "refresh_connections"):
+            self.tcp_pool.refresh_connections()
         self._load_connectors()
+
+    # ── Live status refresh (safe during inline edit) ──────────────────────────
+
+    def _refresh_status_column(self) -> None:
+        status_map: dict = {}
+        if self.tcp_pool and hasattr(self.tcp_pool, "get_connection_status"):
+            status_map = self.tcp_pool.get_connection_status()
+        connectors = self.connector_manager.get_all_connectors()
+
+        for row_idx in range(self.table.rowCount()):
+            if row_idx == self._edit_row and self._adding:
+                continue  # new unsaved row has no connector record yet
+
+            item = self.table.item(row_idx, _STATUS_COL)
+            if item is None:
+                continue
+
+            if row_idx == self._edit_row:
+                rig = self._iw_rig.text().strip() if self._iw_rig else ""
+            else:
+                col0 = self.table.item(row_idx, 0)
+                rig = col0.text() if col0 else ""
+
+            conn = next((c for c in connectors if c.get("rig_name") == rig), None)
+            is_enabled = bool(conn.get("enabled", 1)) if conn else True
+
+            if not is_enabled:
+                text, color = "Disabled", _COL_DISABLED
+            elif status_map.get(rig, False):
+                text, color = "Connected", _COL_CONNECTED
+            else:
+                text, color = "Disconnected", _COL_DISCONNECTED
+
+            item.setText(text)
+            item.setForeground(QtGui.QColor(color))
+
+    def _on_connection_changed(self, _rig_name: str, _connected: bool) -> None:
+        if self._in_edit_mode:
+            self._refresh_status_column()
+        else:
+            self._load_connectors()
 
     def closeEvent(self, event) -> None:
         if self.tcp_pool and hasattr(self.tcp_pool, "any_connection_changed"):
@@ -483,13 +493,3 @@ class JS8ConnectorsDialog(QDialog):
             except RuntimeError:
                 pass
         super().closeEvent(event)
-
-    def _on_reconnect(self) -> None:
-        cid = self._selected_connector_id()
-        if cid is None:
-            return
-        # Re-enable the connector in case it was auto-disabled
-        self.connector_manager.set_enabled(cid, True)
-        if self.tcp_pool and hasattr(self.tcp_pool, "refresh_connections"):
-            self.tcp_pool.refresh_connections()
-        self._load_connectors()

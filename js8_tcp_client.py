@@ -269,6 +269,9 @@ class JS8CallTCPClient(QObject):
             # Spot message - emit for processing
             self.message_received.emit(self.rig_name, message)
 
+        elif msg_type == "RX.BAND_ACTIVITY":
+            self.message_received.emit(self.rig_name, message)
+
         elif msg_type == "RX.CALL_ACTIVITY":
             self.message_received.emit(self.rig_name, message)
 
@@ -282,7 +285,7 @@ class JS8CallTCPClient(QObject):
     def _on_error(self, error: QAbstractSocket.SocketError) -> None:
         """Handle socket errors."""
         if error == QAbstractSocket.ConnectionRefusedError:
-            msg = f"[{self.rig_name}] Attempting to connect on TCP port {self.port}"
+            msg = f"[{self.rig_name}] Connection refused on TCP port {self.port}"
         elif error == QAbstractSocket.RemoteHostClosedError:
             msg = f"[{self.rig_name}] Connection closed by JS8Call"
         elif error == QAbstractSocket.HostNotFoundError:
@@ -372,22 +375,21 @@ class TCPConnectionPool(QObject):
         self.clients: Dict[str, JS8CallTCPClient] = {}
 
     def connect_all(self) -> None:
-        """Create and connect TCP clients for all enabled connectors."""
-        # Get all connectors to report disabled ones
-        all_connectors = self.connector_manager.get_all_connectors(enabled_only=False)
-        for conn in all_connectors:
-            if conn.get("enabled", 1) != 1:
-                print(f"[{conn['rig_name']}] Disabled. Will not attempt to connect.")
+        """Create and connect TCP clients for all configured connectors.
 
-        # Connect only enabled connectors
-        enabled_connectors = [c for c in all_connectors if c.get("enabled", 1) == 1]
-        for conn in enabled_connectors:
+        Enabled connectors connect with full auto-reconnect.
+        Disabled connectors get a single attempt with no retry on failure.
+        """
+        all_connectors = self.connector_manager.get_all_connectors(enabled_only=False)
+
+        for conn in all_connectors:
             rig_name = conn["rig_name"]
             tcp_port = conn["tcp_port"]
             server = conn.get("server", DEFAULT_HOST)
+            is_enabled = conn.get("enabled", 1) == 1
 
             if rig_name not in self.clients:
-                self._create_client(rig_name, tcp_port, server)
+                self._create_client(rig_name, tcp_port, server, auto_reconnect=is_enabled)
 
     def disconnect_all(self) -> None:
         """Disconnect and remove all TCP clients."""
@@ -427,9 +429,14 @@ class TCPConnectionPool(QObject):
                 # Create new client
                 self._create_client(rig_name, tcp_port, server)
 
-    def _create_client(self, rig_name: str, port: int, host: str = DEFAULT_HOST) -> None:
-        """Create and connect a single TCP client."""
+    def _create_client(self, rig_name: str, port: int, host: str = DEFAULT_HOST, auto_reconnect: bool = True) -> None:
+        """Create and connect a single TCP client.
+
+        If auto_reconnect is False, the client tries one connection and
+        will not retry on failure.
+        """
         client = JS8CallTCPClient(rig_name, port, host, self)
+        client._auto_reconnect = auto_reconnect
 
         # Connect signals to aggregate signals
         client.message_received.connect(self.any_message_received)

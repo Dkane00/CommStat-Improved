@@ -12,15 +12,16 @@ from datetime import datetime
 from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout,
-    QLabel, QFrame, QScrollArea, QWidget, QMessageBox, QPushButton, QTextEdit,
+    QLabel, QFrame, QScrollArea, QWidget, QMessageBox, QTextEdit,
 )
 from PyQt5.QtCore import Qt
 import html
-import brevity1
+import brevity
 
 from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER, COLOR_BTN_BLUE,
 )
+from ui_helpers import make_button, label_font, mono_font
 
 # =============================================================================
 # Constants
@@ -33,31 +34,6 @@ _COND_GREEN  = DEFAULT_COLORS.get("condition_green",    "#28A745")
 _COND_YELLOW = DEFAULT_COLORS.get("condition_yellow",   "#FFFF77")
 _COND_RED    = DEFAULT_COLORS.get("condition_red",      "#DC3534")
 _COND_GRAY   = DEFAULT_COLORS.get("condition_gray",     "#6C757D")
-
-
-# =============================================================================
-# Helpers
-# =============================================================================
-
-def _lbl_font() -> QtGui.QFont:
-    return QtGui.QFont("Roboto", -1, QtGui.QFont.Bold)
-
-
-def _mono_font() -> QtGui.QFont:
-    return QtGui.QFont("Kode Mono")
-
-
-def _btn(label: str, color: str, min_w: int = 120) -> QPushButton:
-    b = QPushButton(label)
-    b.setMinimumWidth(min_w)
-    b.setStyleSheet(
-        f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
-        f" padding:6px 14px; border-radius:4px; font-family:Roboto; font-size:15px;"
-        f" font-weight:bold; }}"
-        f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
-        f"QPushButton:pressed {{ background-color:{color}; }}"
-    )
-    return b
 
 
 # =============================================================================
@@ -127,7 +103,7 @@ class StatRepDialog(QDialog):
         general_layout = QVBoxLayout(general_frame)
 
         general_header = QLabel("General Information")
-        general_header.setFont(_lbl_font())
+        general_header.setFont(label_font())
         general_header.setAlignment(Qt.AlignCenter)
         general_layout.addWidget(general_header)
 
@@ -137,13 +113,13 @@ class StatRepDialog(QDialog):
 
         def _field_label(text: str) -> QLabel:
             lbl = QLabel(text)
-            lbl.setFont(_lbl_font())
+            lbl.setFont(label_font())
             lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             return lbl
 
         def _data_label() -> QLabel:
             lbl = QLabel()
-            lbl.setFont(_mono_font())
+            lbl.setFont(mono_font())
             return lbl
 
         self.datetime_label = _data_label()
@@ -188,12 +164,12 @@ class StatRepDialog(QDialog):
 
         for idx, (label_text, field) in enumerate(situational_fields):
             name_label = QLabel(label_text)
-            name_label.setFont(_lbl_font())
+            name_label.setFont(label_font())
             name_label.setAlignment(Qt.AlignCenter)
             grid_layout.addWidget(name_label, 0, idx)
 
             value_label = QLabel()
-            value_label.setFont(_mono_font())
+            value_label.setFont(mono_font())
             value_label.setFixedSize(30, 30)
             value_label.setAlignment(Qt.AlignCenter)
             value_label.setStyleSheet("border: 2px solid black; border-radius: 2px;")
@@ -208,11 +184,11 @@ class StatRepDialog(QDialog):
         remarks_layout = QVBoxLayout(remarks_frame)
 
         remarks_header = QLabel("Remarks:")
-        remarks_header.setFont(_lbl_font())
+        remarks_header.setFont(label_font())
         remarks_layout.addWidget(remarks_header)
 
         self.remarks_label = QLabel()
-        self.remarks_label.setFont(_mono_font())
+        self.remarks_label.setFont(mono_font())
         self.remarks_label.setWordWrap(True)
         self.remarks_label.setStyleSheet(
             f"background-color: white; border: 1px solid {COLOR_INPUT_BORDER};"
@@ -226,11 +202,11 @@ class StatRepDialog(QDialog):
         brevity_layout = QVBoxLayout(brevity_frame)
 
         brevity_header = QLabel("Brevity Decode:")
-        brevity_header.setFont(_lbl_font())
+        brevity_header.setFont(label_font())
         brevity_layout.addWidget(brevity_header)
 
         self.brevity_text = QTextEdit()
-        self.brevity_text.setFont(_mono_font())
+        self.brevity_text.setFont(mono_font())
         self.brevity_text.setPlaceholderText("Brevity codes decoded here...")
         self.brevity_text.setMinimumHeight(120)
         brevity_layout.addWidget(self.brevity_text)
@@ -239,7 +215,7 @@ class StatRepDialog(QDialog):
         # ── Button row ─────────────────────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        self.view_html_button = _btn("View/Save HTML", COLOR_BTN_BLUE)
+        self.view_html_button = make_button("View/Save HTML", COLOR_BTN_BLUE, min_w=120)
         self.view_html_button.clicked.connect(self._view_html)
         btn_row.addWidget(self.view_html_button)
         scroll_layout.addLayout(btn_row)
@@ -302,7 +278,7 @@ class StatRepDialog(QDialog):
                         try:
                             decoded_reports = []
                             for code in brevity_codes:
-                                brevity_report = brevity1.decode_to_report(code)
+                                brevity_report = brevity.decode_to_report(code)
                                 if brevity_report.startswith("Error") or brevity_report.startswith("Invalid"):
                                     decoded_reports.append(f"<p>{html.escape(code)}: {html.escape(brevity_report)}</p>")
                                     continue
@@ -312,7 +288,7 @@ class StatRepDialog(QDialog):
                                 primary_code = code[3]
                                 secondary_code = code[4]
                                 severity_code = code[5]
-                                positions = brevity1.positions
+                                positions = brevity.positions
                                 emergency_data = None
                                 emergency_group = "Unknown"
                                 has_groups = any(k.startswith("***") for k in positions["emergency_type"].keys())
@@ -354,7 +330,7 @@ class StatRepDialog(QDialog):
                                     positions["station_response"][severity_code]["name"] if severity_code != "A" else None,
                                     positions["status_codes"][status_code]["name"] if status_code in positions["status_codes"] else "Unknown"
                                 ]
-                                narrative = brevity1.generate_narrative(description_parts, emergency_code, primary_code, secondary_code, severity_code, status_code, code, list_id)
+                                narrative = brevity.generate_narrative(description_parts, emergency_code, primary_code, secondary_code, severity_code, status_code, code, list_id)
                                 gui_titles = positions.get("gui_titles", {})
                                 emergency_title = gui_titles.get("emergency", "Event:")
                                 status_title    = gui_titles.get("status",    "Status or Target:")
