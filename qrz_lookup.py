@@ -613,7 +613,7 @@ class _QRZInfoSection(QWidget):
         self.image_width_ready.emit(self._gif_movie.scaledSize().width())
 
     def _load_default_image(self) -> None:
-        px = QPixmap("little-duck.png")
+        px = QPixmap("00-qrz-default.png")
         if not px.isNull():
             target_h = 166 if px.height() * 2.0 > px.width() else 126
             self.lbl_image.setPixmap(px.scaledToHeight(target_h, Qt.SmoothTransformation))
