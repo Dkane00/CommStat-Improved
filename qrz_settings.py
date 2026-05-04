@@ -7,6 +7,10 @@ qrz_settings.py - QRZ Settings Management Dialog
 Displays QRZ.com credentials in a single-row table with Add, Edit, Delete,
 and Test actions.  At most one entry is allowed.
 Editing is done inline directly in the table row.
+
+Note: The QRZ password is intentionally shown in plaintext in both the table
+and the inline edit field. This is by design — CommStat is a single-user
+desktop app and the user has explicitly chosen visibility over masking.
 """
 
 import os
@@ -21,13 +25,13 @@ from PyQt5 import QtGui, QtWidgets
 from PyQt5.QtCore import Qt, QObject, pyqtSignal
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QCheckBox,
+    QLabel, QLineEdit, QComboBox,
     QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QAbstractItemView,
+    QHeaderView, QMessageBox, QAbstractItemView, QWidget,
 )
 
 from constants import DEFAULT_COLORS
-from ui_helpers import make_button, make_input, make_checkbox_cell
+from ui_helpers import make_button, make_input
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -109,9 +113,9 @@ def _test_qrz_credentials(username: str, password: str) -> Tuple[bool, str]:
         if sub_exp is None:
             sub_exp = session.find("SubExp")
         exp_text = sub_exp.text if sub_exp is not None else None
-        msg = "Login successful!\n\nQRZ XML connection verified."
+        msg = "Login successful!\nQRZ XML connection verified."
         if exp_text:
-            msg += f"\n\nSubscription expires: {exp_text}"
+            msg += f"\nSubscription expires: {exp_text}"
         return True, msg
 
     # Error path — parse QRZ error text for a clear message
@@ -123,23 +127,23 @@ def _test_qrz_credentials(username: str, password: str) -> Tuple[bool, str]:
 
     if "not found" in lower_err or "callsign not found" in lower_err:
         return False, (
-            "Login failed: username not found.\n\n"
+            "Login failed: username not found.\n"
             "Check that your QRZ.com callsign is entered correctly."
         )
     if "password" in lower_err or "invalid" in lower_err or "incorrect" in lower_err:
         return False, (
-            "Login failed: username or password is incorrect.\n\n"
+            "Login failed: username or password is incorrect.\n"
             "Check your QRZ.com credentials and try again."
         )
     if "subscri" in lower_err:
         return False, (
-            "Login failed: no XML data subscription.\n\n"
+            "Login failed: no XML data subscription.\n"
             "A QRZ XML Data subscription is required for callsign lookups.\n"
             "Visit qrz.com to subscribe."
         )
     if "session" in lower_err:
         return False, (
-            "Login failed: session error from QRZ.\n\n"
+            "Login failed: session error from QRZ.\n"
             "Try again in a few seconds."
         )
 
@@ -169,8 +173,7 @@ class QRZSettingsDialog(QDialog):
         self._adding: bool = False
         self._iw_username: Optional[QLineEdit] = None
         self._iw_password: Optional[QLineEdit] = None
-        self._iw_enable: Optional[QCheckBox] = None
-        self._test_from_form: bool = False
+        self._iw_enable: Optional[QComboBox] = None
 
         self.setWindowTitle("QRZ Subscription Settings")
         self.setWindowFlags(
@@ -220,6 +223,7 @@ class QRZSettingsDialog(QDialog):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setTabKeyNavigation(False)
         self.table.setShowGrid(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(False)
@@ -307,14 +311,14 @@ class QRZSettingsDialog(QDialog):
     def _load(self) -> None:
         self._in_edit_mode = False
         self._edit_row = -1
-        username, _password, is_active = self.db.get_qrz_settings()
+        username, password, is_active = self.db.get_qrz_settings()
         self.table.setRowCount(0)
         mono = QtGui.QFont("Kode Mono")
 
         if username:
             self.table.insertRow(0)
             enabled_text = "Yes" if is_active else "No"
-            for col, val in enumerate([username, _password, enabled_text]):
+            for col, val in enumerate([username, password, enabled_text]):
                 item = QTableWidgetItem(val)
                 item.setFont(mono)
                 item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
@@ -345,9 +349,13 @@ class QRZSettingsDialog(QDialog):
         self._edit_row = row
         self._adding = adding
 
-        username = "" if adding else (self.table.item(row, 0).text() if self.table.item(row, 0) else "")
-        password = "" if adding else (self.table.item(row, 1).text() if self.table.item(row, 1) else "")
-        enabled  = False if adding else (self.table.item(row, 2).text() == "Yes" if self.table.item(row, 2) else False)
+        if adding:
+            username, password, enabled = "", "", False
+        else:
+            db_user, db_pass, db_active = self.db.get_qrz_settings()
+            username = db_user or ""
+            password = db_pass or ""
+            enabled  = bool(db_active)
 
         self._iw_username = make_input(placeholder="Your QRZ.com callsign", max_len=20)
         self._iw_username.setText(username)
@@ -360,11 +368,20 @@ class QRZSettingsDialog(QDialog):
         self._iw_password.setText(password)
         self._iw_password.textChanged.connect(lambda _: self._on_inline_changed())
 
-        container, self._iw_enable = make_checkbox_cell(checked=enabled)
+        self._iw_enable = QComboBox()
+        self._iw_enable.addItems(["Yes", "No"])
+        self._iw_enable.setCurrentIndex(0 if enabled else 1)
+        self._iw_enable.setStyleSheet(
+            "QComboBox { background-color:white; color:#333333;"
+            " border:1px solid #cccccc; border-radius:4px; padding:2px 4px;"
+            " font-family:'Kode Mono'; font-size:13px; }"
+            "QComboBox QAbstractItemView { background-color:white; color:#333333;"
+            " selection-background-color:#cce5ff; selection-color:#000000; }"
+        )
 
         self.table.setCellWidget(row, 0, self._iw_username)
         self.table.setCellWidget(row, 1, self._iw_password)
-        self.table.setCellWidget(row, 2, container)
+        self.table.setCellWidget(row, 2, self._iw_enable)
         self.table.setRowHeight(row, 34)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
 
@@ -379,6 +396,10 @@ class QRZSettingsDialog(QDialog):
         # Clear any previous test result
         self.test_status_lbl.setText("")
         self.test_status_lbl.setVisible(False)
+
+        QWidget.setTabOrder(self._iw_username, self._iw_password)
+        QWidget.setTabOrder(self._iw_password, self._iw_enable)
+        QWidget.setTabOrder(self._iw_enable, self.btn_save)
 
         self._on_inline_changed()
         self._iw_username.setFocus()
@@ -399,7 +420,7 @@ class QRZSettingsDialog(QDialog):
         if save:
             username  = self._iw_username.text().strip().upper()
             password  = self._iw_password.text()
-            is_active = self._iw_enable.isChecked() if self._iw_enable else False
+            is_active = (self._iw_enable.currentText() == "Yes") if self._iw_enable else False
 
             if not username or not password:
                 QMessageBox.warning(self, "QRZ Settings", "Username and password are required.")
@@ -424,6 +445,9 @@ class QRZSettingsDialog(QDialog):
         self.btn_save.setVisible(False)
         self.btn_cancel.setVisible(False)
         self.btn_close.setEnabled(True)
+
+        self.test_status_lbl.setText("")
+        self.test_status_lbl.setVisible(False)
 
         self._load()
 
@@ -458,10 +482,8 @@ class QRZSettingsDialog(QDialog):
         if self._in_edit_mode:
             username = self._iw_username.text().strip().upper() if self._iw_username else ""
             password = self._iw_password.text() if self._iw_password else ""
-            self._test_from_form = True
         else:
             username, password, _ = self.db.get_qrz_settings()
-            self._test_from_form = False
 
         if not username or not password:
             QMessageBox.warning(self, "Test QRZ", "Username and password are required.")

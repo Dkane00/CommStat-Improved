@@ -16,7 +16,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QAbstractItemView,
+    QHeaderView, QMessageBox, QAbstractItemView, QWidget,
 )
 
 from constants import DEFAULT_COLORS
@@ -107,6 +107,7 @@ class GroupsDialog(QDialog):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setTabKeyNavigation(False)
         self.table.setShowGrid(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(False)
@@ -246,6 +247,9 @@ class GroupsDialog(QDialog):
         self.btn_save.setVisible(True)
         self.btn_cancel.setVisible(True)
         self.btn_close.setEnabled(False)
+
+        QWidget.setTabOrder(self._iw_name, self._iw_comment)
+        QWidget.setTabOrder(self._iw_comment, self.btn_save)
 
         self._on_inline_changed()
         self._iw_name.setFocus()
