@@ -1027,10 +1027,8 @@ class BrevityApp(QMainWindow):
         self.panel_bg = panel_bg
         self.panel_fg = panel_fg
         self.setWindowTitle("Brevity")
-        self.setWindowFlags(
-            Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint
-            | Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
-        )
+        if parent is not None:
+            self.setWindowFlags(Qt.Dialog)
         self.resize(700, 750)
         self._setup_ui()
         self._load_data(prefill_code)

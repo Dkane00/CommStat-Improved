@@ -154,11 +154,13 @@ class AlertDialog(QDialog):
             f" border-radius:4px; padding:2px 6px; font-family:'Kode Mono'; font-size:13px; }}"
             f"QLineEdit:focus {{ border:1px solid #007bff; }}"
             f"QComboBox {{ background-color:white; color:#333333; border:1px solid #cccccc;"
-            f" border-radius:4px; padding:2px 4px; font-family:'Kode Mono'; font-size:13px; }}"
+            f" border-radius:4px; padding:2px 4px; font-family:'Kode Mono'; font-size:13px;"
+            f" combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG};"
             f" color:{COLOR_DISABLED_TEXT}; }}"
             f"QComboBox QAbstractItemView {{ background-color:white; color:#333333;"
             f" selection-background-color:#cce5ff; selection-color:#000000; }}"
+            f"QComboBox QAbstractItemView::item {{ min-height:22px; padding:0 6px; }}"
         )
 
         body = QVBoxLayout(self)
@@ -191,9 +193,13 @@ class AlertDialog(QDialog):
         settings_row.setSpacing(12)
 
         self.rig_combo = QComboBox()
+        self.rig_combo.setMaxVisibleItems(30)
+        self.rig_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.rig_combo))
         settings_row.addLayout(_labeled_col("Rig:", self.rig_combo))
 
         self.mode_combo = QComboBox()
+        self.mode_combo.setMaxVisibleItems(30)
+        self.mode_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.mode_combo))
         self.mode_combo.addItem("Slow",   4)
         self.mode_combo.addItem("Normal", 0)
         self.mode_combo.addItem("Fast",   1)
@@ -207,6 +213,8 @@ class AlertDialog(QDialog):
         settings_row.addLayout(_labeled_col("Freq:", self.freq_field))
 
         self.delivery_combo = QComboBox()
+        self.delivery_combo.setMaxVisibleItems(30)
+        self.delivery_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.delivery_combo))
         self.delivery_combo.addItem("Maximum Reach")
         self.delivery_combo.addItem("Limited Reach")
         settings_row.addLayout(_labeled_col("Delivery:", self.delivery_combo))
@@ -224,6 +232,8 @@ class AlertDialog(QDialog):
 
         self.group_combo = QComboBox()
         self.group_combo.setMinimumWidth(150)
+        self.group_combo.setMaxVisibleItems(30)
+        self.group_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.group_combo))
         target_row.addWidget(self.group_combo)
 
         or_lbl = QLabel("OR Callsign")

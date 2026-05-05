@@ -129,10 +129,11 @@ class GroupMessageDialog(QDialog):
             f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT}; }}"
             f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" selection-background-color:#cce5ff; selection-color:#000000; }}"
+            f"QComboBox QAbstractItemView::item {{ min-height:22px; padding:0 6px; }}"
             f"QPlainTextEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px;"
             f" font-family:'Kode Mono'; font-size:13px; }}"
@@ -170,10 +171,14 @@ class GroupMessageDialog(QDialog):
 
         self.rig_combo = QComboBox()
         self.rig_combo.setFixedWidth(150)
+        self.rig_combo.setMaxVisibleItems(30)
+        self.rig_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.rig_combo))
         settings_row.addLayout(_labeled_col("Rig:", self.rig_combo))
 
         self.mode_combo = QComboBox()
         self.mode_combo.setFixedWidth(100)
+        self.mode_combo.setMaxVisibleItems(30)
+        self.mode_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.mode_combo))
         self.mode_combo.addItem("Slow",   4)
         self.mode_combo.addItem("Normal", 0)
         self.mode_combo.addItem("Fast",   1)
@@ -193,6 +198,8 @@ class GroupMessageDialog(QDialog):
 
         self.delivery_combo = QComboBox()
         self.delivery_combo.setFixedWidth(160)
+        self.delivery_combo.setMaxVisibleItems(30)
+        self.delivery_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.delivery_combo))
         self.delivery_combo.addItem("Maximum Reach")
         self.delivery_combo.addItem("Limited Reach")
         settings_row.addLayout(_labeled_col("Delivery:", self.delivery_combo))
@@ -205,6 +212,8 @@ class GroupMessageDialog(QDialog):
         group_row.setSpacing(8)
         self.group_combo = QComboBox()
         self.group_combo.setFixedWidth(180)
+        self.group_combo.setMaxVisibleItems(30)
+        self.group_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.group_combo))
         group_row.addLayout(_labeled_col("Group:", self.group_combo))
         group_row.addStretch()
         body.addLayout(group_row)

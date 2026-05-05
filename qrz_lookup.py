@@ -30,7 +30,8 @@ from PyQt5.QtGui import QColor, QCursor, QDesktopServices, QFont, QMovie, QPaint
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import (
     QComboBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPlainTextEdit, QPushButton, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
+    QMessageBox, QPlainTextEdit, QPushButton, QStyledItemDelegate, QTextBrowser,
+    QTextEdit, QVBoxLayout, QWidget,
 )
 
 from id_utils import generate_time_based_id
@@ -689,6 +690,8 @@ class QRZLookupDialog(QDialog):
                  module_foreground: str = "#333333",
                  program_background: str = "",
                  program_foreground: str = "",
+                 initial_callsign: str = "",
+                 initial_message: str = "",
                  parent=None):
         super().__init__(parent)
         self.setWindowFlags(
@@ -711,6 +714,19 @@ class QRZLookupDialog(QDialog):
         self._thread: Optional[_QRZThread] = None
         self._send_result.connect(self._on_send_result)
         self._setup_ui()
+
+        cs = initial_callsign.strip().upper()
+        if cs:
+            self.cs_edit.setText(cs)
+            self._search()
+        if initial_message:
+            self.msg_edit.setPlainText(initial_message)
+        if cs or initial_message:
+            from PyQt5.QtGui import QTextCursor
+            cursor = self.msg_edit.textCursor()
+            cursor.movePosition(QTextCursor.Start)
+            self.msg_edit.setTextCursor(cursor)
+            self.msg_edit.setFocus()
 
     def _setup_ui(self) -> None:
         self.setStyleSheet(
@@ -979,7 +995,8 @@ class JS8MessageDialog(QDialog):
             f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
+            f"QComboBox QAbstractItemView::item {{ min-height:22px; padding:0 6px; }}"
         )
         main = QVBoxLayout(self)
         main.setContentsMargins(15, 15, 15, 15)
@@ -1032,6 +1049,8 @@ class JS8MessageDialog(QDialog):
         self.rig_combo = QComboBox()
         self.rig_combo.setFont(_mono_font())
         self.rig_combo.setMinimumWidth(140)
+        self.rig_combo.setMaxVisibleItems(30)
+        self.rig_combo.setItemDelegate(QStyledItemDelegate(self.rig_combo))
         self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
         rf_row.addWidget(rig_lbl)
         rf_row.addWidget(self.rig_combo)
@@ -1040,6 +1059,8 @@ class JS8MessageDialog(QDialog):
         mode_lbl.setFont(_lbl_font())
         self.mode_combo = QComboBox()
         self.mode_combo.setFont(_mono_font())
+        self.mode_combo.setMaxVisibleItems(30)
+        self.mode_combo.setItemDelegate(QStyledItemDelegate(self.mode_combo))
         self.mode_combo.addItems(["Normal", "Fast", "Turbo", "Ultra", "Slow"])
         rf_row.addWidget(mode_lbl)
         rf_row.addWidget(self.mode_combo)
@@ -1566,8 +1587,14 @@ class StatRepDetailDialog(QDialog):
         dlg.exec_()
 
     def _on_message_clicked(self) -> None:
-        from direct_message import DirectMessageDialog
-        dlg = DirectMessageDialog(target_callsign=self.callsign, parent=self)
+        dlg = QRZLookupDialog(
+            module_background=self._module_bg,
+            module_foreground=self._module_fg,
+            program_background=self._program_bg,
+            program_foreground=self._program_fg,
+            initial_callsign=self.callsign,
+            parent=self,
+        )
         dlg.exec_()
 
     def _on_delete(self) -> None:
@@ -1816,16 +1843,28 @@ class MessageDetailDialog(QDialog):
             print(f"[MessageDetailDialog] Contact memo save error: {e}")
 
     def _on_message_clicked(self) -> None:
-        from direct_message import DirectMessageDialog
-        dlg = DirectMessageDialog(target_callsign=self.callsign, parent=self)
+        dlg = QRZLookupDialog(
+            module_background=self._module_bg,
+            module_foreground=self._module_fg,
+            program_background=self._program_bg,
+            program_foreground=self._program_fg,
+            initial_callsign=self.callsign,
+            parent=self,
+        )
         dlg.exec_()
 
     def _on_reply_clicked(self) -> None:
-        from direct_message import DirectMessageDialog
         original = self.message_text.replace("||", "\n")
         prefill = "\n\n----------\n" + original
-        dlg = DirectMessageDialog(target_callsign=self.callsign, parent=self)
-        dlg.set_message_text(prefill)
+        dlg = QRZLookupDialog(
+            module_background=self._module_bg,
+            module_foreground=self._module_fg,
+            program_background=self._program_bg,
+            program_foreground=self._program_fg,
+            initial_callsign=self.callsign,
+            initial_message=prefill,
+            parent=self,
+        )
         dlg.exec_()
 
     def _on_close_clicked(self) -> None:

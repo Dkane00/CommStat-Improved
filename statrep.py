@@ -113,6 +113,7 @@ _PANEL_FG   = DEFAULT_COLORS.get("module_foreground",   "#FFFFFF")
 _COL_CANCEL = "#555555"
 _COL_GRAY   = "#6c757d"
 _COL_PURPLE = "#6f42c1"
+_COL_PINK   = "#e83e8c"
 
 
 # =============================================================================
@@ -597,6 +598,7 @@ class StatRepDialog(QDialog):
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
                 font-family: 'Kode Mono'; font-size: 13px;
+                combobox-popup: 0;
             }}
             QComboBox:disabled {{
                 background-color: {COLOR_DISABLED_BG}; color: {COLOR_DISABLED_TEXT};
@@ -605,6 +607,9 @@ class StatRepDialog(QDialog):
             QComboBox QAbstractItemView {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 selection-background-color: #cce5ff; selection-color: #000000;
+            }}
+            QComboBox QAbstractItemView::item {{
+                min-height: 22px; padding: 0 6px;
             }}
         """)
 
@@ -634,12 +639,18 @@ class StatRepDialog(QDialog):
             col.addWidget(ctrl)
             return col
 
+        def _apply_combo_popup_style(combo):
+            """Force a styled delegate so QAbstractItemView::item rules apply on macOS."""
+            combo.setItemDelegate(QtWidgets.QStyledItemDelegate(combo))
+
         rig_row = QtWidgets.QHBoxLayout()
         rig_row.setSpacing(8)
 
         self.rig_combo = QtWidgets.QComboBox()
         self.rig_combo.setFont(mono_font())
         self.rig_combo.setMinimumWidth(180)
+        self.rig_combo.setMaxVisibleItems(30)
+        _apply_combo_popup_style(self.rig_combo)
         self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
         rig_row.addLayout(_labeled_col("Rig:", self.rig_combo))
 
@@ -650,6 +661,7 @@ class StatRepDialog(QDialog):
         self.mode_combo.addItem("Fast",   1)
         self.mode_combo.addItem("Turbo",  2)
         self.mode_combo.addItem("Ultra",  8)
+        _apply_combo_popup_style(self.mode_combo)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         rig_row.addLayout(_labeled_col("Mode:", self.mode_combo))
 
@@ -665,34 +677,42 @@ class StatRepDialog(QDialog):
 
         self.delivery_combo = QtWidgets.QComboBox()
         self.delivery_combo.setFont(mono_font())
+        self.delivery_combo.setMaxVisibleItems(30)
         self.delivery_combo.addItem("Maximum Reach")
         self.delivery_combo.addItem("Limited Reach")
+        _apply_combo_popup_style(self.delivery_combo)
         self.delivery_combo.currentTextChanged.connect(self._on_delivery_changed)
         rig_row.addLayout(_labeled_col("Delivery:", self.delivery_combo))
 
-        # Help link to the right of Delivery dropdown
-        self.help_link = QtWidgets.QLabel('<a href="#help" style="color:#007bff;">Help</a>')
-        self.help_link.setFont(label_font())
-        self.help_link.setCursor(Qt.PointingHandCursor)
-        self.help_link.setStyleSheet("QLabel { background-color: transparent; font-size: 13px; }")
-        self.help_link.linkActivated.connect(self._on_help_clicked)
-        rig_row.addLayout(_labeled_col("", self.help_link))
+        # Help button to the right of Delivery dropdown
+        self.help_btn = make_button("Help", _COL_PINK)
+        self.help_btn.clicked.connect(self._on_help_clicked)
+        rig_row.addLayout(_labeled_col("", self.help_btn))
 
         rig_row.addStretch()
         layout.addLayout(rig_row)
 
         # ── Header row: From | To | Grid | Scope ────────────────────────
-        header_layout = QtWidgets.QHBoxLayout()
-        header_layout.setSpacing(8)
+        header_grid = QtWidgets.QGridLayout()
+        header_grid.setSpacing(8)
+        for col in range(4):
+            header_grid.setColumnStretch(col, 1)
+
+        def _add_header_cell(col, label_text, widget):
+            lbl = QtWidgets.QLabel(label_text)
+            lbl.setFont(label_font())
+            header_grid.addWidget(lbl, 0, col)
+            header_grid.addWidget(widget, 1, col)
 
         self.from_field = QtWidgets.QLineEdit(self.callsign)
         self.from_field.setFont(mono_font())
         self.from_field.textChanged.connect(self._on_from_field_changed)
         make_uppercase(self.from_field)
-        header_layout.addLayout(_labeled_col("From:", self.from_field))
+        _add_header_cell(0, "From:", self.from_field)
 
         self.to_combo = QtWidgets.QComboBox()
         self.to_combo.setFont(mono_font())
+        self.to_combo.setMaxVisibleItems(30)
         all_groups = self._get_all_groups_from_db()
         if len(all_groups) == 1:
             self.to_combo.addItem(all_groups[0])
@@ -700,25 +720,29 @@ class StatRepDialog(QDialog):
             self.to_combo.addItem("")
             for group in all_groups:
                 self.to_combo.addItem(group)
-        header_layout.addLayout(_labeled_col("To:", self.to_combo))
+        _apply_combo_popup_style(self.to_combo)
+        _add_header_cell(1, "To:", self.to_combo)
 
         self.grid_field = QtWidgets.QLineEdit(self.grid)
         self.grid_field.setMaxLength(6)
         self.grid_field.setFont(mono_font())
         self.grid_field.textChanged.connect(self._on_grid_field_changed)
-        header_layout.addLayout(_labeled_col("Grid:", self.grid_field))
+        _add_header_cell(2, "Grid:", self.grid_field)
 
         self.scope_combo = QtWidgets.QComboBox()
         self.scope_combo.setFont(mono_font())
         for display, code in SCOPE_OPTIONS:
             self.scope_combo.addItem(display, code)
-        header_layout.addLayout(_labeled_col("Scope:", self.scope_combo))
+        _apply_combo_popup_style(self.scope_combo)
+        _add_header_cell(3, "Scope:", self.scope_combo)
 
-        layout.addLayout(header_layout)
+        layout.addLayout(header_grid)
 
         # ── Status grid (4 columns x 3 rows) ────────────────────────────
         status_grid = QtWidgets.QGridLayout()
         status_grid.setSpacing(8)
+        for col in range(4):
+            status_grid.setColumnStretch(col, 1)
 
         for i, (label, name) in enumerate(STATUS_CATEGORIES):
             label_row = (i // 4) * 2
@@ -818,6 +842,7 @@ class StatRepDialog(QDialog):
         combo.setFont(mono_font())
         combo.setMinimumWidth(130)
         combo.setMinimumHeight(28)
+        combo.setItemDelegate(QtWidgets.QStyledItemDelegate(combo))
 
         for display, code in STATUS_OPTIONS:
             combo.addItem(display, code)
@@ -1133,12 +1158,13 @@ class StatRepDialog(QDialog):
                 combo.setCurrentIndex(index)
 
     def _on_brevity(self) -> None:
-        """Launch Brevity modal over StatRep; Copy Code inserts into remarks field."""
+        """Launch Brevity over StatRep; Copy Code inserts into remarks field."""
         from brevity import BrevityApp
         self._brevity_window = BrevityApp(self.module_background, "#333333", parent=self)
-        self._brevity_window.setWindowModality(QtCore.Qt.WindowModal)
         self._brevity_window.code_selected.connect(self._on_brevity_code_selected)
         self._brevity_window.show()
+        self._brevity_window.raise_()
+        self._brevity_window.activateWindow()
 
     def _on_brevity_code_selected(self, code: str) -> None:
         """Insert selected brevity code into the remarks field and close Brevity."""

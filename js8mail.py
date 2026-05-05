@@ -94,10 +94,11 @@ class JS8MailDialog(QDialog):
             f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT}; }}"
             f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" selection-background-color:#cce5ff; selection-color:#000000; }}"
+            f"QComboBox QAbstractItemView::item {{ min-height:22px; padding:0 6px; }}"
         )
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -138,10 +139,15 @@ class JS8MailDialog(QDialog):
 
         self.rig_combo = QtWidgets.QComboBox()
         self.rig_combo.setMinimumWidth(140)
+        self.rig_combo.setMaxVisibleItems(30)
+        self.rig_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.rig_combo))
         self.rig_combo.currentTextChanged.connect(self._on_rig_changed)
         rig_row.addLayout(_labeled_col("Rig:", self.rig_combo))
 
         self.mode_combo = QtWidgets.QComboBox()
+        self.mode_combo.setFixedWidth(160)
+        self.mode_combo.setMaxVisibleItems(30)
+        self.mode_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.mode_combo))
         self.mode_combo.addItem("Slow", 4)
         self.mode_combo.addItem("Normal", 0)
         self.mode_combo.addItem("Fast", 1)
