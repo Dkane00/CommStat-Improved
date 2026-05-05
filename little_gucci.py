@@ -3901,6 +3901,15 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         self._update_time()  # Initial display
         self._update_connected_rigs_display()  # Initial connected rigs display
 
+        # Periodic resync of the status-bar rig indicators against live socket
+        # state. Why: the indicators are otherwise event-driven via
+        # any_connection_changed; if a signal is missed (e.g. socket transitions
+        # without `disconnected` firing) the indicators drift out of sync with
+        # the JS8 Connectors dialog. A 2s poll keeps them self-correcting.
+        self.rig_status_timer = QTimer(self)
+        self.rig_status_timer.timeout.connect(self._update_connected_rigs_display)
+        self.rig_status_timer.start(2000)
+
         # Internet check timer - retries every 30 minutes if offline
         self.internet_timer = QTimer(self)
         self.internet_timer.timeout.connect(self._retry_internet_check)

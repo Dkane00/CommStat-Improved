@@ -63,6 +63,7 @@ class JS8CallTCPClient(QObject):
         self.buffer = b""
         self._auto_reconnect = True
         self._reconnect_attempts = 0
+        self._was_connected = False  # Tracks last-emitted connection state
         self.callsign = ""  # Cached callsign from JS8Call
         self.speed_name = ""  # Cached speed mode name (NORMAL, FAST, TURBO, etc.)
         self.frequency = 0.0  # Cached frequency in MHz
@@ -185,6 +186,7 @@ class JS8CallTCPClient(QObject):
         self._reconnect_timer.stop()
         self._reconnect_attempts = 0  # Reset counter on successful connection
         self._auto_reconnect = True   # Re-enable auto-reconnect
+        self._was_connected = True
         self.connection_changed.emit(self.rig_name, True)
         # Emit connected message immediately
         self.status_message.emit(
@@ -197,7 +199,9 @@ class JS8CallTCPClient(QObject):
         """Handle disconnection."""
         print(f"[{self.rig_name}] Disconnected from JS8Call")
         self.buffer = b""
-        self.connection_changed.emit(self.rig_name, False)
+        if self._was_connected:
+            self._was_connected = False
+            self.connection_changed.emit(self.rig_name, False)
 
         # Schedule reconnect if auto-reconnect is enabled and under max attempts
         if self._auto_reconnect and self._reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
@@ -295,6 +299,13 @@ class JS8CallTCPClient(QObject):
 
         print(msg)
         self.status_message.emit(self.rig_name, msg)
+
+        # Catch the case where the socket dropped without `disconnected` firing.
+        # Why: errorOccurred is the only guaranteed signal on some failure paths;
+        # without this fallback, downstream UI can stay stuck on "Connected".
+        if self._was_connected and self.socket.state() != QAbstractSocket.ConnectedState:
+            self._was_connected = False
+            self.connection_changed.emit(self.rig_name, False)
 
         # Schedule reconnect on connection errors (if under max attempts)
         if self._auto_reconnect and error in (
