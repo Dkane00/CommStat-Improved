@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QStatusBar, QCompleter, QMessageBox, QHeaderView,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont, QFontDatabase, QIcon
 
 from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
@@ -323,6 +323,14 @@ if __name__ == '__main__':
 
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
+
+    font_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
+    for font_file in ('Roboto-Regular.ttf', 'Roboto-Bold.ttf',
+                      'RobotoSlab-Regular.ttf', 'RobotoSlab-Bold.ttf', 'RobotoSlab-Black.ttf',
+                      'KodeMono-Regular.ttf', 'KodeMono-Medium.ttf', 'KodeMono-Bold.ttf'):
+        font_path = os.path.join(font_dir, font_file)
+        if os.path.exists(font_path):
+            QFontDatabase.addApplicationFont(font_path)
 
     if os.path.exists("radiation-32.png"):
         app.setWindowIcon(QIcon("radiation-32.png"))

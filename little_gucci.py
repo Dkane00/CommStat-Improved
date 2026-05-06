@@ -3854,36 +3854,38 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             self._set_map_view_mode("contacts")
 
     def _on_grid_finder(self) -> None:
-        """Launch Grid Finder in a separate process."""
-        gridfinder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gridfinder.py")
-        if os.path.exists(gridfinder_path):
-            geo = self.geometry()
-            subprocess.Popen([
-                sys.executable, gridfinder_path,
-                self.config.get_color('module_background'),
-                self.config.get_color('module_foreground'),
-                self.config.get_color('data_background'),
-                self.config.get_color('data_foreground'),
-                str(geo.x()), str(geo.y()), str(geo.width()), str(geo.height()),
-            ])
-        else:
-            QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find gridfinder.py")
+        """Open Grid Finder as an in-process modeless window; reuse if already open."""
+        existing = getattr(self, "_grid_finder_window", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        Cls = self._resolve_dialog_class("gridfinder", "GridFinderApp")
+        win = Cls(parent=self)
+        geo = self.geometry()
+        ww, wh = win.width(), win.height()
+        win.move(geo.x() + (geo.width() - ww) // 2, geo.y() + (geo.height() - wh) // 2)
+        self._grid_finder_window = win
+        win.show()
 
     def _on_brevity_generator(self) -> None:
-        """Launch the Brevity Code Generator in a separate process."""
-        brevity_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brevity.py")
-        if os.path.exists(brevity_path):
-            geo = self.geometry()
-            subprocess.Popen([
-                sys.executable, brevity_path,
-                self.config.get_color('module_background'),
-                self.config.get_color('module_foreground'),
-                "",  # prefill_code
-                "",  # return_file
-                str(geo.x()), str(geo.y()), str(geo.width()), str(geo.height()),
-            ])
-        else:
-            QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find brevity.py")
+        """Open the Brevity Code Generator in-process; reuse if already open."""
+        existing = getattr(self, "_brevity_window", None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        Cls = self._resolve_dialog_class("brevity", "BrevityApp")
+        win = Cls(
+            panel_bg=self.config.get_color('module_background'),
+            panel_fg=self.config.get_color('module_foreground'),
+            parent=self,
+        )
+        geo = self.geometry()
+        ww, wh = win.width(), win.height()
+        win.move(geo.x() + (geo.width() - ww) // 2, geo.y() + (geo.height() - wh) // 2)
+        self._brevity_window = win
+        win.show()
 
     def _resolve_dialog_class(self, module_name: str, class_name: str):
         """Return a dialog class, reloading its module first when DEV_RELOAD_DIALOGS is set.

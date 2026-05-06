@@ -21,6 +21,11 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QFrame, QCheckBox, QStatusBar, QListView)
 from PyQt5.QtCore import Qt, QRegExp, pyqtSignal
 from PyQt5.QtGui import QFont, QRegExpValidator, QIcon
+
+from constants import DEFAULT_COLORS
+
+_PROG_BG = DEFAULT_COLORS.get("program_background", "#A52A2A")
+_PROG_FG = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
 # Global variables
 positions = {}
 updating_menus = False
@@ -1029,7 +1034,7 @@ class BrevityApp(QMainWindow):
         self.setWindowTitle("Brevity")
         if parent is not None:
             self.setWindowFlags(Qt.Dialog)
-        self.resize(700, 750)
+        self.resize(700, 600)
         self._setup_ui()
         self._load_data(prefill_code)
 
@@ -1041,8 +1046,9 @@ class BrevityApp(QMainWindow):
             }}
             QLabel {{
                 color: {self.panel_fg};
-                font-weight: normal;
-                font-size: 11pt;
+                font-family: Roboto;
+                font-weight: bold;
+                font-size: 13px;
             }}
             QLineEdit {{
                 background-color: #ffffff;
@@ -1051,23 +1057,20 @@ class BrevityApp(QMainWindow):
                 padding: 4px;
                 font-size: 11pt;
             }}
-            QComboBox[hasSelection="false"] {{
-                background-color: #6c757d;
-                color: white;
+            QComboBox {{
+                background-color: #ffffff;
+                color: {self.panel_fg};
                 border: 1px solid #cccccc;
                 padding: 4px;
                 font-weight: bold;
                 font-size: 11pt;
                 min-width: 200px;
             }}
-            QComboBox[hasSelection="true"] {{
-                background-color: #28a745;
-                color: white;
-                border: 1px solid #cccccc;
-                padding: 4px;
-                font-weight: bold;
-                font-size: 11pt;
-                min-width: 200px;
+            QComboBox QAbstractItemView {{
+                background-color: #ffffff;
+                color: {self.panel_fg};
+                selection-background-color: #cce5ff;
+                selection-color: #000000;
             }}
             QComboBox::drop-down {{
                 border: none;
@@ -1094,17 +1097,23 @@ class BrevityApp(QMainWindow):
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
+        title_bar = QLabel("Brevity Encoder/Decoder")
+        title_bar.setAlignment(Qt.AlignCenter)
+        title_bar.setFont(QFont("Roboto Slab", -1, QFont.Black))
+        title_bar.setFixedHeight(36)
+        title_bar.setStyleSheet(
+            f"QLabel {{ background-color: {_PROG_BG}; color: {_PROG_FG};"
+            f" font-family: 'Roboto Slab'; font-size: 16px; font-weight: 900;"
+            f" padding-top: 9px; padding-bottom: 9px; }}"
+        )
+        main_layout.addWidget(title_bar)
+
         # Top section - Decode area
         decode_frame = QFrame()
         decode_layout = QVBoxLayout(decode_frame)
         decode_layout.setAlignment(Qt.AlignCenter)
-        decode_layout.setContentsMargins(10, 12, 10, 20)
+        decode_layout.setContentsMargins(10, 12, 10, 0)
         decode_layout.setSpacing(12)
-
-        label_decode = QLabel("Brevity Encoder/Decoder")
-        label_decode.setAlignment(Qt.AlignCenter)
-        label_decode.setStyleSheet(f"font-family: Arial; font-size: 16pt; font-weight: bold; color: {self.panel_fg};")
-        decode_layout.addWidget(label_decode)
 
         decode_inner_layout = QHBoxLayout()
         decode_inner_layout.setAlignment(Qt.AlignCenter)
@@ -1254,7 +1263,7 @@ class BrevityApp(QMainWindow):
         # Output section
         output_header_layout = QHBoxLayout()
         output_label = QLabel("Brevity Report")
-        output_label.setFont(QFont("Arial", 10, QFont.Bold))
+        output_label.setStyleSheet("QLabel { font-family: Arial; font-size: 10pt; font-weight: bold; }")
         output_header_layout.addWidget(output_label)
         output_header_layout.addStretch()
 
@@ -1268,13 +1277,13 @@ class BrevityApp(QMainWindow):
         output_frame_layout = QVBoxLayout(output_frame)
         output_frame_layout.setContentsMargins(0, 0, 0, 0)
         self.output_text = QTextEdit()
-        self.output_text.setMinimumHeight(150)
+        self.output_text.setMinimumHeight(170)
         output_frame_layout.addWidget(self.output_text)
         main_layout.addWidget(output_frame)
 
         # Narrative section (initially hidden)
         narrative_label = QLabel("Detailed Narrative")
-        narrative_label.setFont(QFont("Arial", 10, QFont.Bold))
+        narrative_label.setStyleSheet("QLabel { font-family: Arial; font-size: 10pt; font-weight: bold; }")
         narrative_label.hide()
         main_layout.addWidget(narrative_label)
 
@@ -1339,21 +1348,8 @@ class BrevityApp(QMainWindow):
         self.secondary_combo.currentTextChanged.connect(lambda text: handle_menu_select("secondary", text))
         self.severity_combo.currentTextChanged.connect(lambda text: handle_menu_select("severity", text))
 
-        for combo in [self.list_combo, self.emergency_combo, self.status_combo,
-                      self.primary_combo, self.secondary_combo, self.severity_combo]:
-            combo.currentTextChanged.connect(lambda text, c=combo: self._update_combo_bg(c, text))
-            self._update_combo_bg(combo, combo.currentText())
-
         self.decode_entry.setContextMenuPolicy(Qt.CustomContextMenu)
         self.decode_entry.customContextMenuRequested.connect(lambda pos: paste_into_decode())
-
-    def _update_combo_bg(self, combo, text):
-        if not text or text.startswith("Select ") or text.startswith("No "):
-            combo.setProperty("hasSelection", "false")
-        else:
-            combo.setProperty("hasSelection", "true")
-        combo.style().unpolish(combo)
-        combo.style().polish(combo)
 
     def _on_copy_code(self):
         text = self.output_text.toPlainText()
