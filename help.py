@@ -7,6 +7,7 @@ import os
 from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtCore import Qt
 from constants import DEFAULT_COLORS, ICON_FILE
+from ui_helpers import make_button
 
 
 _PROG_BG  = DEFAULT_COLORS.get("program_background", "#000000")
@@ -69,6 +70,10 @@ class HelpDialog(QtWidgets.QDialog):
 
         layout.addStretch()
 
-        close_btn = QtWidgets.QPushButton("Close")
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+        close_btn = make_button("Close", "#555555", 80)
         close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn, alignment=Qt.AlignCenter)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)

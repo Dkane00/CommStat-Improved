@@ -1390,6 +1390,16 @@ if __name__ == "__main__":
         prefill_code = sys.argv[3] if len(sys.argv) > 3 else ""
         return_file = sys.argv[4] if len(sys.argv) > 4 else ""
 
+        parent_rect = None
+        if len(sys.argv) > 8:
+            try:
+                parent_rect = (
+                    int(sys.argv[5]), int(sys.argv[6]),
+                    int(sys.argv[7]), int(sys.argv[8]),
+                )
+            except (ValueError, TypeError):
+                parent_rect = None
+
         app = QApplication(sys.argv)
         if os.path.exists("radiation-32.png"):
             app.setWindowIcon(QIcon("radiation-32.png"))
@@ -1397,6 +1407,10 @@ if __name__ == "__main__":
         window = BrevityApp(panel_bg, panel_fg, prefill_code)
         if return_file:
             window.code_selected.connect(lambda code: _copy_code_and_return(return_file, code))
+        if parent_rect is not None:
+            px, py, pw, ph = parent_rect
+            ww, wh = window.width(), window.height()
+            window.move(px + (pw - ww) // 2, py + (ph - wh) // 2)
         window.show()
         sys.exit(app.exec_())
     except Exception as e:

@@ -114,11 +114,7 @@ class JS8SMSDialog(QDialog):
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
-
-        # Warning (below title)
-        warning = QtWidgets.QLabel("Sending SMS depends on APRS services being available.")
-        warning.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
-        layout.addWidget(warning)
+        layout.addSpacing(7)
 
         # Rig / Mode / Frequency row
         def _labeled_col(lbl_text, ctrl):
@@ -192,14 +188,31 @@ class JS8SMSDialog(QDialog):
         self.message_field.textChanged.connect(self._force_uppercase_message)
         layout.addWidget(self.message_field)
 
-        # Note
+        # Note + Opt-in + Limitations
         note = QtWidgets.QLabel(
-            "Recipients must often opt-in on the SMS gateway before delivery will work. "
-            "SMS delivery is highly unreliable."
+            '<span style="color:#CC0000; font-weight:bold;">Note:</span> '
+            "Recipients must often opt-in on the SMS gateway before delivery will work."
         )
         note.setWordWrap(True)
         note.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
         layout.addWidget(note)
+
+        optin = QtWidgets.QLabel(
+            'To opt in, the recipient must register their phone number at '
+            '<a href="https://smsgte.org/opt-in/">https://smsgte.org/opt-in/</a>.'
+        )
+        optin.setOpenExternalLinks(True)
+        optin.setWordWrap(True)
+        optin.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        layout.addWidget(optin)
+
+        limitations = QtWidgets.QLabel(
+            '<span style="color:#CC0000; font-weight:bold;">Limitations:</span> '
+            "Sending SMS depends on APRS services being available."
+        )
+        limitations.setWordWrap(True)
+        limitations.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        layout.addWidget(limitations)
 
         layout.addStretch()
 

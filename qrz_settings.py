@@ -231,9 +231,11 @@ class QRZSettingsDialog(QDialog):
         self.table.setMaximumHeight(120)
 
         hh = self.table.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.Stretch)
+        hh.setSectionResizeMode(0, QHeaderView.Interactive)
         hh.setSectionResizeMode(1, QHeaderView.Stretch)
-        hh.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(2, QHeaderView.Fixed)
+        self.table.setColumnWidth(0, 185)
+        self.table.setColumnWidth(2, 100)
 
         self.table.setStyleSheet(
             f"QTableWidget {{ background-color:{_DATA_BG}; alternate-background-color:{_DATA_BG};"

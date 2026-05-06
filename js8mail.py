@@ -116,11 +116,7 @@ class JS8MailDialog(QDialog):
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
-
-        # Warning (below title)
-        warning = QtWidgets.QLabel("Sending email depends on APRS services being available.")
-        warning.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
-        layout.addWidget(warning)
+        layout.addSpacing(7)
 
         # Rig / Mode / Frequency row
         def _labeled_col(lbl_text, ctrl):
@@ -194,10 +190,20 @@ class JS8MailDialog(QDialog):
         self.subject_field.textChanged.connect(self._force_uppercase_subject)
         layout.addWidget(self.subject_field)
 
-        # Note
-        note = QtWidgets.QLabel("APRS emails are sent in the subject line. Replies are not supported.")
+        # Note + Limitations
+        note = QtWidgets.QLabel(
+            '<span style="color:#CC0000; font-weight:bold;">Note:</span> '
+            "APRS emails are sent in the subject line. Replies are not supported."
+        )
         note.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
         layout.addWidget(note)
+
+        limitations = QtWidgets.QLabel(
+            '<span style="color:#CC0000; font-weight:bold;">Limitations:</span> '
+            "Sending email depends on APRS services being available."
+        )
+        limitations.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        layout.addWidget(limitations)
 
         layout.addSpacing(12)
 

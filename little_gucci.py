@@ -1436,8 +1436,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(*WINDOW_SIZE)
 
-        # Restore window position from config
+        # Restore window geometry from config
         self._restore_window_position()
+
+        # Cmd+Q on macOS may bypass closeEvent — save on aboutToQuit too.
+        qApp.aboutToQuit.connect(self._save_window_position)
 
         # Set window icon
         icon_path = Path(ICON_FILE)
@@ -1447,26 +1450,40 @@ class MainWindow(QtWidgets.QMainWindow):
             self.setWindowIcon(icon)
 
     def _restore_window_position(self) -> None:
-        """Restore window position from config.ini."""
+        """Restore window geometry from config.ini."""
         config = ConfigParser()
         if not os.path.exists(CONFIG_FILE):
             return
 
         config.read(CONFIG_FILE)
+        if not config.has_section("WINDOW"):
+            return
 
-        if config.has_section("WINDOW"):
+        # Prefer Qt's saveGeometry blob — handles frame offsets and screen bounds.
+        geom_b64 = config.get("WINDOW", "geometry", fallback="")
+        if geom_b64:
             try:
-                x = config.getint("WINDOW", "x", fallback=None)
-                y = config.getint("WINDOW", "y", fallback=None)
-                width = config.getint("WINDOW", "width", fallback=None)
-                height = config.getint("WINDOW", "height", fallback=None)
-
-                if x is not None and y is not None:
-                    self.move(x, y)
-                if width is not None and height is not None:
-                    self.resize(width, height)
+                geom = QtCore.QByteArray.fromBase64(geom_b64.encode("ascii"))
+                if not geom.isEmpty() and self.restoreGeometry(geom):
+                    return
             except (ValueError, TypeError):
-                pass  # Use defaults if config is invalid
+                pass
+
+        # Legacy fallback: explicit x/y/width/height. move() before show() is
+        # unreliable on some WMs, so re-apply after the window is shown.
+        try:
+            x = config.getint("WINDOW", "x", fallback=None)
+            y = config.getint("WINDOW", "y", fallback=None)
+            width = config.getint("WINDOW", "width", fallback=None)
+            height = config.getint("WINDOW", "height", fallback=None)
+        except (ValueError, TypeError):
+            return
+
+        if width is not None and height is not None:
+            self.resize(width, height)
+        if x is not None and y is not None:
+            self.move(x, y)
+            QTimer.singleShot(0, lambda: self.move(x, y))
 
     def closeEvent(self, event) -> None:
         """Clean up resources and save window position before closing."""
@@ -1490,7 +1507,7 @@ class MainWindow(QtWidgets.QMainWindow):
         event.accept()
 
     def _save_window_position(self) -> None:
-        """Save window position to config.ini."""
+        """Save window geometry to config.ini."""
         config = ConfigParser()
         if os.path.exists(CONFIG_FILE):
             config.read(CONFIG_FILE)
@@ -1498,12 +1515,17 @@ class MainWindow(QtWidgets.QMainWindow):
         if not config.has_section("WINDOW"):
             config.add_section("WINDOW")
 
-        pos = self.pos()
-        size = self.size()
-        config.set("WINDOW", "x", str(pos.x()))
-        config.set("WINDOW", "y", str(pos.y()))
-        config.set("WINDOW", "width", str(size.width()))
-        config.set("WINDOW", "height", str(size.height()))
+        # Authoritative: Qt's geometry blob, which round-trips frame coords
+        # correctly across platforms via restoreGeometry().
+        geom_b64 = bytes(self.saveGeometry().toBase64()).decode("ascii")
+        config.set("WINDOW", "geometry", geom_b64)
+
+        # Also store frame coords in plain form for human inspection.
+        fg = self.frameGeometry()
+        config.set("WINDOW", "x", str(fg.x()))
+        config.set("WINDOW", "y", str(fg.y()))
+        config.set("WINDOW", "width", str(fg.width()))
+        config.set("WINDOW", "height", str(fg.height()))
 
         try:
             with open(CONFIG_FILE, 'w') as f:
@@ -1821,6 +1843,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tools_menu.addSeparator()
         create_action(self.tools_menu, "QRZ Contacts", "qrz_contacts", self._on_qrz_contacts_menu)
         create_action(self.tools_menu, "Grid Finder", "grid_finder", self._on_grid_finder)
+        create_action(self.tools_menu, "Brevity", "brevity", self._on_brevity_generator)
         create_action(self.tools_menu, "Large Map...", "large_map", self._on_large_map)
 
         # Menubar items
@@ -3850,10 +3873,14 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         """Launch the Brevity Code Generator in a separate process."""
         brevity_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brevity.py")
         if os.path.exists(brevity_path):
+            geo = self.geometry()
             subprocess.Popen([
                 sys.executable, brevity_path,
                 self.config.get_color('module_background'),
                 self.config.get_color('module_foreground'),
+                "",  # prefill_code
+                "",  # return_file
+                str(geo.x()), str(geo.y()), str(geo.width()), str(geo.height()),
             ])
         else:
             QtWidgets.QMessageBox.critical(self, "CommStat Error", "Could not find brevity.py")
@@ -5520,6 +5547,9 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             loading_text: Text to show while loading.
             error_prefix: Prefix for error message (e.g., "Failed to load band conditions").
         """
+        panel_bg = DEFAULT_COLORS.get("module_background", "#DDDDDD")
+        panel_fg = DEFAULT_COLORS.get("module_foreground", "#FFFFFF")
+
         dialog = QtWidgets.QDialog(self)
         dialog.setWindowTitle(title)
         dialog.setMinimumSize(480, 200)
@@ -5529,9 +5559,14 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             Qt.WindowTitleHint |
             Qt.WindowCloseButtonHint
         )
+        dialog.setStyleSheet(
+            f"QDialog {{ background-color:{panel_bg}; color:{panel_fg}; }}"
+            f"QLabel {{ font-size:13px; color:{panel_fg}; }}"
+        )
 
         layout = QtWidgets.QVBoxLayout(dialog)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
 
         # Image label (shows loading text, then image or error)
         image_label = QtWidgets.QLabel(loading_text)
@@ -5544,10 +5579,15 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         link_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(link_label)
 
-        # Close button
-        close_btn = QtWidgets.QPushButton("Close")
+        # Close button row (bottom right)
+        from ui_helpers import make_button
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addStretch()
+        close_btn = make_button("Close", "#555555", 80)
         close_btn.clicked.connect(dialog.close)
-        layout.addWidget(close_btn, alignment=Qt.AlignCenter)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
 
         # Storage for fetched data (shared between threads)
         fetch_result = {'data': None, 'error': None}
