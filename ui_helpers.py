@@ -14,7 +14,7 @@ from typing import Tuple
 from PyQt5 import QtGui
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QPushButton, QLineEdit, QCheckBox, QWidget, QHBoxLayout, QMessageBox,
+    QPushButton, QLineEdit, QCheckBox, QComboBox, QWidget, QHBoxLayout, QMessageBox,
 )
 
 from constants import FONT_ROBOTO, FONT_MONO
@@ -73,6 +73,28 @@ def make_input(placeholder: str = "", default: str = "", max_len: int = 0) -> QL
         "QLineEdit:focus { border:1px solid #007bff; }"
     )
     return e
+
+
+# ── Combo box ──────────────────────────────────────────────────────────────────
+
+def make_combobox(items) -> QComboBox:
+    """
+    Standard styled QComboBox matching make_input.
+    items: iterable of (label, value) tuples. Stored value via itemData.
+    """
+    cb = QComboBox()
+    cb.setMinimumHeight(30)
+    cb.setStyleSheet(
+        "QComboBox { background-color:white; color:#333333; border:1px solid #cccccc;"
+        f" border-radius:4px; padding:2px 6px; font-family:'{FONT_MONO}'; font-size:13px; }}"
+        "QComboBox:focus { border:1px solid #007bff; }"
+        "QComboBox QAbstractItemView { background-color:white; color:#333333;"
+        " selection-background-color:#cce5ff; selection-color:#000000;"
+        f" font-family:'{FONT_MONO}'; font-size:13px; }}"
+    )
+    for label, value in items:
+        cb.addItem(label, value)
+    return cb
 
 
 # ── Checkbox cell ──────────────────────────────────────────────────────────────

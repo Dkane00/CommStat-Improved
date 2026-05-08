@@ -16,12 +16,12 @@ from PyQt5 import QtGui
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
+    QLabel, QLineEdit, QComboBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QAbstractItemView, QWidget,
 )
 
 from constants import DEFAULT_COLORS
-from ui_helpers import make_button, make_input, confirm
+from ui_helpers import make_button, make_input, make_combobox, confirm
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -41,10 +41,19 @@ _COL_CLOSE  = "#555555"
 _COL_SAVE   = "#28a745"
 _COL_CANCEL = "#555555"
 
-_WIN_W      = 520
+_WIN_W      = 680
 _WIN_H      = 260
 
-_TABLE_COLS = ["Callsign", "Grid Square", "State"]
+_TABLE_COLS = ["Callsign", "Grid Square", "State", "Default Map"]
+
+_REGIONS = [
+    ("United States",  "us"),
+    ("European Union", "eu"),
+    ("Middle East",    "mideast"),
+    ("SE Asia",        "seasia"),
+]
+_REGION_LABEL = {v: k for k, v in _REGIONS}
+_DEFAULT_REGION = "us"
 
 
 # ── Dialog ─────────────────────────────────────────────────────────────────────
@@ -62,6 +71,7 @@ class UserSettingsDialog(QDialog):
         self._iw_callsign: Optional[QLineEdit] = None
         self._iw_grid: Optional[QLineEdit] = None
         self._iw_state: Optional[QLineEdit] = None
+        self._iw_region: Optional[QComboBox] = None
 
         self.setWindowTitle("User Settings")
         self.setWindowFlags(
@@ -119,6 +129,7 @@ class UserSettingsDialog(QDialog):
         hh.setSectionResizeMode(0, QHeaderView.Stretch)
         hh.setSectionResizeMode(1, QHeaderView.Stretch)
         hh.setSectionResizeMode(2, QHeaderView.Stretch)
+        hh.setSectionResizeMode(3, QHeaderView.Stretch)
 
         self.table.setStyleSheet(
             f"QTableWidget {{ background-color:{_DATA_BG}; alternate-background-color:{_DATA_BG};"
@@ -173,12 +184,14 @@ class UserSettingsDialog(QDialog):
         self._in_edit_mode = False
         self._edit_row = -1
         callsign, grid, state = self.db.get_user_settings()
+        region = self.db.get_default_map() or _DEFAULT_REGION
+        region_label = _REGION_LABEL.get(region, _REGION_LABEL[_DEFAULT_REGION])
         self.table.setRowCount(0)
         mono = QtGui.QFont("Kode Mono")
 
         if callsign:
             self.table.insertRow(0)
-            for col, val in enumerate([callsign, grid, state]):
+            for col, val in enumerate([callsign, grid, state, region_label]):
                 item = QTableWidgetItem(val)
                 item.setFont(mono)
                 item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
@@ -208,6 +221,9 @@ class UserSettingsDialog(QDialog):
         grid     = "" if adding else (self.table.item(row, 1).text() if self.table.item(row, 1) else "")
         state    = "" if adding else (self.table.item(row, 2).text() if self.table.item(row, 2) else "")
 
+        # Region: always read from DB (the cell text is the human label, not the code)
+        current_region = self.db.get_default_map() or _DEFAULT_REGION
+
         self._iw_callsign = make_input(placeholder="Your callsign", max_len=12)
         self._iw_callsign.setText(callsign)
         self._iw_callsign.textChanged.connect(
@@ -224,9 +240,16 @@ class UserSettingsDialog(QDialog):
             lambda t: self._iw_state.setText(t.upper()) if t != t.upper() else None
         )
 
+        self._iw_region = make_combobox(_REGIONS)
+        idx = self._iw_region.findData(current_region)
+        if idx < 0:
+            idx = self._iw_region.findData(_DEFAULT_REGION)
+        self._iw_region.setCurrentIndex(max(idx, 0))
+
         self.table.setCellWidget(row, 0, self._iw_callsign)
         self.table.setCellWidget(row, 1, self._iw_grid)
         self.table.setCellWidget(row, 2, self._iw_state)
+        self.table.setCellWidget(row, 3, self._iw_region)
         self.table.setRowHeight(row, 34)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
 
@@ -239,7 +262,8 @@ class UserSettingsDialog(QDialog):
 
         QWidget.setTabOrder(self._iw_callsign, self._iw_grid)
         QWidget.setTabOrder(self._iw_grid, self._iw_state)
-        QWidget.setTabOrder(self._iw_state, self.btn_save)
+        QWidget.setTabOrder(self._iw_state, self._iw_region)
+        QWidget.setTabOrder(self._iw_region, self.btn_save)
 
         self._on_inline_changed()
         self._iw_callsign.setFocus()
@@ -264,15 +288,17 @@ class UserSettingsDialog(QDialog):
             else:
                 grid = raw_grid.upper()
             state = self._iw_state.text().strip().upper()
+            region = self._iw_region.currentData() or _DEFAULT_REGION
             ok = self.db.set_user_settings(callsign, grid, state)
             if not ok:
                 QMessageBox.critical(self, "Error", "Could not save user settings.")
                 return
+            self.db.set_default_map(region)
 
-        for col in range(3):
+        for col in range(4):
             self.table.removeCellWidget(row, col)
 
-        self._iw_callsign = self._iw_grid = self._iw_state = None
+        self._iw_callsign = self._iw_grid = self._iw_state = self._iw_region = None
         self._in_edit_mode = False
 
         self.table.setRowHeight(row, self.table.verticalHeader().defaultSectionSize())
@@ -305,4 +331,5 @@ class UserSettingsDialog(QDialog):
                        no_label="Cancel"):
             return
         self.db.set_user_settings("", "", "")
+        self.db.set_default_map(_DEFAULT_REGION)
         self._load()

@@ -1326,6 +1326,31 @@ class DatabaseManager:
             return cursor.rowcount > 0
         return self._execute(op, False)
 
+    def get_default_map(self) -> str:
+        """Get user's preferred startup map region; falls back to 'us'."""
+        def op(cursor, conn):
+            try:
+                cursor.execute("SELECT default_map FROM controls WHERE id = 1")
+                row = cursor.fetchone()
+                return (row[0] or "us") if row else "us"
+            except sqlite3.OperationalError:
+                return "us"
+        return self._execute(op, "us")
+
+    def set_default_map(self, region: str) -> bool:
+        """Save user's preferred startup map region."""
+        def op(cursor, conn):
+            try:
+                cursor.execute(
+                    "UPDATE controls SET default_map = ? WHERE id = 1",
+                    (region,)
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+            except sqlite3.OperationalError:
+                return False
+        return self._execute(op, False)
+
     def set_qrz_active(self, is_active: bool) -> bool:
         """Toggle QRZ active status."""
         def op(cursor, conn):
@@ -1431,6 +1456,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Map state
         self.map_loaded = False
+        self._last_map_region = self.db.get_default_map()
+        self._current_view_mode: str = ""
+        self._region_pin_counts: Dict[str, int] = {"us": 0, "eu": 0, "mideast": 0, "seasia": 0}
 
         self._setup_window()
         self._setup_ui()
@@ -1866,7 +1894,15 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
         # Map view toggle buttons (left side of status bar)
-        for label, mode in [("Map", "map"), ("Images", "images"), ("Alerts", "alerts"), ("Contacts", "contacts")]:
+        for label, mode in [
+            ("US", "us"),
+            ("EU", "eu"),
+            ("Mid-East", "mideast"),
+            ("SE Asia", "seasia"),
+            ("Images", "images"),
+            ("Alerts", "alerts"),
+            ("Contacts", "contacts"),
+        ]:
             btn = QtWidgets.QPushButton(label)
             btn.setFixedHeight(18)
             btn.setFixedWidth(70)
@@ -2235,19 +2271,40 @@ class MainWindow(QtWidgets.QMainWindow):
         elif self.config.get_hide_map():
             self._set_map_view_mode("images")
         else:
-            self._set_map_view_mode("map")
+            default = self.db.get_default_map()
+            if default not in ("us", "eu", "mideast", "seasia"):
+                default = "us"
+            self._set_map_view_mode(default)
 
     def _set_map_view_mode(self, mode: str) -> None:
-        """Switch the map panel between Map, Images, and Alerts views."""
+        """Switch the map panel between region maps, Images, Alerts, and Contacts views."""
         INACTIVE = "background-color: #DDDDDD; color: #000000; border: none; border-radius: 4px; padding: 2px 10px;"
         ACTIVE   = "background-color: #28a745; color: white; border: none; border-radius: 4px; padding: 2px 10px;"
 
-        for m in ("map", "images", "alerts", "contacts"):
+        # Region presets: (center_lat, center_lng), zoom
+        REGION_VIEWS = {
+            "us":      ((38.8199286, -96.7782551), 4),
+            "eu":      ((45.8150, 15.9819),        4),
+            "mideast": ((31.7683, 35.2137),        4),
+            "seasia":  ((22.4778, 101.1718),       4),
+        }
+
+        self._current_view_mode = mode
+
+        # Non-region buttons are styled directly; region buttons go through
+        # _update_region_button_pin_indicators so they can show orange when
+        # an inactive region has pins on it.
+        for m in ("images", "alerts", "contacts"):
             btn = getattr(self, f"_btn_{m}", None)
             if btn:
                 btn.setStyleSheet(ACTIVE if m == mode else INACTIVE)
+        self._update_region_button_pin_indicators()
 
-        if mode == "map":
+        if mode in REGION_VIEWS:
+            center, zoom = REGION_VIEWS[mode]
+            self.map_center = center
+            self.map_zoom = zoom
+            self._last_map_region = mode
             self._stop_slideshow()
             self.map_disabled_label.hide()
             self.alert_display.hide()
@@ -2259,6 +2316,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.config.set_hide_map(False)
             self.config.set_show_alerts(False)
             self.config.set_show_contacts(False)
+            self._load_map()
         elif mode == "images":
             self.map_widget.hide()
             self.alert_display.hide()
@@ -2300,6 +2358,33 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.contacts_table.viewport().setFocus()
             else:
                 QTimer.singleShot(0, lambda: self._set_map_view_mode("contacts"))
+
+    def _update_region_button_pin_indicators(self) -> None:
+        """
+        Style the four region buttons from current state:
+          - selected region  → green
+          - has pins on it   → orange (#F07800)
+          - otherwise        → gray
+        Pin counts come from self._region_pin_counts (filled by _load_map);
+        selected region comes from self._current_view_mode.
+        """
+        INACTIVE = "background-color: #DDDDDD; color: #000000; border: none; border-radius: 4px; padding: 2px 10px;"
+        ACTIVE   = "background-color: #28a745; color: white;   border: none; border-radius: 4px; padding: 2px 10px;"
+        HASPINS  = "background-color: #F07800; color: white;   border: none; border-radius: 4px; padding: 2px 10px;"
+
+        counts  = getattr(self, "_region_pin_counts", {}) or {}
+        current = getattr(self, "_current_view_mode", "")
+
+        for region in ("us", "eu", "mideast", "seasia"):
+            btn = getattr(self, f"_btn_{region}", None)
+            if not btn:
+                continue
+            if region == current:
+                btn.setStyleSheet(ACTIVE)
+            elif counts.get(region, 0) > 0:
+                btn.setStyleSheet(HASPINS)
+            else:
+                btn.setStyleSheet(INACTIVE)
 
     def _show_alert_display(self) -> None:
         """Show the alert display with the current alert from database."""
@@ -3569,6 +3654,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 control=False
             ).add_to(m)
 
+        # Bounding boxes used to count pins per region for status-bar indicators
+        # (lat_min, lat_max, lng_min, lng_max). Boxes can overlap; a pin near a
+        # boundary may light multiple buttons.
+        REGION_BBOX = {
+            "us":      ( 24.0,  50.0, -125.0,  -66.0),
+            "eu":      ( 35.0,  72.0,  -10.0,   40.0),
+            "mideast": ( 12.0,  42.0,   25.0,   65.0),
+            "seasia":  (-10.0,  30.0,   90.0,  140.0),
+        }
+        region_counts = {"us": 0, "eu": 0, "mideast": 0, "seasia": 0}
+
         # Get StatRep data for pins
         try:
             _map_callsign = next((cs for cs in self.rig_callsigns.values() if cs), "") or ""
@@ -3627,6 +3723,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     if self._hide_internet_statrep and row[21] != 1:
                         continue
 
+                    # Count this pin against any region whose bounding box contains it
+                    for _region, (_lat_min, _lat_max, _lng_min, _lng_max) in REGION_BBOX.items():
+                        if _lat_min <= lat <= _lat_max and _lng_min <= lon <= _lng_max:
+                            region_counts[_region] += 1
+
                     # Determine pin color and size
                     if status == "1":
                         color = "green"
@@ -3654,6 +3755,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         except Exception as e:
             print(f"Error loading map data: {e}")
+
+        # Publish per-region pin counts to status-bar indicators
+        self._region_pin_counts = region_counts
+        self._update_region_button_pin_indicators()
 
         # Save map to bytes and display
         map_data = io.BytesIO()
@@ -3866,7 +3971,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
     def _on_qrz_contacts_menu(self) -> None:
         """Toggle QRZ Contacts view; switch back to map if already showing."""
         if hasattr(self, 'contacts_widget') and self.contacts_widget.isVisible():
-            self._set_map_view_mode("map")
+            self._set_map_view_mode(getattr(self, "_last_map_region", "us"))
         else:
             self._set_map_view_mode("contacts")
 
