@@ -1883,7 +1883,8 @@ class MainWindow(QtWidgets.QMainWindow):
         create_action(self.menubar, "QRZ", "qrz_lookup", self._on_qrz_lookup)
         create_action(self.menubar, "Help", "help", self._on_help)
         create_action(self.menubar, "Exit" + " " * 10, "exit", qApp.quit)
-        create_action(self.menubar, "What's New", "whats_new", self._on_whats_new)
+        create_action(self.menubar, "What's New" + " " * 10, "whats_new", self._on_whats_new)
+        create_action(self.menubar, "Live Better", "live_better", self._on_live_better)
 
         # Add status bar
         self.statusbar = QtWidgets.QStatusBar(self)
@@ -1911,7 +1912,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusbar.addWidget(btn)
             setattr(self, f"_btn_{mode}", btn)
 
-        hint_label = QtWidgets.QLabel(" < Click to Change View")
+        hint_label = QtWidgets.QLabel(" - - -")
         self.statusbar.addWidget(hint_label)
 
         # Add "Rig Status:" label (no sunken effect, permanent on right)
@@ -4030,6 +4031,10 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
     def _on_whats_new(self) -> None:
         """Open the What's New page in the user's browser."""
         QDesktopServices.openUrl(QUrl("https://commstat-improved.com/new-features.php"))
+
+    def _on_live_better(self) -> None:
+        """Open the Live Better page in the user's browser."""
+        QDesktopServices.openUrl(QUrl("https://commstat-improved.com/how-are-you-feeling.php"))
 
     def _on_qrz_lookup(self) -> None:
         """Open standalone QRZ Lookup dialog (Tools menu)."""
