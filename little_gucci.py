@@ -61,7 +61,6 @@ from filter import FilterDialog
 from groups import GroupsDialog
 from js8mail import JS8MailDialog
 from js8sms import JS8SMSDialog
-from direct_message import DirectMessageDialog
 from group_message import GroupMessageDialog
 from alert import AlertDialog
 from statrep import StatRepDialog
@@ -83,6 +82,12 @@ from qrz_settings import QRZSettingsDialog
 # This allows the developer to push messages/images to all CommStat users
 _BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
 _PING = _BACKBONE + "/heartbeat-808585.php"
+
+# Pixels of mouse-wheel scroll required to advance one Leaflet zoom level
+# on the bottom-left map. Leaflet default is 60; raised to dampen sensitivity.
+# Paired with zoomSnap=0.25 in the folium.Map() call so fractional zoom is
+# allowed — otherwise every wheel tick rounds up to a full zoom level.
+MAP_WHEEL_PX_PER_ZOOM = 360
 
 # Solar/radio image dialogs: (menu_label, image_url, link_html, loading_text, error_prefix)
 SOLAR_IMAGE_DIALOGS = [
@@ -3075,17 +3080,15 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(int)
     def _show_program_update_notification(self, new_build: int) -> None:
         """Show notification prompting user to restart (called from main thread)."""
-        reply = QtWidgets.QMessageBox.question(
+        from ui_helpers import confirm
+        if confirm(
             self,
             "Update Available",
             f"CommStat build {new_build} has been downloaded.\n\n"
             f"Please close the application to install the update.\n\n"
             f"Close CommStat now?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.Yes
-        )
-
-        if reply == QtWidgets.QMessageBox.Yes:
+            default_yes=True,
+        ):
             # Close the application gracefully - this triggers closeEvent() which
             # disconnects TCP connections and saves state
             # commstat.py will apply the update on next launch
@@ -3270,7 +3273,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.message_table.setRowCount(0)
 
         self._setup_table_widget(self.message_table, [
-            "", "Date Time", "Freq", "From", "To", "ID", "Message"
+            "", "Date Time", "Freq", "From", "To", "ID", "0 Messages"
         ])
         self.message_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.message_table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -3521,6 +3524,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._populate_table(self.message_table, data)
 
+        count = len(data)
+        label = "Message" if count == 1 else "Messages"
+        self.message_table.setHorizontalHeaderItem(
+            6, QTableWidgetItem(f"{count} {label}")
+        )
+
     def _load_map(self, callback=None) -> None:
         """Generate and display the folium map with StatRep pins."""
         filters = self.config.filter_settings
@@ -3531,7 +3540,15 @@ class MainWindow(QtWidgets.QMainWindow):
             self.map_center = (38.8199286, -96.7782551)
             self.map_zoom = 4
 
-        m = folium.Map(zoom_start=self.map_zoom, location=self.map_center)
+        # zoomSnap=0.25 allows fractional zoom so wheelPxPerZoomLevel actually
+        # matters — with Leaflet's default zoomSnap=1, every wheel tick rounds
+        # up to a full zoom level no matter how small the per-tick delta is.
+        m = folium.Map(
+            zoom_start=self.map_zoom,
+            location=self.map_center,
+            wheelPxPerZoomLevel=MAP_WHEEL_PX_PER_ZOOM,
+            zoomSnap=0.25,
+        )
 
         # Add local tile layer
         folium.raster_layers.TileLayer(
@@ -4234,12 +4251,6 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         dialog = Cls(self.tcp_pool, self.connector_manager, self._load_message_data, parent=self)
         dialog.exec_()
 
-    def _on_direct_message(self) -> None:
-        """Open Direct Message window."""
-        Cls = self._resolve_dialog_class("direct_message", "DirectMessageDialog")
-        dialog = Cls(self.tcp_pool, self.connector_manager, parent=self)
-        dialog.exec_()
-
     def _on_js8_message(self) -> None:
         """Open JS8 Message dialog (RF transmit with QRZ lookup)."""
         Cls = self._resolve_dialog_class("qrz_lookup", "JS8MessageDialog")
@@ -4499,6 +4510,13 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         # Alert table (non-statrep, non-message): sort by first column descending
         if not is_message_table and not is_statrep_table:
             table.sortItems(0, QtCore.Qt.DescendingOrder)
+
+        if is_message_table:
+            count = table.rowCount()
+            label = "1 Message" if count == 1 else f"{count} Messages"
+            header_item = table.horizontalHeaderItem(6)
+            if header_item is not None:
+                header_item.setText(label)
 
     def _get_normalization_settings(self) -> Tuple[bool, Optional[Dict[str, str]]]:
         """Get text normalization flag and abbreviations dict.

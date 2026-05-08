@@ -109,7 +109,7 @@ class GroupMessageDialog(QDialog):
         self._pending_callsign: str  = ""
         self._message_is_expanded: bool = False
 
-        self.setWindowTitle("GROUP MESSAGE")
+        self.setWindowTitle("Group Message")
         self.setWindowFlags(
             Qt.Window |
             Qt.CustomizeWindowHint |
@@ -154,7 +154,7 @@ class GroupMessageDialog(QDialog):
         body.setSpacing(10)
 
         # Title
-        title_lbl = QLabel("GROUP MESSAGE")
+        title_lbl = QLabel("Group Message")
         title_lbl.setAlignment(Qt.AlignCenter)
         title_lbl.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title_lbl.setFixedHeight(36)

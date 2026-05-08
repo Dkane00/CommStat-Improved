@@ -106,7 +106,7 @@ class JS8MailDialog(QDialog):
         layout.setContentsMargins(15, 15, 15, 15)
 
         # Title
-        title = QtWidgets.QLabel("JS8 EMAIL")
+        title = QtWidgets.QLabel("JS8 Email")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title.setFixedHeight(36)

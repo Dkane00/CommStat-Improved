@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (
 
 from connector_manager import ConnectorManager, DEFAULT_SERVER, DEFAULT_TCP_PORT
 from constants import DEFAULT_COLORS
-from ui_helpers import make_button, make_input, mono_font
+from ui_helpers import make_button, make_input, mono_font, confirm
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ class JS8ConnectorsDialog(QDialog):
         body.setSpacing(10)
 
         # ── Title ─────────────────────────────────────────────────────────────
-        title_lbl = QLabel("JS8 CONNECTORS")
+        title_lbl = QLabel("JS8 Connectors")
         title_lbl.setAlignment(Qt.AlignCenter)
         title_lbl.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title_lbl.setFixedHeight(36)
@@ -423,13 +423,8 @@ class JS8ConnectorsDialog(QDialog):
             return
         row  = self.table.currentRow()
         name = self.table.item(row, 0).text() if self.table.item(row, 0) else "this connector"
-        reply = QMessageBox.question(
-            self, "Delete Connector",
-            f"Delete connector '{name}'?",
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel
-        )
-        if reply != QMessageBox.Yes:
+        if not confirm(self, "Delete Connector", f"Delete connector '{name}'?",
+                       no_label="Cancel"):
             return
         ok = self.connector_manager.remove_connector(cid)
         if ok:

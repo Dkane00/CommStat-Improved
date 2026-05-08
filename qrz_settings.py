@@ -31,7 +31,7 @@ from PyQt5.QtWidgets import (
 )
 
 from constants import DEFAULT_COLORS
-from ui_helpers import make_button, make_input
+from ui_helpers import make_button, make_input, confirm
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -206,7 +206,7 @@ class QRZSettingsDialog(QDialog):
         body.setSpacing(10)
 
         # ── Title ─────────────────────────────────────────────────────────────
-        title_lbl = QLabel("QRZ SUBSCRIPTION SETTINGS")
+        title_lbl = QLabel("QRZ Subscription Settings")
         title_lbl.setAlignment(Qt.AlignCenter)
         title_lbl.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title_lbl.setFixedHeight(36)
@@ -467,13 +467,8 @@ class QRZSettingsDialog(QDialog):
         self._enter_edit_mode(row=0, adding=False)
 
     def _on_delete(self) -> None:
-        reply = QMessageBox.question(
-            self, "Delete QRZ Settings",
-            "Delete QRZ credentials?",
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel
-        )
-        if reply != QMessageBox.Yes:
+        if not confirm(self, "Delete QRZ Settings", "Delete QRZ credentials?",
+                       no_label="Cancel"):
             return
         self.db.set_qrz_settings("", "", False)
         self._load()

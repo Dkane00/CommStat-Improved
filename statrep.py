@@ -75,7 +75,7 @@ SCOPE_OPTIONS = [
 # Status categories in display order (label, internal_name)
 # Note: internal_name is used as dictionary key in the form, not the DB column name
 STATUS_CATEGORIES = [
-    ("Overall Status", "status"),
+    ("Map Pin", "status"),
     ("Power", "power"),
     ("Water", "water"),
     ("Medical", "medical"),
@@ -174,7 +174,7 @@ class StatRepDialog(QDialog):
         self.module_background = module_background
         self.data_background = data_background
 
-        self.setWindowTitle("STATREP")
+        self.setWindowTitle("Status Report")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setWindowFlags(
             Qt.Window |
@@ -199,6 +199,13 @@ class StatRepDialog(QDialog):
 
         # Status combo boxes
         self.status_combos: Dict[str, QComboBox] = {}
+
+        # Map Pin auto-flip state: tracks whether the user has manually picked
+        # a Map Pin value (in which case we stop auto-flipping it from the
+        # worst of the other 11 categories) and a guard flag used during
+        # prefill so loading a forwarded report doesn't clobber its Map Pin.
+        self._map_pin_overridden = False
+        self._suppress_auto_map_pin = False
 
         # Load config
         self._load_config()
@@ -618,7 +625,7 @@ class StatRepDialog(QDialog):
         layout.setContentsMargins(15, 15, 15, 15)
 
         # Title
-        title = QtWidgets.QLabel("STATUS REPORT")
+        title = QtWidgets.QLabel("Status Report")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title.setFixedHeight(36)
@@ -756,6 +763,15 @@ class StatRepDialog(QDialog):
 
             combo = self._create_status_combo()
             self.status_combos[name] = combo
+            if name == "status":
+                # `activated` fires only on real user interaction, not on
+                # programmatic setCurrentIndex — exactly what we need to
+                # detect a manual override of the auto-flipping Map Pin.
+                combo.activated.connect(self._on_map_pin_activated)
+            else:
+                combo.currentTextChanged.connect(
+                    lambda _t, n=name: self._on_status_combo_changed(n)
+                )
             status_grid.addWidget(combo, combo_row, col)
 
         layout.addLayout(status_grid)
@@ -795,7 +811,7 @@ class StatRepDialog(QDialog):
             btn_grid.setColumnStretch(col, 1)
 
         # Row 0: Forward Mode indicator (cols 0-2), Grid Finder (col 3), Brevity (col 4)
-        self._forward_mode_label = QtWidgets.QLabel("FORWARD MODE")
+        self._forward_mode_label = QtWidgets.QLabel("Forward Mode")
         self._forward_mode_label.setAlignment(QtCore.Qt.AlignCenter)
         self._forward_mode_label.setFont(label_font())
         self._forward_mode_label.setStyleSheet(
@@ -867,7 +883,7 @@ class StatRepDialog(QDialog):
     def _on_help_clicked(self, _link: str = "") -> None:
         """Show a styled help dialog explaining Mode, Delivery, and Color selection."""
         dlg = QDialog(self)
-        dlg.setWindowTitle("STATREP HELP")
+        dlg.setWindowTitle("Status Report Help")
         dlg.setWindowFlags(
             Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint |
             Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
@@ -885,7 +901,7 @@ class StatRepDialog(QDialog):
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
 
-        title = QtWidgets.QLabel("STATREP HELP")
+        title = QtWidgets.QLabel("Status Report Help")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title.setFixedHeight(36)
@@ -1067,13 +1083,19 @@ class StatRepDialog(QDialog):
             ("civil",     "civil"),
             ("political", "political"),
         ]
-        for db_key, combo_key in _MAP:
-            code = data.get(db_key, "")
-            if code:
-                combo = self.status_combos[combo_key]
-                idx = combo.findData(code)
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
+        # Suppress Map Pin auto-flip while loading so the forwarded report's
+        # original Map Pin value is preserved verbatim.
+        self._suppress_auto_map_pin = True
+        try:
+            for db_key, combo_key in _MAP:
+                code = data.get(db_key, "")
+                if code:
+                    combo = self.status_combos[combo_key]
+                    idx = combo.findData(code)
+                    if idx >= 0:
+                        combo.setCurrentIndex(idx)
+        finally:
+            self._suppress_auto_map_pin = False
 
         if data.get("grid"):
             self.grid_field.setText(data["grid"])
@@ -1157,6 +1179,45 @@ class StatRepDialog(QDialog):
             if index >= 0:
                 combo.setCurrentIndex(index)
 
+    def _on_map_pin_activated(self, _index: int) -> None:
+        """User manually picked a Map Pin value; stop auto-flipping it."""
+        self._map_pin_overridden = True
+
+    def _on_status_combo_changed(self, _name: str) -> None:
+        """A non-Map-Pin status changed; auto-flip Map Pin to the worst color."""
+        if self._suppress_auto_map_pin:
+            return
+        if getattr(self, '_forward_origin', None):
+            return
+        if self._map_pin_overridden:
+            return
+        self._update_map_pin_from_worst()
+
+    def _update_map_pin_from_worst(self) -> None:
+        """Set Map Pin to Red if any other status is Red, else Yellow if any is Yellow."""
+        has_red = False
+        has_yellow = False
+        for _label, name in STATUS_CATEGORIES:
+            if name == "status":
+                continue
+            text = self.status_combos[name].currentText()
+            if text == "Red":
+                has_red = True
+                break
+            if text == "Yellow":
+                has_yellow = True
+
+        target = "Red" if has_red else ("Yellow" if has_yellow else None)
+        if target is None:
+            return
+
+        map_pin = self.status_combos["status"]
+        if map_pin.currentText() == target:
+            return
+        idx = map_pin.findText(target)
+        if idx >= 0:
+            map_pin.setCurrentIndex(idx)
+
     def _on_brevity(self) -> None:
         """Launch Brevity over StatRep; Copy Code inserts into remarks field."""
         from brevity import BrevityApp
@@ -1200,10 +1261,12 @@ class StatRepDialog(QDialog):
 
     def _on_all_green(self) -> None:
         """Set all statuses to Green."""
+        self._map_pin_overridden = False
         self._set_all_status("Green")
 
     def _on_all_gray(self) -> None:
         """Set all statuses to Unknown (Gray)."""
+        self._map_pin_overridden = False
         self._set_all_status("Unknown")
 
     def _build_message(self) -> str:

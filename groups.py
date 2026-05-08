@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
 )
 
 from constants import DEFAULT_COLORS
-from ui_helpers import make_button, make_input
+from ui_helpers import make_button, make_input, confirm
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ class GroupsDialog(QDialog):
         body.setSpacing(10)
 
         # ── Title ─────────────────────────────────────────────────────────────
-        title_lbl = QLabel("GROUPS")
+        title_lbl = QLabel("Groups")
         title_lbl.setAlignment(Qt.AlignCenter)
         title_lbl.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title_lbl.setFixedHeight(36)
@@ -336,13 +336,8 @@ class GroupsDialog(QDialog):
         name = name_item.text() if name_item else ""
         if not name:
             return
-        reply = QMessageBox.question(
-            self, "Delete Group",
-            f"Delete group '{name}'?",
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel,
-        )
-        if reply != QMessageBox.Yes:
+        if not confirm(self, "Delete Group", f"Delete group '{name}'?",
+                       no_label="Cancel"):
             return
         if not self.db.remove_group(name):
             QMessageBox.critical(self, "Error", "Could not delete group.")

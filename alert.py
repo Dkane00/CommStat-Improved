@@ -168,7 +168,7 @@ class AlertDialog(QDialog):
         body.setSpacing(10)
 
         # ── Title ─────────────────────────────────────────────────────────────
-        title_lbl = QLabel("GROUP ALERT / CALLSIGN ALERT")
+        title_lbl = QLabel("Group Alert / Callsign Alert")
         title_lbl.setAlignment(QtCore.Qt.AlignCenter)
         title_lbl.setFont(QtGui.QFont("Roboto Slab", -1, QtGui.QFont.Black))
         title_lbl.setFixedHeight(36)

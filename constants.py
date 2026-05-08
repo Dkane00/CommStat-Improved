@@ -145,8 +145,9 @@ class ConsoleColors:
 
 DEFAULT_RSS_FEEDS: Dict[str, str] = {
     "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
-    "AP News":    "https://feedx.net/rss/ap.xml",
+    "AP News":    "https://news.google.com/rss/search?q=when:24h+site:apnews.com&hl=en-US&gl=US&ceid=US:en",
     "BBC World":  "http://feeds.bbci.co.uk/news/world/rss.xml",
     "Fox News":   "https://moxie.foxnews.com/google-publisher/latest.xml",
     "NPR News":   "https://feeds.npr.org/1001/rss.xml",
+    "Reuters":    "https://news.google.com/rss/search?q=when:24h+site:reuters.com&hl=en-US&gl=US&ceid=US:en",
 }

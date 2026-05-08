@@ -14,7 +14,7 @@ from typing import Tuple
 from PyQt5 import QtGui
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QPushButton, QLineEdit, QCheckBox, QWidget, QHBoxLayout,
+    QPushButton, QLineEdit, QCheckBox, QWidget, QHBoxLayout, QMessageBox,
 )
 
 from constants import FONT_ROBOTO, FONT_MONO
@@ -35,6 +35,24 @@ def make_button(label: str, color: str, min_w: int = 90) -> QPushButton:
         f"QPushButton:disabled {{ background-color:#cccccc; color:#888888; }}"
     )
     return b
+
+
+# ── Confirmation dialog ───────────────────────────────────────────────────────
+
+def confirm(parent, title: str, text: str,
+            yes_label: str = "Yes", no_label: str = "No",
+            default_yes: bool = False) -> bool:
+    """Styled Yes/No confirmation. Returns True if user clicked the affirmative button."""
+    box = QMessageBox(parent)
+    box.setWindowTitle(title)
+    box.setText(text)
+    yes_btn = make_button(yes_label, "#28a745")
+    no_btn = make_button(no_label, "#6c757d")
+    box.addButton(yes_btn, QMessageBox.YesRole)
+    box.addButton(no_btn, QMessageBox.NoRole)
+    box.setDefaultButton(yes_btn if default_yes else no_btn)
+    box.exec_()
+    return box.clickedButton() is yes_btn
 
 
 # ── Input ──────────────────────────────────────────────────────────────────────

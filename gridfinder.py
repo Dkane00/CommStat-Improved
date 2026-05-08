@@ -104,7 +104,7 @@ class GridFinderApp(QMainWindow):
         layout.setContentsMargins(15, 15, 15, 10)
 
         # Title
-        title = QLabel("GRID FINDER")
+        title = QLabel("Grid Finder")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QFont("Roboto Slab", -1, QFont.Black))
         title.setFixedHeight(36)

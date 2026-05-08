@@ -741,7 +741,7 @@ class QRZLookupDialog(QDialog):
         main.setSpacing(10)
 
         # Title
-        title = QLabel("QRZ LOOKUP")
+        title = QLabel("QRZ Lookup")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QFont("Roboto Slab", -1, QFont.Black))
         title.setFixedHeight(36)
@@ -1598,16 +1598,13 @@ class StatRepDetailDialog(QDialog):
         dlg.exec_()
 
     def _on_delete(self) -> None:
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Confirm Delete")
-        msg_box.setText(
+        from ui_helpers import confirm
+        if not confirm(
+            self, "Confirm Delete",
             "Status Report records will be deleted from all CommStat users if you are "
             "the creator of the record. If you are not the creator, the record will only "
-            "be deleted locally."
-        )
-        msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        msg_box.setDefaultButton(QMessageBox.No)
-        if msg_box.exec_() != QMessageBox.Yes:
+            "be deleted locally.",
+        ):
             return
         if self._global_id and self._backbone_url:
             try:
@@ -2017,7 +2014,7 @@ class DeliveryConfirmationDialog(QDialog):
         self._img_loader: Optional[_ImageLoader] = None
         self._gif_movie: Optional[QMovie] = None
         self._qrz_thread: Optional[_QRZThread] = None
-        self.setWindowTitle("DELIVERY CONFIRMATION")
+        self.setWindowTitle("Delivery Confirmation")
         self.setModal(True)
         self.resize(510, 440)
         self.setMinimumSize(510, 440)
@@ -2040,7 +2037,7 @@ class DeliveryConfirmationDialog(QDialog):
         main.setSpacing(10)
 
         # Title bar (program colors)
-        title = QLabel("DELIVERY CONFIRMATION")
+        title = QLabel("Delivery Confirmation")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QFont("Roboto Slab", -1, QFont.Black))
         title.setStyleSheet(
