@@ -13,8 +13,6 @@
 
 
 """
-CommStat v4.0.8 - Rebuilt with best practices
-
 A PyQt5 application for monitoring JS8Call communications,
 displaying status reports, messages, and live data feeds.
 """
@@ -1492,18 +1490,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if not config.has_section("WINDOW"):
             return
 
-        # Prefer Qt's saveGeometry blob — handles frame offsets and screen bounds.
-        geom_b64 = config.get("WINDOW", "geometry", fallback="")
-        if geom_b64:
-            try:
-                geom = QtCore.QByteArray.fromBase64(geom_b64.encode("ascii"))
-                if not geom.isEmpty() and self.restoreGeometry(geom):
-                    return
-            except (ValueError, TypeError):
-                pass
-
-        # Legacy fallback: explicit x/y/width/height. move() before show() is
-        # unreliable on some WMs, so re-apply after the window is shown.
+        # move() before show() is unreliable on some WMs, so re-apply after
+        # the window is shown.
         try:
             x = config.getint("WINDOW", "x", fallback=None)
             y = config.getint("WINDOW", "y", fallback=None)
@@ -1548,17 +1536,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if not config.has_section("WINDOW"):
             config.add_section("WINDOW")
 
-        # Authoritative: Qt's geometry blob, which round-trips frame coords
-        # correctly across platforms via restoreGeometry().
-        geom_b64 = bytes(self.saveGeometry().toBase64()).decode("ascii")
-        config.set("WINDOW", "geometry", geom_b64)
+        # Drop any stale geometry blob from older versions.
+        config.remove_option("WINDOW", "geometry")
 
-        # Also store frame coords in plain form for human inspection.
-        fg = self.frameGeometry()
-        config.set("WINDOW", "x", str(fg.x()))
-        config.set("WINDOW", "y", str(fg.y()))
-        config.set("WINDOW", "width", str(fg.width()))
-        config.set("WINDOW", "height", str(fg.height()))
+        # pos() pairs with move(); size() pairs with resize().
+        pos = self.pos()
+        size = self.size()
+        config.set("WINDOW", "x", str(pos.x()))
+        config.set("WINDOW", "y", str(pos.y()))
+        config.set("WINDOW", "width", str(size.width()))
+        config.set("WINDOW", "height", str(size.height()))
 
         try:
             with open(CONFIG_FILE, 'w') as f:
@@ -1945,7 +1932,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # RSS Feed selector dropdown
         self.feed_combo = QtWidgets.QComboBox(self.header_widget)
-        self.feed_combo.setFixedSize(120, 28)
+        self.feed_combo.setFixedSize(180, 28)
+        self.feed_combo.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         _combo_font = QtGui.QFont("Roboto", -1)
         _combo_font.setPixelSize(15)
         self.feed_combo.setFont(_combo_font)
@@ -1993,7 +1981,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # News ticker (scrolling text)
         self.newsfeed_label = QtWidgets.QLabel(self.header_widget)
-        self.newsfeed_label.setFixedSize(840, 32)
+        self.newsfeed_label.setFixedHeight(32)
+        self.newsfeed_label.setMinimumWidth(0)
+        self.newsfeed_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         _ticker_font = QtGui.QFont("Kode Mono", -1)
         _ticker_font.setPixelSize(15)
         self.newsfeed_label.setFont(_ticker_font)
@@ -2001,7 +1991,14 @@ class MainWindow(QtWidgets.QMainWindow):
             f"background-color: {self.config.get_color('newsfeed_background')};"
             f"color: {self.config.get_color('newsfeed_foreground')};"
         )
-        self.header_layout.addWidget(self.newsfeed_label)
+        self.header_layout.addWidget(self.newsfeed_label, 7)
+        # Recompute ticker length when the label is resized so the scrolling
+        # text fills the new width. Debounced via single-shot QTimer to avoid
+        # restarting on every pixel during a window drag.
+        self._newsfeed_resize_timer = QTimer(self)
+        self._newsfeed_resize_timer.setSingleShot(True)
+        self._newsfeed_resize_timer.timeout.connect(self._refresh_newsfeed_for_resize)
+        self.newsfeed_label.installEventFilter(self)
 
         # Last 20 button - shows last 20 news headlines
         self.last20_button = QtWidgets.QPushButton("Last 20", self.header_widget)
@@ -2024,7 +2021,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.last20_button.clicked.connect(self._on_last20_clicked)
         self.header_layout.addWidget(self.last20_button)
 
-        self.header_layout.addStretch()
+        self.header_layout.addSpacing(22)
 
         # Time label
         self.label_time_prefix = QtWidgets.QLabel(self.header_widget)
@@ -4281,6 +4278,22 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         except (IndexError, TypeError) as e:
             print(f"Error displaying headline: {e}")
             self.newsfeed_label.setText("  News feed error")
+
+    def eventFilter(self, obj, event):
+        """Watch for newsfeed_label resizes to refresh ticker length."""
+        if obj is getattr(self, 'newsfeed_label', None) and event.type() == QtCore.QEvent.Resize:
+            # Debounce: restart the timer so we only refresh once the drag settles.
+            self._newsfeed_resize_timer.start(150)
+        return super().eventFilter(obj, event)
+
+    def _refresh_newsfeed_for_resize(self) -> None:
+        """Recompute and restart the current headline at the new label width."""
+        # Only refresh if we are actively scrolling a headline (not Disabled / no-internet states).
+        feed_name = self.config.get_selected_rss_feed()
+        if feed_name == "Disable" or not self._internet_available or not self.headlines:
+            return
+        self.newsfeed_timer.stop()
+        self._display_current_headline()
 
     def _on_feed_changed(self, feed_name: str) -> None:
         """Handle feed selection change."""

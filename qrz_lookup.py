@@ -40,6 +40,8 @@ from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_BTN_RED, COLOR_BTN_BLUE, COLOR_BTN_CYAN,
 )
+# Single source of truth for mouse-wheel zoom dampening — see little_gucci.py
+from little_gucci import MAP_WHEEL_PX_PER_ZOOM
 
 DB_PATH = "traffic.db3"
 _BACKBONE_URL  = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC1pbXByb3ZlZC5jb20=").decode()
@@ -139,9 +141,15 @@ def _make_map_html(lat: float, lon: float, internet_available: bool = True,
     if extra_lat is not None and extra_lon is not None:
         center_lat = (lat + extra_lat) / 2
         center_lon = (lon + extra_lon) / 2
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=4)
+        m = folium.Map(
+            location=[center_lat, center_lon], zoom_start=4,
+            wheelPxPerZoomLevel=MAP_WHEEL_PX_PER_ZOOM, zoomSnap=0.25,
+        )
     else:
-        m = folium.Map(location=[lat, lon], zoom_start=4)
+        m = folium.Map(
+            location=[lat, lon], zoom_start=4,
+            wheelPxPerZoomLevel=MAP_WHEEL_PX_PER_ZOOM, zoomSnap=0.25,
+        )
 
     folium.raster_layers.TileLayer(
         tiles="tiles://local/{z}/{x}/{y}.png",
