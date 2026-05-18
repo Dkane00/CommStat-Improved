@@ -73,277 +73,73 @@ CommStatOne is a Python version of the CommStat software **designed to run on Wi
 
 ---
 
-## Project rebuild and modernization effort – December 2025  
-### Summary of Changes and Improvements
+## Why CommStat?
 
-1. NEW MAIN APPLICATION
---------------------------------------
-- Complete rebuild of commstat.py using Python best practices
-- Clean class-based architecture:
-  - ConfigManager: Handles config.ini loading with validation
-  - DatabaseManager: Centralized SQLite operations
-  - MainWindow: PyQt5 GUI with organized component setup
-- Type hints and docstrings throughout
-- Constants defined at top of file (no magic numbers/strings)
-- Color validation with fallback to defaults for invalid config values
-- Menu bar styling with configurable colors and centered text
-- Filter labels use size policy to allow window resizing
-- 20-second auto-refresh for StatRep, messages, live feed, and map
+CommStat has become the go-to situational awareness companion for JS8Call operators. What started as a focused tool for organized HF digital communications has grown into a polished, full-featured application used daily across the amateur radio and emergency preparedness communities.
 
-2. DATAREADER REFACTORING (datareader.py)
------------------------------------------
-- Reduced from 675 to ~620 lines while adding features
-- Replaced 7 global variables with Config class
-- Consolidated 4+ database connections into single connection
-- Created helper methods to eliminate code duplication:
-  - extract_callsign(): Replaces 6 duplicated blocks
-  - parse_statrep_fields(): Parses 12-character status code
-  - validate_statrep_fields(): Validates all fields in one call
-- Added constants for message type markers:
-  - MSG_BULLETIN = "{^%}"
-  - MSG_STATREP = "{&%}"
-  - MSG_FORWARDED_STATREP = "{F%}"
-  - MSG_MARQUEE = "{*%}"
-  - MSG_CHECKIN = "{~%}"
-- Removed unused imports (numpy, re)
-- Removed 100+ lines of commented/dead code
-- Added type hints and docstrings
+Adoption continues to climb. Operators are joining the network every week, and we constantly receive positive feedback from users telling us CommStat has changed the way their nets, groups, and personal stations operate on HF digital. Whether you're a solo operator looking for better situational awareness or part of a coordinated emergency communications team, CommStat is built to make your time on the air more productive.
 
-3. MODULE INTEGRATION (datareader + commstat2)
-----------------------------------------------
-- datareader imported as module instead of subprocess call
-- Parser instance persists in memory between refresh cycles
-- Added timestamp tracking to skip already-processed lines:
-  - First run: processes last 50 lines (sets baseline)
-  - Subsequent runs: only processes NEW lines
-- Much cleaner terminal output - only shows genuinely new messages
-- No subprocess overhead every 20 seconds
-
-4. CROSS-PLATFORM PATH HANDLING
--------------------------------
-- Replaced OS-specific path separators with os.path.join()
-- Works on Windows, Linux, and macOS without code changes
-- Simplified _detect_os() to _log_os_info() (just logs OS name)
-
-5. CONFIGURATION IMPROVEMENTS
------------------------------
-- Created config.ini.template with default settings
-- Created traffic.db3.template with test data
-- install.py creates files from templates if missing
-- User configs preserved during updates
-- .gitignore updated to track templates but ignore user files
-- Renamed 'port' to 'UDP_port' for clarity (15 Python files updated)
-
-6. INSTALL.PY UPDATES
----------------------
-- Added psutil to package list
-- Refactored to use list iteration instead of individual variables
-- Added create_from_template() function
-- Added setup_files() to create config and database from templates
-
-7. UI IMPROVEMENTS
-------------------
-- Menu bar: 24px height with 4px padding for centered text
-- Menu colors configurable via config.ini (menu_background, menu_foreground)
-- Filter labels allow window to be narrowed (QSizePolicy.Ignored)
-- Color validation: invalid colors fall back to defaults with warning
-
-8. CODE QUALITY
----------------
-- Type hints on all function parameters and returns
-- Docstrings on all classes and key methods
-- Constants replace magic numbers and strings
-- Single responsibility principle applied
-- Dependency injection (config/db managers passed to components)
-- Error handling with graceful failures
-- f-strings for consistent string formatting
-- Private methods use _ prefix
-
-9. FILES MODIFIED
------------------
-- commstat.py (main application rebuild)
-- datareader.py (refactored)
-- install.py (updated)
-- config.ini.template (NEW)
-- traffic.db3.template (NEW)
-- .gitignore (updated)
-- message.py, checkin.py, csresponder.py, filter.py,
-  js8mail.py, js8sms.py, marquee.py, members.py, netmanager.py,
-  settings.py, statack.py, statrep.py (modernized dialogs)
-
-10. MENU ACTIVATION (December 2025)
------------------------------------
-- JS8EMAIL: Send emails via APRS gateway
-- JS8SMS: Send SMS via APRS gateway
-- DISPLAY FILTER: Simplified filter dialog
-- Removed unused DATA MANAGER menu option
-
-11. MAP IMPROVEMENTS
---------------------
-- Map preserves position and zoom during 20-second auto-refresh
-- Removed grid-based filtering from SQL queries
-
-12. GROUP MANAGEMENT
---------------------
-- Groups now stored in database (Groups table) instead of config.ini
-- Unlimited groups supported
-- Group names: max 15 characters, stored in UPPERCASE
-- Default groups seeded on first run: MAGNET, AMRRON, PREPPERNET
-- New "MANAGE GROUPS" menu option
-- All data refreshes when active group changes
-
-13. FILE CLEANUP AND REORGANIZATION (December 2025)
-----------------------------------------------------
-- Renamed modernized files
-- Replaced images and icons
-- Moved obsolete files to trash/
-- Cleaned up UI labels and spacing
-
-14. MODERNIZED DIALOGS
-----------------------
-- StatRep
-- JS8 EMAIL
-- JS8 SMS
-- Filter
-- Settings
-
-15. GIT COMMITS
----------------
-- Application rebuild
-- Refactoring and cleanup
-- Feature activation
-- Group management overhaul
-- File reorganization
-
-16. JS8 TCP CONNECTOR SUPPORT (December 2025)
----------------------------------------------
-- Replaced file-based DIRECTED.TXT polling with persistent TCP connections
-- Replaced UDP transmission with TCP API (TX.SEND_MESSAGE)
-- Support for up to 3 simultaneous JS8Call instances
-- New "JS8 CONNECTORS" menu for managing connections
-- Connector configuration stored in database (js8_connectors table)
-- Server IP hardcoded to 127.0.0.1 (localhost)
-- Callsign and grid fetched automatically from JS8Call via API
-- Frequency stored in database when sending StatRep, Message, or Marquee
-- Rig dropdown added to all transmit dialogs:
-  - StatRep
-  - Message
-  - Marquee
-  - JS8 Email
-  - JS8 SMS
-- New files:
-  - connector_manager.py: Database operations for connectors
-  - js8_tcp_client.py: TCP client with Qt signals
-  - js8_connectors.py: Connector management dialog
-- Removed from config.ini: callsign, grid, server, UDP_port
-
-17. EVENT-DRIVEN UI UPDATES (January 2026)
-------------------------------------------
-- Replaced 20-second polling with event-driven updates
-- UI refreshes immediately when data is received via TCP:
-  - StatRep received → StatRep table + map refresh
-  - Message received → Message table refresh
-  - Marquee received → Marquee banner refresh
-  - Check-in received → Map refresh
-- Playlist check moved to 60-second interval
-- More responsive UI with reduced unnecessary database queries
-
-18. DATE FILTERING (January 2026)
----------------------------------
-- Start date automatically set to today when program launches
-- No end date by default (shows all data from today forward)
-- Display Filter dialog (Menu > DISPLAY FILTER) allows viewing historical data:
-  - Set custom start date to view older StatReps
-  - Set end date to limit the date range
-- Filter settings stored in memory (not saved to config.ini)
-- Each program restart resets to today's date
-- Removed [FILTER] section from config.ini
-
-19. STATREP COMPRESSION (January 2026)
---------------------------------------
-- All-green StatReps (111111111111) are compressed to "+" when transmitted
-- Saves 11 characters over the air for faster transmission
-- Receiving stations automatically expand "+" back to 12 ones
-- Works for both regular and forwarded StatReps
-
-20. TOOLS MENU (January 2026)
------------------------------
-- Band Conditions: Solar-terrestrial data from N0NBH (https://www.hamqsl.com/solar.html)
-- World Map: HF propagation world map
+Visit **https://commstat.app/** to learn more.
 
 ---
 
-# CommStat Version 3.0.2
-**Released:** February 2026
+## Major Features
 
-- **Author:** Manuel G. Ochoa ~N0DDK
-- **AI Code Assistant:** Claude (Anthropic), ChatGPT (OpenAI)
+### Dual-Path Delivery
+Every StatRep, message, and alert travels simultaneously over **radio (JS8Call TCP)** and over the **internet (backbone server)**. If one path is down, the other carries the traffic. If both work, duplicates are silently discarded. Your communications get through.
+
+### Multi-Rig Support
+Run **up to three JS8Call instances at once** — different bands, different modes, different antennas — all feeding into a single CommStat window. Pick the rig you want to transmit on from a dropdown in every send dialog.
+
+### AmRRON StatRep 5.1
+Full implementation of the AmRRON 5.1 Status Report form with all twelve category scores. All-green reports compress to a single `+` character over the air for faster transmission, with automatic expansion on the receiving end.
+
+### Group Alerts
+Color-coded severity alerts (Yellow / Orange / Red / Black) with title and message fields. Transmitted via JS8Call and shared with the backbone for immediate group-wide situational awareness.
+
+### Direct Messages
+Point-to-point messaging between operators, with a contacts roster automatically built from received traffic.
+
+### Net Check-Ins
+Streamlined check-in workflow for organized nets — submit, track, and review who's on frequency.
+
+### JS8 Email & SMS
+Send email and SMS messages through the APRS gateway, directly from inside CommStat.
+
+### Live Map with Offline Support
+Real-time map plotting of station locations with grid square enrichment. **Offline maps** keep the map working when the internet doesn't.
+
+### QRZ Integration
+Optional QRZ.com lookups enrich incoming messages with grid squares, names, and locations. A built-in 30-day cache keeps things fast and minimizes API calls.
+
+### Group Management
+Unlimited user-defined groups, stored in the database. Filter all data displays by active group with a single click. Default groups (MAGNET, AMRRON, PREPPERNET) seeded on first run.
+
+### Tools
+- **Band Conditions** — live solar-terrestrial data from N0NBH
+- **World Map** — HF propagation visualization
+- **RSS News Feeds** — integrated news feed display with filtering and sorting
+
+### Event-Driven UI
+The interface updates the instant data arrives — no polling delays. StatRep tables, messages, alerts, and the map all refresh in real time.
+
+### Automatic Updates
+CommStat checks for new versions automatically via the backbone, so operators always know when an update is available.
+
+### Cross-Platform
+First-class support for **Windows, macOS, and Linux** — including Raspberry Pi.
 
 ---
 
-## Feature Highlights — Version 3.0
+## A Growing Community
 
-21. BACKBONE SERVER INTEGRATION
--------------------------------
-- Real-time data sharing over the internet between CommStat users
-- StatReps, messages, and alerts are automatically submitted to the backbone after radio transmission
-- Backbone polling every 3 minutes retrieves data from other stations
-- Dual-path delivery: data arrives via both radio (TCP) and internet (backbone)
-- Duplicate detection silently skips already-received records
-
-22. GROUP ALERTS
-----------------
-- New alert system with color-coded severity levels (Yellow, Orange, Red, Black)
-- Alerts include title and message fields
-- Transmitted via JS8Call and submitted to backbone
-- Dedicated alert display table in the main window
-
-23. QRZ CALLSIGN LOOKUPS
--------------------------
-- Optional QRZ.com integration for callsign lookups
-- Grid square enrichment for incoming messages when grid data is missing
-- QRZ cache layer to minimize API calls
-- Configurable via QRZ credentials in settings
-
-24. UNIFIED MESSAGE PROCESSING
-------------------------------
-- Single code path handles messages from both TCP and backbone sources
-- Consistent parsing for statreps, messages, alerts, and forwarded statreps
-- Source tracking (Radio vs Internet) displayed in all data tables
-
-25. TIME-BASED ID SYSTEM
--------------------------
-- Unique IDs generated for statreps, messages, and alerts
-- Enables reliable duplicate detection across TCP and backbone paths
-- ID columns visible in display tables
-
-26. AUTOMATIC UPDATE SYSTEM
----------------------------
-- Checks for updates via backbone heartbeat mechanism
-- Notifies user when a new version is available
-
-27. RSS NEWS FEEDS
-------------------
-- Integrated news feed display with timestamp filtering and sorting
-
-28. STATREP IMPROVEMENTS
--------------------------
-- Numeric validation on SRCODE fields
-- Slash suffix stripping from callsigns in message values
-- Relay information displayed for forwarded StatReps
-- Internet source indicator for backbone-received reports
-
-29. CROSS-PLATFORM FIXES
--------------------------
-- Linux installer fixes for pip and PyQt5 installation
-- macOS PyQt5 installation via pip packages
-- All Python files converted to Unix line endings (LF)
+CommStat continues to gain popularity month over month. New operators are joining the backbone regularly, and the feedback keeps coming in: faster nets, more consistent reporting, better-coordinated groups. If you're running JS8Call and you haven't tried CommStat yet — give it a spin. We think you'll see why so many operators have made it their daily driver.
 
 ---
 
 ## License & Copyright
 
-Copyright © 2025 Manuel Ochoa
+Copyright © 2025–2026 Manuel Ochoa
 
 This project is licensed under the **GNU General Public License v3.0**.
 
@@ -364,5 +160,5 @@ AI assistance provided by **Claude (Anthropic)** and **ChatGPT (OpenAI)**.
 
 For questions, comments, or suggestions:  
 **mochoa@protonmail.com**
-<br><br>
-<img src="https://thedeepmatrix.com/z-storage/pdf/shack/disney-me-th.jpg" style="margin: 6px 0px 6px 0px; float: none;">
+
+Website: **https://commstat.app/**

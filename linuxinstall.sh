@@ -55,19 +55,19 @@ echo ""
 echo "Creating desktop shortcut..."
 INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$HOME/Desktop"
-cat > "$HOME/Desktop/CommStat-Improved.desktop" << EOF
+cat > "$HOME/Desktop/CommStat.desktop" << EOF
 [Desktop Entry]
 Type=Application
-Name=CommStat-Improved
-Comment=Run CommStat-Improved
+Name=CommStat
+Comment=Run CommStat
 Exec=$INSTALL_DIR/linuxlauncher.sh
 Icon=radiation-32.png
 Terminal=false
 StartupNotify=true
 Path=$INSTALL_DIR
 EOF
-chmod +x "$HOME/Desktop/CommStat-Improved.desktop"
-echo "Desktop shortcut created at $HOME/Desktop/CommStat-Improved.desktop"
+chmod +x "$HOME/Desktop/CommStat.desktop"
+echo "Desktop shortcut created at $HOME/Desktop/CommStat.desktop"
 
 echo ""
 echo "=============================================="
