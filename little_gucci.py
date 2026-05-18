@@ -115,7 +115,7 @@ _CONTACTS_BASE_CS_PATTERN = re.compile(r"^[A-Z0-9]{3,8}$")
 #    directed at and is discarded. SNR is unknown for both ends of the link,
 #    so a fixed placeholder is written into both SNR columns.
 _CONTACTS_HEARING_PATTERN = re.compile(
-    r"^[A-Z0-9/]{3,12}\s+HEARING\s+(.+)$",
+    r"^[@A-Z0-9/]{3,12}\s+HEARING\s+(.+)$",
     re.IGNORECASE,
 )
 _CONTACTS_HEARING_DEFAULT_SNR = -99

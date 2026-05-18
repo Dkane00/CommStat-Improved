@@ -69,6 +69,35 @@ _COL_HELP   = "#e83e8c"  # matches StatRep help button
 _COL_CANCEL = "#555555"
 
 
+class _UpperCaseEventFilter(QtCore.QObject):
+    """Intercept key presses on a QLineEdit and force them to uppercase.
+
+    Using an event filter instead of a textChanged/textEdited slot is the only
+    safe approach on Linux/Qt5.  Any slot that calls setText() while Qt is
+    already inside a signal-dispatch loop can corrupt the C++ iterator and
+    segfault — even with blockSignals() and even with QTimer.singleShot(),
+    because the singleShot scheduling call itself can occur while Qt is in a
+    bad internal state (e.g. relay model.clear() fires relay line-edit
+    textChanged, which fires the target line-edit lambda from within the
+    target textChanged chain).
+
+    An event filter runs before the line edit processes the key and before any
+    signals are emitted, so insert() here is always called outside a signal
+    handler — no re-entry, no crash.
+    """
+
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.KeyPress:
+            text = event.text()
+            if text and text != text.upper():
+                if isinstance(obj, QPlainTextEdit):
+                    obj.insertPlainText(text.upper())
+                else:
+                    obj.insert(text.upper())
+                return True                # consume original lowercase event
+        return False
+
+
 # =============================================================================
 # JS8 Direct Message Dialog
 # =============================================================================
@@ -185,9 +214,12 @@ class JS8DirectMessageDialog(QDialog):
         self.target_combo.setFixedWidth(150)
         self.target_combo.setEditable(True)
         self.target_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.target_combo.setCompleter(None)
         self.target_combo.setMaxVisibleItems(30)
         self.target_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.target_combo))
         self.target_combo.currentTextChanged.connect(self._on_target_changed)
+        self.target_combo.activated.connect(lambda _: self._on_target_committed())
+        self.target_combo.lineEdit().editingFinished.connect(self._on_target_committed)
         self._wire_uppercase(self.target_combo)
         sta_row.addLayout(self._labeled_col("Target:", self.target_combo))
 
@@ -195,6 +227,7 @@ class JS8DirectMessageDialog(QDialog):
         self.relay_combo.setFixedWidth(220)
         self.relay_combo.setEditable(True)
         self.relay_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.relay_combo.setCompleter(None)
         self.relay_combo.setMaxVisibleItems(30)
         self.relay_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.relay_combo))
         self.relay_combo.setModel(QStandardItemModel(self.relay_combo))
@@ -204,6 +237,7 @@ class JS8DirectMessageDialog(QDialog):
 
         self.btn_refresh = make_button("Refresh", COLOR_BTN_CYAN, min_w=90)
         self.btn_refresh.clicked.connect(self._on_refresh_targets)
+        self._refresh_btn_style = self.btn_refresh.styleSheet()
         sta_row.addLayout(self._labeled_col(" ", self.btn_refresh))
 
         sta_row.addStretch()
@@ -226,7 +260,8 @@ class JS8DirectMessageDialog(QDialog):
 
         self.body = QPlainTextEdit()
         self.body.setFixedHeight(96)
-        self.body.textChanged.connect(self._update_transmit_state)
+        self.body.installEventFilter(_UpperCaseEventFilter(self.body))
+        self.body.textChanged.connect(self._on_body_changed)
         layout.addWidget(self.body)
 
         layout.addStretch()
@@ -266,21 +301,11 @@ class JS8DirectMessageDialog(QDialog):
 
     @staticmethod
     def _wire_uppercase(combo: QComboBox) -> None:
-        """Force the combo's editable line edit to uppercase as the user types."""
+        """Install an event filter that forces the line edit to uppercase."""
         line = combo.lineEdit()
         if line is None:
             return
-
-        def to_upper(text: str) -> None:
-            if text == text.upper():
-                return
-            pos = line.cursorPosition()
-            line.blockSignals(True)
-            line.setText(text.upper())
-            line.blockSignals(False)
-            line.setCursorPosition(pos)
-
-        line.textChanged.connect(to_upper)
+        line.installEventFilter(_UpperCaseEventFilter(line))
 
     def _effective_target_cs(self) -> str:
         """Target callsign currently in the dropdown — typed or selected."""
@@ -475,12 +500,23 @@ class JS8DirectMessageDialog(QDialog):
         self._populate_relays([], "")
         self._update_transmit_state()
 
-    def _on_target_changed(self, target_cs: str) -> None:
-        target_cs = (target_cs or "").strip()
+    def _on_target_changed(self, _target_cs: str) -> None:
+        """Called on every keystroke. Clears stale relay/QRZ state only."""
+        self.qrz_info_label.clear()
+        self._populate_relays([], "")
+        self._update_transmit_state()
+
+    def _on_target_committed(self) -> None:
+        """Run QRZ lookup and relay query when the user finishes typing.
+
+        Connected to editingFinished (focus loss / Enter) and activated
+        (dropdown selection) so the DB is only hit once per completed entry,
+        not on every keystroke.
+        """
+        target_cs = self._effective_target_cs()
         self._update_qrz_info(target_cs)
         if not target_cs or self._current_freq_mhz is None:
             self._populate_relays([], "")
-            self._update_transmit_state()
             return
 
         rows = []
@@ -532,6 +568,21 @@ class JS8DirectMessageDialog(QDialog):
     # -------------------------------------------------------------------------
     # Transmit state + actions
     # -------------------------------------------------------------------------
+
+    def _on_body_changed(self) -> None:
+        """Force body text to uppercase (handles paste) then refresh transmit state."""
+        text = self.body.toPlainText()
+        upper = text.upper()
+        if text != upper:
+            cursor = self.body.textCursor()
+            pos = cursor.position()
+            self.body.blockSignals(True)
+            self.body.setPlainText(upper)
+            self.body.blockSignals(False)
+            cursor = self.body.textCursor()
+            cursor.setPosition(min(pos, len(upper)))
+            self.body.setTextCursor(cursor)
+        self._update_transmit_state()
 
     def _update_transmit_state(self) -> None:
         target_ok = bool(_CALLSIGN_PATTERN.match(self._effective_target_cs()))
@@ -713,10 +764,26 @@ class JS8DirectMessageDialog(QDialog):
 
     def _on_refresh_targets(self) -> None:
         """Re-query the contacts table for the current rig frequency and repopulate Target."""
+        self.btn_refresh.setEnabled(False)
+        self.btn_refresh.setText("Refreshing...")
+
         if self._current_freq_mhz is None:
             self._populate_targets([])
-            return
-        self._load_targets(self._current_freq_mhz)
+        else:
+            self._load_targets(self._current_freq_mhz)
+
+        self.btn_refresh.setText("Done!")
+        self.btn_refresh.setStyleSheet(
+            "QPushButton { background-color:#28a745; color:#ffffff; border:none;"
+            " padding:6px 14px; border-radius:4px; font-family:Roboto;"
+            " font-size:15px; font-weight:bold; }"
+        )
+        QtCore.QTimer.singleShot(1500, self._restore_refresh_button)
+
+    def _restore_refresh_button(self) -> None:
+        self.btn_refresh.setText("Refresh")
+        self.btn_refresh.setStyleSheet(self._refresh_btn_style)
+        self.btn_refresh.setEnabled(True)
 
     def _on_transmit(self) -> None:
         if not self._rig_client_connected():

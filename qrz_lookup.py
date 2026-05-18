@@ -1310,6 +1310,7 @@ class StatRepDetailDialog(QDialog):
             Qt.CustomizeWindowHint |
             Qt.WindowTitleHint |
             Qt.WindowCloseButtonHint |
+            Qt.WindowMaximizeButtonHint |
             Qt.WindowStaysOnTopHint
         )
         self._record_id = record_id
@@ -1342,8 +1343,8 @@ class StatRepDetailDialog(QDialog):
         self._statrep_grid: str = ""
         self.setWindowTitle(f"StatRep — {callsign}")
         self.setModal(True)
-        self.setMinimumSize(996, 726)
-        self.resize(996, 726)
+        self.setMinimumSize(996, 696)
+        self.resize(996, 696)
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._setup_ui()
@@ -1400,7 +1401,8 @@ class StatRepDetailDialog(QDialog):
 
         self.comments = QTextBrowser()
         self.comments.setFont(_mono_font())
-        self.comments.setFixedSize(480, 220)
+        self.comments.setFixedHeight(220)
+        self.comments.setMinimumWidth(480)
         self.comments.setStyleSheet(
             f"background-color:{self._data_bg}; color:#000000;"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
@@ -1797,6 +1799,7 @@ class MessageDetailDialog(QDialog):
             Qt.CustomizeWindowHint |
             Qt.WindowTitleHint |
             Qt.WindowCloseButtonHint |
+            Qt.WindowMaximizeButtonHint |
             Qt.WindowStaysOnTopHint
         )
         self.callsign = callsign
@@ -1843,7 +1846,8 @@ class MessageDetailDialog(QDialog):
 
         self.msg_text = QTextBrowser()
         self.msg_text.setFont(_mono_font())
-        self.msg_text.setFixedSize(480, 220)
+        self.msg_text.setFixedHeight(220)
+        self.msg_text.setMinimumWidth(480)
         self.msg_text.setStyleSheet(
             f"background-color:{self._data_bg}; border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
         )
