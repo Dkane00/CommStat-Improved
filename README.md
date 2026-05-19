@@ -159,6 +159,6 @@ AI assistance provided by **Claude (Anthropic)** and **ChatGPT (OpenAI)**.
 ## Contact
 
 For questions, comments, or suggestions:  
-**mochoa@protonmail.com**
+**commstat@proton.me**
 
 Website: **https://commstat.app/**

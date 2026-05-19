@@ -69,8 +69,15 @@ _COL_HELP   = "#e83e8c"  # matches StatRep help button
 _COL_CANCEL = "#555555"
 
 
+class _UpperCaseValidator(QtGui.QValidator):
+    """Force any QLineEdit input (including paste) to uppercase."""
+
+    def validate(self, text, pos):
+        return QtGui.QValidator.Acceptable, text.upper(), pos
+
+
 class _UpperCaseEventFilter(QtCore.QObject):
-    """Intercept key presses on a QLineEdit and force them to uppercase.
+    """Intercept key presses on a QPlainTextEdit and force them to uppercase.
 
     Using an event filter instead of a textChanged/textEdited slot is the only
     safe approach on Linux/Qt5.  Any slot that calls setText() while Qt is
@@ -81,7 +88,7 @@ class _UpperCaseEventFilter(QtCore.QObject):
     textChanged, which fires the target line-edit lambda from within the
     target textChanged chain).
 
-    An event filter runs before the line edit processes the key and before any
+    An event filter runs before the widget processes the key and before any
     signals are emitted, so insert() here is always called outside a signal
     handler — no re-entry, no crash.
     """
@@ -301,10 +308,11 @@ class JS8DirectMessageDialog(QDialog):
 
     @staticmethod
     def _wire_uppercase(combo: QComboBox) -> None:
-        """Install an event filter that forces the line edit to uppercase."""
+        """Force the combo line edit to uppercase via validator (covers paste too)."""
         line = combo.lineEdit()
         if line is None:
             return
+        line.setValidator(_UpperCaseValidator(line))
         line.installEventFilter(_UpperCaseEventFilter(line))
 
     def _effective_target_cs(self) -> str:

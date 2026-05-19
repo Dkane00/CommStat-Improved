@@ -5275,6 +5275,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         if not _CONTACTS_BASE_CS_PATTERN.match(relay_cs):
             return
         freq_mhz = round(hz_to_mhz(freq_hz, offset_hz), 3)
+        value = re.sub(rf'^(?:{re.escape(relay_cs)}\s*:\s*)+', '', value, flags=re.IGNORECASE)
         parsed = parse_contacts_observation(value)
         if parsed is not None:
             target_cs, target_snr = parsed
