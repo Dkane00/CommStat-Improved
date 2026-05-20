@@ -9,6 +9,7 @@ factories that were previously copy-pasted across every dialog module.
 The canonical implementation comes from qrz_settings.py.
 """
 
+import os
 from typing import Tuple
 
 from PyQt5 import QtGui
@@ -17,7 +18,12 @@ from PyQt5.QtWidgets import (
     QPushButton, QLineEdit, QCheckBox, QComboBox, QWidget, QHBoxLayout, QMessageBox,
 )
 
-from constants import FONT_ROBOTO, FONT_MONO
+from constants import (
+    FONT_ROBOTO, FONT_MONO, FONT_ROBOTO_STACK, FONT_MONO_STACK,
+    COLOR_BTN_GREEN, COLOR_BTN_GRAY, COLOR_BTN_BLUE,
+    COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
+    ICON_FILE,
+)
 
 
 # ── Button ─────────────────────────────────────────────────────────────────────
@@ -28,7 +34,7 @@ def make_button(label: str, color: str, min_w: int = 90) -> QPushButton:
     b.setMinimumWidth(min_w)
     b.setStyleSheet(
         f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
-        f" padding:6px 14px; border-radius:4px; font-family:{FONT_ROBOTO}; font-size:15px;"
+        f" padding:6px 14px; border-radius:4px; font-family:{FONT_ROBOTO_STACK}; font-size:15px;"
         f" font-weight:bold; }}"
         f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
         f"QPushButton:pressed {{ background-color:{color}; }}"
@@ -46,8 +52,8 @@ def confirm(parent, title: str, text: str,
     box = QMessageBox(parent)
     box.setWindowTitle(title)
     box.setText(text)
-    yes_btn = make_button(yes_label, "#28a745")
-    no_btn = make_button(no_label, "#6c757d")
+    yes_btn = make_button(yes_label, COLOR_BTN_GREEN)
+    no_btn = make_button(no_label, COLOR_BTN_GRAY)
     box.addButton(yes_btn, QMessageBox.YesRole)
     box.addButton(no_btn, QMessageBox.NoRole)
     box.setDefaultButton(yes_btn if default_yes else no_btn)
@@ -68,9 +74,9 @@ def make_input(placeholder: str = "", default: str = "", max_len: int = 0) -> QL
         e.setMaxLength(max_len)
     e.setMinimumHeight(30)
     e.setStyleSheet(
-        "QLineEdit { background-color:white; color:#333333; border:1px solid #cccccc;"
-        f" border-radius:4px; padding:2px 6px; font-family:'{FONT_MONO}'; font-size:13px; }}"
-        "QLineEdit:focus { border:1px solid #007bff; }"
+        f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT}; border:1px solid {COLOR_INPUT_BORDER};"
+        f" border-radius:4px; padding:2px 6px; font-family:{FONT_MONO_STACK}; font-size:13px; }}"
+        f"QLineEdit:focus {{ border:1px solid {COLOR_BTN_BLUE}; }}"
     )
     return e
 
@@ -85,12 +91,12 @@ def make_combobox(items) -> QComboBox:
     cb = QComboBox()
     cb.setMinimumHeight(30)
     cb.setStyleSheet(
-        "QComboBox { background-color:white; color:#333333; border:1px solid #cccccc;"
-        f" border-radius:4px; padding:2px 6px; font-family:'{FONT_MONO}'; font-size:13px; }}"
-        "QComboBox:focus { border:1px solid #007bff; }"
-        "QComboBox QAbstractItemView { background-color:white; color:#333333;"
+        f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT}; border:1px solid {COLOR_INPUT_BORDER};"
+        f" border-radius:4px; padding:2px 6px; font-family:{FONT_MONO_STACK}; font-size:13px; }}"
+        f"QComboBox:focus {{ border:1px solid {COLOR_BTN_BLUE}; }}"
+        f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
         " selection-background-color:#cce5ff; selection-color:#000000;"
-        f" font-family:'{FONT_MONO}'; font-size:13px; }}"
+        f" font-family:{FONT_MONO_STACK}; font-size:13px; }}"
     )
     for label, value in items:
         cb.addItem(label, value)
@@ -126,3 +132,21 @@ def label_font() -> QtGui.QFont:
 def mono_font() -> QtGui.QFont:
     """Kode Mono — for table cells and data display."""
     return QtGui.QFont(FONT_MONO)
+
+
+# ── Dialog chrome ──────────────────────────────────────────────────────────────
+
+def apply_standard_dialog_chrome(dialog, title: str, w: int = 0, h: int = 0) -> None:
+    """Set window flags, title, optional fixed size, and app icon for any CommStat dialog."""
+    dialog.setWindowFlags(
+        Qt.Window |
+        Qt.CustomizeWindowHint |
+        Qt.WindowTitleHint |
+        Qt.WindowCloseButtonHint |
+        Qt.WindowStaysOnTopHint
+    )
+    dialog.setWindowTitle(title)
+    if w and h:
+        dialog.setFixedSize(w, h)
+    if os.path.exists(ICON_FILE):
+        dialog.setWindowIcon(QtGui.QIcon(ICON_FILE))

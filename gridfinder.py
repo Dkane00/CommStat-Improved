@@ -13,7 +13,7 @@ from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_BTN_RED, COLOR_BTN_CYAN,
 )
-from ui_helpers import make_button
+from ui_helpers import make_button, apply_standard_dialog_chrome
 
 _PROG_BG  = DEFAULT_COLORS.get("program_background",   "#000000")
 _PROG_FG  = DEFAULT_COLORS.get("program_foreground",   "#FFFFFF")
@@ -48,19 +48,9 @@ class GridFinderApp(QMainWindow):
         self.data_bg  = data_bg
         self.data_fg  = data_fg
 
-        self.setWindowTitle("Grid Finder")
-        self.setWindowFlags(
-            Qt.Window |
-            Qt.CustomizeWindowHint |
-            Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint |
-            Qt.WindowStaysOnTopHint
-        )
+        apply_standard_dialog_chrome(self, "Grid Finder")
         self.resize(620, 520)
         self.setMinimumSize(500, 440)
-
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QIcon("radiation-32.png"))
 
         self.data = self._load_data()
         if not self.data.empty:
@@ -197,12 +187,12 @@ class GridFinderApp(QMainWindow):
             QLineEdit {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px;
-                padding: 4px; font-family: 'Kode Mono'; font-size: 13px;
+                padding: 4px; font-family: 'Kode Mono', monospace; font-size: 13px;
             }}
             QTableWidget {{
                 background-color: {_DATA_BG}; color: {_DATA_FG};
                 border: 1px solid {COLOR_INPUT_BORDER};
-                font-family: 'Kode Mono'; font-size: 13px;
+                font-family: 'Kode Mono', monospace; font-size: 13px;
                 gridline-color: #cccccc;
             }}
             QTableWidget::item {{
@@ -214,11 +204,11 @@ class GridFinderApp(QMainWindow):
             QHeaderView::section {{
                 background-color: {_TITLE_BG}; color: {_TITLE_FG};
                 border: 1px solid {COLOR_INPUT_BORDER};
-                padding: 4px; font-family: Roboto; font-size: 13px; font-weight: bold;
+                padding: 4px; font-family: Roboto, sans-serif; font-size: 13px; font-weight: bold;
             }}
             QStatusBar {{
                 background-color: {_PANEL_BG}; color: {_PANEL_FG};
-                font-family: Roboto; font-size: 13px;
+                font-family: Roboto, sans-serif; font-size: 13px;
             }}
         """)
 

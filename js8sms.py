@@ -21,7 +21,7 @@ from constants import (
     COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
     COLOR_BTN_BLUE, COLOR_BTN_RED,
 )
-from ui_helpers import make_button
+from ui_helpers import make_button, apply_standard_dialog_chrome
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -62,18 +62,7 @@ class JS8SMSDialog(QDialog):
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
 
-        self.setWindowTitle("JS8 SMS")
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        self.setWindowFlags(
-            Qt.Window |
-            Qt.CustomizeWindowHint |
-            Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint |
-            Qt.WindowStaysOnTopHint
-        )
-
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+        apply_standard_dialog_chrome(self, "JS8 SMS", WINDOW_WIDTH, WINDOW_HEIGHT)
 
         self._setup_ui()
         self._load_rigs()
@@ -86,13 +75,13 @@ class JS8SMSDialog(QDialog):
         """Build the user interface."""
         self.setStyleSheet(
             f"QDialog {{ background-color:{_PANEL_BG}; }}"
-            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}"
+            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT}; }}"
             f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" selection-background-color:#cce5ff; selection-color:#000000; }}"
@@ -110,7 +99,7 @@ class JS8SMSDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
@@ -122,7 +111,7 @@ class JS8SMSDialog(QDialog):
             col.setSpacing(2)
             lbl = QtWidgets.QLabel(lbl_text)
             lbl.setStyleSheet(
-                "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+                "QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }"
             )
             col.addWidget(lbl)
             col.addWidget(ctrl)
@@ -156,7 +145,7 @@ class JS8SMSDialog(QDialog):
         self.freq_field.setStyleSheet(
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
         )
         rig_row.addLayout(_labeled_col("Freq:", self.freq_field))
 
@@ -166,7 +155,7 @@ class JS8SMSDialog(QDialog):
         # Phone number
         phone_label = QtWidgets.QLabel("Phone Number:")
         phone_label.setStyleSheet(
-            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+            "QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }"
         )
         layout.addWidget(phone_label)
         self.phone_field = QtWidgets.QLineEdit()
@@ -178,7 +167,7 @@ class JS8SMSDialog(QDialog):
         # Message
         message_label = QtWidgets.QLabel("Text Message:")
         message_label.setStyleSheet(
-            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+            "QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }"
         )
         layout.addWidget(message_label)
         self.message_field = QtWidgets.QLineEdit()
@@ -194,7 +183,7 @@ class JS8SMSDialog(QDialog):
             "Recipients must often opt-in on the SMS gateway before delivery will work."
         )
         note.setWordWrap(True)
-        note.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        note.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}")
         layout.addWidget(note)
 
         optin = QtWidgets.QLabel(
@@ -203,7 +192,7 @@ class JS8SMSDialog(QDialog):
         )
         optin.setOpenExternalLinks(True)
         optin.setWordWrap(True)
-        optin.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        optin.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}")
         layout.addWidget(optin)
 
         limitations = QtWidgets.QLabel(
@@ -211,7 +200,7 @@ class JS8SMSDialog(QDialog):
             "Sending SMS depends on APRS services being available."
         )
         limitations.setWordWrap(True)
-        limitations.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        limitations.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}")
         layout.addWidget(limitations)
 
         layout.addStretch()

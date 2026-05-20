@@ -29,9 +29,10 @@ from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
     COLOR_BTN_GREEN, COLOR_BTN_BLUE, COLOR_BTN_CYAN,
+    RIG_FETCH_DELAY_MS, RIG_FREQ_DELAY_MS,
 )
 from id_utils import generate_time_based_id
-from ui_helpers import make_button, label_font, mono_font
+from ui_helpers import make_button, label_font, mono_font, apply_standard_dialog_chrome
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -172,19 +173,7 @@ class StatRepDialog(QDialog):
         self.module_background = module_background
         self.data_background = data_background
 
-        self.setWindowTitle("Status Report")
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        self.setWindowFlags(
-            Qt.Window |
-            Qt.CustomizeWindowHint |
-            Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint |
-            Qt.WindowStaysOnTopHint
-        )
-
-        # Set window icon
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+        apply_standard_dialog_chrome(self, "Status Report", WINDOW_WIDTH, WINDOW_HEIGHT)
 
         # Configuration
         self.callsign = ""
@@ -492,8 +481,8 @@ class StatRepDialog(QDialog):
             # Small delay between requests to avoid race condition
             print(f"[StatRep] Requesting callsign, grid, and frequency from {rig_name}")
             client.get_callsign()
-            QtCore.QTimer.singleShot(100, client.get_grid)  # 100ms delay for grid request
-            QtCore.QTimer.singleShot(200, client.get_frequency)  # 200ms delay for frequency request
+            QtCore.QTimer.singleShot(RIG_FETCH_DELAY_MS, client.get_grid)
+            QtCore.QTimer.singleShot(RIG_FREQ_DELAY_MS, client.get_frequency)
         else:
             print(f"[StatRep] Client not available or not connected for {rig_name}")
             if hasattr(self, 'freq_field'):
@@ -597,12 +586,12 @@ class StatRepDialog(QDialog):
             QLineEdit {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
-                font-family: 'Kode Mono'; font-size: 13px;
+                font-family: 'Kode Mono', monospace; font-size: 13px;
             }}
             QComboBox {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
-                font-family: 'Kode Mono'; font-size: 13px;
+                font-family: 'Kode Mono', monospace; font-size: 13px;
                 combobox-popup: 0;
             }}
             QComboBox:disabled {{
@@ -629,7 +618,7 @@ class StatRepDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
@@ -881,13 +870,7 @@ class StatRepDialog(QDialog):
     def _on_help_clicked(self, _link: str = "") -> None:
         """Show a styled help dialog explaining Mode, Delivery, and Color selection."""
         dlg = QDialog(self)
-        dlg.setWindowTitle("Status Report Help")
-        dlg.setWindowFlags(
-            Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
-        )
-        if os.path.exists("radiation-32.png"):
-            dlg.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+        apply_standard_dialog_chrome(dlg, "Status Report Help")
         dlg.setFixedWidth(460)
 
         dlg.setStyleSheet(f"""
@@ -905,7 +888,7 @@ class StatRepDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
@@ -914,7 +897,7 @@ class StatRepDialog(QDialog):
             lbl = QtWidgets.QLabel(text)
             lbl.setStyleSheet(
                 "QLabel { background-color: transparent; color: #000000;"
-                " font-family: 'Roboto'; font-size: 13px; font-weight: bold;"
+                " font-family: Roboto, sans-serif; font-size: 13px; font-weight: bold;"
                 " padding-bottom: 2px; border-bottom: 1px solid #999999; }"
             )
             return lbl
@@ -925,7 +908,7 @@ class StatRepDialog(QDialog):
             lbl.setWordWrap(True)
             lbl.setStyleSheet(
                 "QLabel { background-color: transparent; color: #000000;"
-                " font-family: 'Roboto'; font-size: 13px; padding-left: 8px; }"
+                " font-family: Roboto, sans-serif; font-size: 13px; padding-left: 8px; }"
             )
             return lbl
 
@@ -959,7 +942,7 @@ class StatRepDialog(QDialog):
             box.setStyleSheet(
                 f"QFrame {{ background-color: {bg}; border-radius: 4px; }}"
                 f"QLabel {{ background-color: transparent; color: {fg};"
-                f" font-family: 'Roboto'; font-size: 13px; font-weight: bold; }}"
+                f" font-family: Roboto, sans-serif; font-size: 13px; font-weight: bold; }}"
             )
             v = QtWidgets.QVBoxLayout(box)
             v.setContentsMargins(8, 6, 8, 6)
@@ -970,7 +953,7 @@ class StatRepDialog(QDialog):
             desc.setAlignment(Qt.AlignCenter)
             desc.setStyleSheet(
                 f"QLabel {{ background-color: transparent; color: {fg};"
-                f" font-family: 'Roboto'; font-size: 13px; font-weight: normal; }}"
+                f" font-family: Roboto, sans-serif; font-size: 13px; font-weight: normal; }}"
             )
             v.addWidget(name)
             v.addWidget(desc)

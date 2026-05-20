@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
 from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER, COLOR_BTN_GREEN,
 )
-from ui_helpers import make_button, label_font
+from ui_helpers import make_button, label_font, apply_standard_dialog_chrome
 
 _PROG_BG = DEFAULT_COLORS.get("program_background", "#000000")
 _PROG_FG = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
@@ -38,29 +38,18 @@ class FilterDialog(QDialog):
         self.current_filters = current_filters or {}
         self.result_filters = {}
 
-        self.setWindowTitle("Display Filter")
-        self.setFixedSize(500, 185)
-        self.setWindowFlags(
-            Qt.Window |
-            Qt.CustomizeWindowHint |
-            Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint |
-            Qt.WindowStaysOnTopHint
-        )
-
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+        apply_standard_dialog_chrome(self, "Display Filter", 500, 185)
 
         self.setStyleSheet(f"""
             QDialog {{ background-color: {_DATA_BG}; }}
             QLabel {{
-                color: {COLOR_INPUT_TEXT}; font-family: Roboto;
+                color: {COLOR_INPUT_TEXT}; font-family: Roboto, sans-serif;
                 font-size: 13px; font-weight: bold;
             }}
             QDateEdit {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px;
-                padding: 2px 4px; font-family: 'Kode Mono'; font-size: 13px;
+                padding: 2px 4px; font-family: 'Kode Mono', monospace; font-size: 13px;
             }}
         """)
 

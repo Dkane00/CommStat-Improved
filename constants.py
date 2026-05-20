@@ -15,10 +15,6 @@ from typing import Dict
 
 VERSION = "4.2"
 
-# When True, dialog handlers reload their module before opening so source
-# edits take effect without restarting CommStat. Leave False for releases.
-DEV_RELOAD_DIALOGS = False
-
 WINDOW_TITLE = f"CommStat (v{VERSION}) by N0DDK"
 WINDOW_SIZE = (1360, 768)
 CONFIG_FILE = "config.ini"
@@ -29,9 +25,20 @@ DATABASE_FILE = "traffic.db3"
 # Fonts
 # =============================================================================
 
+# Timing
+HEARTBEAT_DELAY_MS  = 15000  # initial delay before first backbone heartbeat
+RIG_FETCH_DELAY_MS  = 100    # staggered delay for grid/callsign requests after rig select
+RIG_FREQ_DELAY_MS   = 200    # staggered delay for frequency request after rig select
+
 FONT_ROBOTO   = "Roboto"
 FONT_SLAB     = "Roboto Slab"
 FONT_MONO     = "Kode Mono"
+
+# CSS font-family stacks — use in stylesheets for graceful fallback if fonts
+# are not installed (e.g. fresh Linux install without bundled .ttf files).
+FONT_ROBOTO_STACK = "Roboto, sans-serif"
+FONT_MONO_STACK   = "'Kode Mono', monospace"
+FONT_SLAB_STACK   = "'Roboto Slab', serif"
 FONT_SIZE     = 13   # body / inputs
 FONT_SIZE_SM  = 13   # hints & tips
 FONT_SIZE_LG  = 16   # section / dialog headers
@@ -52,6 +59,7 @@ COLOR_BTN_RED   = "#dc3545"
 COLOR_BTN_GREEN = "#28a745"
 COLOR_BTN_BLUE  = "#007bff"
 COLOR_BTN_CYAN  = "#17a2b8"
+COLOR_BTN_GRAY  = "#6c757d"
 
 # Labels
 COLOR_ERROR         = "#AA0000"
@@ -69,14 +77,11 @@ COLOR_ALERT_TEXT = "#ffffff"
 DEFAULT_COLORS: Dict[str, str] = {
     # Main window
     'program_background': '#A52A2A',       # Maroon
-    #'program_background': '#DDDDDD',       # testing black
     'program_foreground': '#FFFFFF',
     'menu_background': '#3050CC',          # Blue
     'menu_foreground': '#FFFFFF',
     'title_bar_background': '#F07800',     # Orange
     'title_bar_foreground': '#FFFFFF',
-    #'title_bar_background': '#FFFF00',     # Testing
-    #'title_bar_foreground': '#000000',
     # News feed marquee
     'newsfeed_background': '#242424',      # Dark gray
     'newsfeed_foreground': '#00FF00',      # Green text

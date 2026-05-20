@@ -22,7 +22,7 @@ from constants import (
     COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
     COLOR_BTN_BLUE, COLOR_BTN_RED,
 )
-from ui_helpers import make_button
+from ui_helpers import make_button, apply_standard_dialog_chrome
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -64,18 +64,7 @@ class JS8MailDialog(QDialog):
         self.tcp_pool = tcp_pool
         self.connector_manager = connector_manager
 
-        self.setWindowTitle("JS8 Email")
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        self.setWindowFlags(
-            Qt.Window |
-            Qt.CustomizeWindowHint |
-            Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint |
-            Qt.WindowStaysOnTopHint
-        )
-
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+        apply_standard_dialog_chrome(self, "JS8 Email", WINDOW_WIDTH, WINDOW_HEIGHT)
 
         self._setup_ui()
         self._load_rigs()
@@ -88,13 +77,13 @@ class JS8MailDialog(QDialog):
         """Build the user interface."""
         self.setStyleSheet(
             f"QDialog {{ background-color:{_PANEL_BG}; }}"
-            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}"
+            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT}; }}"
             f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" selection-background-color:#cce5ff; selection-color:#000000; }}"
@@ -112,7 +101,7 @@ class JS8MailDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
@@ -124,7 +113,7 @@ class JS8MailDialog(QDialog):
             col.setSpacing(2)
             lbl = QtWidgets.QLabel(lbl_text)
             lbl.setStyleSheet(
-                "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+                "QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }"
             )
             col.addWidget(lbl)
             col.addWidget(ctrl)
@@ -158,7 +147,7 @@ class JS8MailDialog(QDialog):
         self.freq_field.setStyleSheet(
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
         )
         rig_row.addLayout(_labeled_col("Freq:", self.freq_field))
 
@@ -168,7 +157,7 @@ class JS8MailDialog(QDialog):
         # Email address
         email_label = QtWidgets.QLabel("Email Address:")
         email_label.setStyleSheet(
-            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+            "QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }"
         )
         layout.addWidget(email_label)
         self.email_field = QtWidgets.QLineEdit()
@@ -180,7 +169,7 @@ class JS8MailDialog(QDialog):
         # Subject / message
         subject_label = QtWidgets.QLabel("Message (Subject Line):")
         subject_label.setStyleSheet(
-            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+            "QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }"
         )
         layout.addWidget(subject_label)
         self.subject_field = QtWidgets.QLineEdit()
@@ -195,14 +184,14 @@ class JS8MailDialog(QDialog):
             '<span style="color:#CC0000; font-weight:bold;">Note:</span> '
             "APRS emails are sent in the subject line. Replies are not supported."
         )
-        note.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        note.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}")
         layout.addWidget(note)
 
         limitations = QtWidgets.QLabel(
             '<span style="color:#CC0000; font-weight:bold;">Limitations:</span> '
             "Sending email depends on APRS services being available."
         )
-        limitations.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}")
+        limitations.setStyleSheet(f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}")
         layout.addWidget(limitations)
 
         layout.addSpacing(12)

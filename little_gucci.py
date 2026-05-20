@@ -1730,6 +1730,15 @@ class DatabaseManager:
 
 # =============================================================================
 # MainWindow - Main application window
+class _MenuBarMenu(QtWidgets.QMenu):
+    """QMenu that shifts its popup position 50 px down so it clears the menu bar."""
+    _Y_OFFSET = 50
+
+    def showEvent(self, event):
+        self.move(self.x(), self.y() + self._Y_OFFSET)
+        super().showEvent(event)
+
+
 # =============================================================================
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -2021,7 +2030,7 @@ class MainWindow(QtWidgets.QMainWindow):
             def start_backbone_heartbeat():
                 self._check_backbone()  # Send first heartbeat immediately
                 self.backbone_timer.start(180000)  # Then start 3 minute interval timer
-            QTimer.singleShot(15000, start_backbone_heartbeat)
+            QTimer.singleShot(HEARTBEAT_DELAY_MS, start_backbone_heartbeat)
         elif not self._internet_available:
             print("Internet connectivity: Still not available (will retry in 30 minutes)")
 
@@ -2043,7 +2052,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenuBar {{
                 background-color: {menu_bg};
                 color: {menu_fg};
-                font-family: Roboto;
+                font-family: Roboto, sans-serif;
                 font-size: 13px;
                 font-weight: bold;
             }}
@@ -2056,11 +2065,11 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenu {{
                 background-color: {panel_bg};
                 color: {panel_fg};
-                font-family: Roboto;
+                font-family: Roboto, sans-serif;
                 font-size: 13px;
             }}
             QMenu::item {{
-                font-family: Roboto;
+                font-family: Roboto, sans-serif;
                 font-size: 13px;
                 padding: 3px 12px;
             }}
@@ -2071,7 +2080,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
 
         # Create the main menu
-        self.menu = QtWidgets.QMenu("Config", self.menubar)
+        self.menu = _MenuBarMenu("Config", self.menubar)
         self.menubar.addMenu(self.menu)
 
         # Define menu actions: (name, text, handler)
@@ -2098,7 +2107,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Deferred to after db initialization in __init__
 
         # Create the Transmit menu
-        self.transmit_menu = QtWidgets.QMenu("Transmit", self.menubar)
+        self.transmit_menu = _MenuBarMenu("Transmit", self.menubar)
         self.menubar.addMenu(self.transmit_menu)
 
         hybrid_lbl = QtWidgets.QAction("HYBRID TOOLS", self)
@@ -2141,7 +2150,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.actions[name] = action
 
         # Create the Filter menu
-        self.filter_menu = QtWidgets.QMenu("Filter", self.menubar)
+        self.filter_menu = _MenuBarMenu("Filter", self.menubar)
         self.menubar.addMenu(self.filter_menu)
 
         # Helper to create styled menu checkboxes
@@ -2199,7 +2208,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.show_every_group_action = self.filter_menu.actions()[-1]
 
         # Create Tools dropdown menu
-        self.tools_menu = QtWidgets.QMenu("Tools", self.menubar)
+        self.tools_menu = _MenuBarMenu("Tools", self.menubar)
         self.menubar.addMenu(self.tools_menu)
 
         # Helper to create menu actions
@@ -2240,7 +2249,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setStatusBar(self.statusbar)
         self.statusbar.setStyleSheet(
             "QStatusBar, QStatusBar QLabel, QStatusBar QPushButton {"
-            " font-family: Roboto; font-size: 12px; font-weight: normal; }"
+            " font-family: Roboto, sans-serif; font-size: 12px; font-weight: normal; }"
         )
 
         # Map view toggle buttons (left side of status bar)
@@ -2420,7 +2429,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QTableWidget {{
                 background-color: {data_bg};
                 color: {data_fg};
-                font-family: Roboto;
+                font-family: Roboto, sans-serif;
                 font-size: 13px;
                 gridline-color: #D2D0CF;
                 border: 1px solid #D2D0CF;
@@ -2428,7 +2437,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QTableWidget QHeaderView::section {{
                 background-color: {title_bg};
                 color: {title_fg};
-                font-family: Roboto;
+                font-family: Roboto, sans-serif;
                 font-weight: bold;
                 padding: 4px;
                 border: 1px solid {title_bg};
@@ -2449,7 +2458,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QHeaderView::section {{
                 background-color: {title_bg};
                 color: {title_fg};
-                font-family: Roboto;
+                font-family: Roboto, sans-serif;
                 font-weight: bold;
                 font-size: 13px;
                 padding: 4px;
@@ -2596,7 +2605,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.alert_delete_btn = QtWidgets.QPushButton("Delete")
         self.alert_delete_btn.setStyleSheet(
-            "QPushButton { background-color: #dc3545; color: white; font-family: Roboto; font-size: 13px; font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
+            "QPushButton { background-color: #dc3545; color: white; font-family: Roboto, sans-serif; font-size: 13px; font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
             "QPushButton:hover { background-color: #c82333; }"
             "QPushButton:pressed { background-color: #bd2130; }"
         )
@@ -2614,8 +2623,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Default styling (will be updated when alert is displayed)
         self.alert_display.setStyleSheet("background-color: #333333;")
         self.alert_title_label.setStyleSheet("color: #ffffff;")
-        self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
-        self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
+        self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto, sans-serif;")
+        self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto, sans-serif;")
 
         # Add to same layout position as map
         self.main_layout.addWidget(self.alert_display, 4, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
@@ -2774,7 +2783,7 @@ class MainWindow(QtWidgets.QMainWindow):
             date_formatted = date_received[:16] if len(date_received) > 16 else date_received
 
             # Build date/callsign line with bold labels (use Roboto font)
-            date_line = f'<span style="font-family: Roboto;"><b>Date Received:</b> {date_formatted}'
+            date_line = f'<span style="font-family: Roboto, sans-serif;"><b>Date Received:</b> {date_formatted}'
             if from_callsign:
                 date_line += f"&nbsp;&nbsp;&nbsp;<b>Sent By:</b> {from_callsign}"
             date_line += "</span>"
@@ -2786,17 +2795,17 @@ class MainWindow(QtWidgets.QMainWindow):
             if group:
                 # Show group + ALERT at top, then title in bold below (strip @ symbol)
                 group_display = group.lstrip('@')
-                formatted_title = f'<div style="font-family: \'Kode Mono\'; font-size: 22px; font-weight: bold; margin-top: -18px;">@{group_display} - ALERT</div>'
+                formatted_title = f'<div style="font-family: \'Kode Mono\', monospace; font-size: 22px; font-weight: bold; margin-top: -18px;">@{group_display} - ALERT</div>'
                 if title:
-                    formatted_title += f'<div style="font-family: \'Roboto Slab\'; font-size: 30px; font-weight: 900; margin-top: 24px;">{title}</div>'
+                    formatted_title += f'<div style="font-family: \'Roboto Slab\', serif; font-size: 30px; font-weight: 900; margin-top: 24px;">{title}</div>'
             else:
                 # No group, just show title in bold
-                formatted_title = f'<div style="font-family: \'Roboto Slab\'; font-size: 26px; font-weight: 900;">{title if title else ""}</div>'
+                formatted_title = f'<div style="font-family: \'Roboto Slab\', serif; font-size: 26px; font-weight: 900;">{title if title else ""}</div>'
 
             self.alert_display.setStyleSheet(f"background-color: {bg_color};")
             self.alert_title_label.setStyleSheet(f"color: {text_color};")
-            self.alert_message_label.setStyleSheet(f"color: {text_color}; font-family: Roboto;")
-            self.alert_date_label.setStyleSheet(f"color: {text_color}; font-family: Roboto;")
+            self.alert_message_label.setStyleSheet(f"color: {text_color}; font-family: Roboto, sans-serif;")
+            self.alert_date_label.setStyleSheet(f"color: {text_color}; font-family: Roboto, sans-serif;")
             self.alert_title_label.setText(formatted_title)
             self.alert_message_label.setText(message)
             self.alert_date_label.setText(date_line)
@@ -2804,8 +2813,8 @@ class MainWindow(QtWidgets.QMainWindow):
             # No alerts - show placeholder
             self.alert_display.setStyleSheet("background-color: #333333;")
             self.alert_title_label.setStyleSheet("color: #ffffff;")
-            self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
-            self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
+            self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto, sans-serif;")
+            self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto, sans-serif;")
             self.alert_title_label.setText("No Alerts")
             self.alert_message_label.setText("")
             self.alert_date_label.setText("")
@@ -4353,17 +4362,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         win.show()
 
     def _resolve_dialog_class(self, module_name: str, class_name: str):
-        """Return a dialog class, reloading its module first when DEV_RELOAD_DIALOGS is set.
-
-        Allows iterating on dialog source without restarting CommStat. Safe only for
-        self-contained dialog modules opened from menu actions — other modules holding
-        references to the previous class will not pick up the reload.
-        """
         import importlib
-        module = importlib.import_module(module_name)
-        if DEV_RELOAD_DIALOGS:
-            module = importlib.reload(module)
-        return getattr(module, class_name)
+        return getattr(importlib.import_module(module_name), class_name)
 
     def _on_help(self) -> None:
         HelpDialogCls = self._resolve_dialog_class("help", "HelpDialog")
@@ -4433,7 +4433,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             def start_backbone_heartbeat():
                 self._check_backbone()  # Send first heartbeat immediately
                 self.backbone_timer.start(180000)  # Then start 3 minute interval timer
-            QTimer.singleShot(15000, start_backbone_heartbeat)
+            QTimer.singleShot(HEARTBEAT_DELAY_MS, start_backbone_heartbeat)
 
         # News ticker animation timer
         self.newsfeed_timer = QTimer(self)
@@ -4528,19 +4528,19 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                 label_status.setText(" Disabled ")
                 label_status.setStyleSheet(
                     "background-color: #888888; color: white;"
-                    " font-family: Roboto; font-size: 12px; font-weight: normal;"
+                    " font-family: Roboto, sans-serif; font-size: 12px; font-weight: normal;"
                 )
             elif is_connected:
                 label_status.setText(" Connected ")
                 label_status.setStyleSheet(
                     "background-color: #00dd00; color: black;"
-                    " font-family: Roboto; font-size: 12px; font-weight: normal;"
+                    " font-family: Roboto, sans-serif; font-size: 12px; font-weight: normal;"
                 )
             else:
                 label_status.setText(" Disconnected ")
                 label_status.setStyleSheet(
                     "background-color: #dd0000; color: white;"
-                    " font-family: Roboto; font-size: 12px; font-weight: normal;"
+                    " font-family: Roboto, sans-serif; font-size: 12px; font-weight: normal;"
                 )
 
     def _tick_newsfeed(self) -> None:
@@ -5090,7 +5090,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                 padding: 4px 8px;
                 background-color: {panel_bg};
                 color: {panel_fg};
-                font-family: Roboto;
+                font-family: Roboto, sans-serif;
                 font-size: 13px;
             }}
             QCheckBox::indicator {{
@@ -5137,7 +5137,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                     padding: 4px 8px;
                     background-color: {panel_bg};
                     color: {panel_fg};
-                    font-family: Roboto;
+                    font-family: Roboto, sans-serif;
                     font-size: 13px;
                 }}
                 QCheckBox::indicator {{

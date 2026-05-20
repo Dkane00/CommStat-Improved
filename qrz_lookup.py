@@ -39,9 +39,11 @@ from qrz_client import QRZClient, get_qrz_cached, load_qrz_config
 from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_BTN_RED, COLOR_BTN_BLUE, COLOR_BTN_CYAN,
+    RIG_FREQ_DELAY_MS,
 )
 # Single source of truth for mouse-wheel zoom dampening — see little_gucci.py
 from little_gucci import MAP_WHEEL_PX_PER_ZOOM
+from ui_helpers import apply_standard_dialog_chrome
 
 DB_PATH = "traffic.db3"
 _BACKBONE_URL  = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
@@ -94,7 +96,7 @@ def _btn(label: str, color: str, min_w: int = 90) -> QPushButton:
     b.setMinimumWidth(min_w)
     b.setStyleSheet(
         f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
-        f" padding:6px 14px; border-radius:4px; font-family:Roboto; font-size:15px;"
+        f" padding:6px 14px; border-radius:4px; font-family:Roboto, sans-serif; font-size:15px;"
         f" font-weight:bold; }}"
         f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
         f"QPushButton:pressed {{ background-color:{color}; }}"
@@ -415,7 +417,7 @@ class _QRZInfoSection(QWidget):
         self.lbl_lon     = QLabel(); self.lbl_lon.setFont(_mono_font())
 
         self.lbl_qrz_status = QLabel()
-        self.lbl_qrz_status.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }")
+        self.lbl_qrz_status.setStyleSheet("QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }")
         self.lbl_qrz_status.setWordWrap(True)
         self.lbl_qrz_status.setVisible(False)
 
@@ -540,7 +542,7 @@ class _QRZInfoSection(QWidget):
     # ── Last Seen lookup ──────────────────────────────────────────────────────
 
     def _fetch_last_seen(self, target: str) -> None:
-        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
         self.lbl_last_seen.setText(f'<span style="{_k}">Last Seen:</span> …')
         threading.Thread(target=self._last_seen_thread, args=(target,), daemon=True).start()
 
@@ -562,7 +564,7 @@ class _QRZInfoSection(QWidget):
             self.last_seen_updated.emit("—")
 
     def _on_last_seen_updated(self, value: str) -> None:
-        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
         self.lbl_last_seen.setText(f'<span style="{_k}">Last Seen:</span> {value}')
 
     def update_data(self, data: dict) -> None:
@@ -579,7 +581,7 @@ class _QRZInfoSection(QWidget):
             city_state = (city_state + " " + d["zip"]).strip()
         self.lbl_addr2.setText(city_state)
 
-        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
         self.lbl_county.setText(f'<span style="{_k}">County:</span> {d["county"]}' if d["county"] else "")
         self.lbl_country.setText(f'<span style="{_k}">Country:</span> {d["country"]}' if d["country"] else "")
 
@@ -661,7 +663,7 @@ class _QRZInfoSection(QWidget):
         self.lbl_addr1.clear()
         self.lbl_addr2.clear()
         self.lbl_moddate.clear()
-        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
         self.lbl_county.setText(f"<span style='{_k}'>County:</span>")
         self.lbl_country.setText(f"<span style='{_k}'>Country:</span>")
         if not self._skip_last_seen:
@@ -703,23 +705,14 @@ class QRZLookupDialog(QDialog):
                  initial_message: str = "",
                  parent=None):
         super().__init__(parent)
-        self.setWindowFlags(
-            Qt.Window |
-            Qt.CustomizeWindowHint |
-            Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint |
-            Qt.WindowStaysOnTopHint
-        )
+        apply_standard_dialog_chrome(self, "QRZ Lookup")
+        self.setModal(True)
+        self.setMinimumSize(825, 500)
+        self.resize(902, 580)
         self._module_bg = module_background
         self._module_fg = module_foreground
         self._program_bg = program_background or _PROG_BG
         self._program_fg = program_foreground or _PROG_FG
-        self.setWindowTitle("QRZ Lookup")
-        self.setModal(True)
-        self.setMinimumSize(825, 500)
-        self.resize(902, 580)
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._thread: Optional[_QRZThread] = None
         self._send_result.connect(self._on_send_result)
         self._setup_ui()
@@ -743,7 +736,7 @@ class QRZLookupDialog(QDialog):
             f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
         )
         main = QVBoxLayout(self)
         main.setContentsMargins(15, 15, 15, 15)
@@ -780,7 +773,7 @@ class QRZLookupDialog(QDialog):
         self.lbl_status = QLabel()
         self.lbl_status.setFont(QFont("Roboto"))
         self.lbl_status.setStyleSheet(
-            f"QLabel {{ color:{self._module_fg}; font-family:Roboto; font-size:13px; font-weight:bold; }}"
+            f"QLabel {{ color:{self._module_fg}; font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }}"
         )
         main.addWidget(self.lbl_status)
 
@@ -797,7 +790,7 @@ class QRZLookupDialog(QDialog):
         self.msg_edit.setStyleSheet(
             f"background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono'; font-size:13px;"
+            f" font-family:'Kode Mono', monospace; font-size:13px;"
         )
         from PyQt5.QtGui import QFontMetrics
         _fm = QFontMetrics(self.msg_edit.font())
@@ -975,10 +968,10 @@ class JS8MessageDialog(QDialog):
                  connector_manager=None,
                  parent=None):
         super().__init__(parent)
-        self.setWindowFlags(
-            Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
-        )
+        apply_standard_dialog_chrome(self, "JS8 Message")
+        self.setModal(True)
+        self.setMinimumSize(825, 460)
+        self.resize(900, 530)
         self._program_bg = program_background or _PROG_BG
         self._program_fg = program_foreground or _PROG_FG
         self._module_bg = module_background
@@ -986,12 +979,6 @@ class JS8MessageDialog(QDialog):
         self._tcp_pool = tcp_pool
         self._connector_manager = connector_manager
         self._qrz_thread: Optional[_QRZThread] = None
-        self.setWindowTitle("JS8 Message")
-        self.setModal(True)
-        self.setMinimumSize(825, 460)
-        self.resize(900, 530)
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._setup_ui()
         self._populate_rigs()
 
@@ -1001,10 +988,10 @@ class JS8MessageDialog(QDialog):
             f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; combobox-popup:0; }}"
             f"QComboBox QAbstractItemView::item {{ min-height:22px; padding:0 6px; }}"
         )
         main = QVBoxLayout(self)
@@ -1084,7 +1071,7 @@ class JS8MessageDialog(QDialog):
         self.freq_edit.setStyleSheet(
             f"background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px;"
+            f" font-family:'Kode Mono', monospace; font-size:13px;"
         )
         rf_row.addWidget(freq_lbl)
         rf_row.addWidget(self.freq_edit)
@@ -1098,7 +1085,7 @@ class JS8MessageDialog(QDialog):
         self.msg_edit.setStyleSheet(
             f"background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono'; font-size:13px;"
+            f" font-family:'Kode Mono', monospace; font-size:13px;"
         )
         self.msg_edit.setFixedHeight(34)
         self.msg_edit.textChanged.connect(self._on_msg_changed)
@@ -1168,7 +1155,7 @@ class JS8MessageDialog(QDialog):
             pass
         client.frequency_received.connect(self._on_frequency_received)
         from PyQt5.QtCore import QTimer
-        QTimer.singleShot(200, client.get_frequency)
+        QTimer.singleShot(RIG_FREQ_DELAY_MS, client.get_frequency)
 
     def _on_frequency_received(self, rig_name: str, dial_freq: int) -> None:
         self.freq_edit.setText(f"{dial_freq / 1_000_000:.3f} MHz")
@@ -1485,7 +1472,7 @@ class StatRepDetailDialog(QDialog):
         _source_map = {1: "RF via JS8Call", 2: "Internet", 3: "Internet Only"}
         source_text  = _source_map.get(int(source), "Unknown")
 
-        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
         self.qrz_info.lbl_sr_posted.setText(
             f'<span style="{_k}">Posted:</span>  {row[0]}' if row[0] else f'<span style="{_k}">Posted:</span>'
         )
@@ -1551,7 +1538,7 @@ class StatRepDetailDialog(QDialog):
         if not text:
             return
         count_str = text.split(",", 1)[0].strip()
-        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
         self.qrz_info.lbl_sr_delivered.setText(f'<span style="{_k}">Delivered To:</span>  {count_str} CommStat users')
 
     def _save_pinned(self, checked: bool) -> None:
@@ -1885,7 +1872,7 @@ def _text_to_html(text: str, bg: str) -> str:
     lines = linked.replace("\n", "<br>")
     return (
         f'<html><body style="background-color:{bg};color:#000000;'
-        f'font-family:\'Kode Mono\';font-size:13px;">{lines}</body></html>'
+        f'font-family:\'Kode Mono\', monospace;font-size:13px;">{lines}</body></html>'
     )
 
 
@@ -2236,10 +2223,10 @@ class DeliveryConfirmationDialog(QDialog):
                  program_foreground: str = "",
                  parent=None):
         super().__init__(parent)
-        self.setWindowFlags(
-            Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
-        )
+        apply_standard_dialog_chrome(self, "Delivery Confirmation")
+        self.setModal(True)
+        self.resize(510, 440)
+        self.setMinimumSize(510, 440)
         self._callsign = (callsign or "").strip().upper()
         self._message = (message or "").replace("||", "\n")
         self._module_bg = module_background
@@ -2249,12 +2236,6 @@ class DeliveryConfirmationDialog(QDialog):
         self._img_loader: Optional[_ImageLoader] = None
         self._gif_movie: Optional[QMovie] = None
         self._qrz_thread: Optional[_QRZThread] = None
-        self.setWindowTitle("Delivery Confirmation")
-        self.setModal(True)
-        self.resize(510, 440)
-        self.setMinimumSize(510, 440)
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._setup_ui()
         self._populate_qrz()
 
@@ -2264,7 +2245,7 @@ class DeliveryConfirmationDialog(QDialog):
             f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
             f"QPlainTextEdit {{ background-color:#e9ecef; color:#333333;"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
         )
 
         main = QVBoxLayout(self)
@@ -2335,7 +2316,7 @@ class DeliveryConfirmationDialog(QDialog):
         confirm_lbl.setFont(QFont("Roboto", -1, QFont.Bold))
         confirm_lbl.setStyleSheet(
             f"QLabel {{ color:{self._module_fg}; background-color: transparent;"
-            " font-family:Roboto; font-size:13px; font-weight:bold; padding-top:6px; }}"
+            " font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; padding-top:6px; }}"
         )
         main.addWidget(confirm_lbl)
         main.addStretch()
@@ -2374,7 +2355,7 @@ class DeliveryConfirmationDialog(QDialog):
 
     def _update_data(self, data: dict) -> None:
         d = _normalize_qrz(data)
-        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
 
         self.lbl_call.setText(f"<span style='{_k}'>Callsign:</span> {d['call']}")
         self.lbl_name.setText(f"<b>{d['name']}</b>" if d["name"] else "")
@@ -2405,7 +2386,7 @@ class DeliveryConfirmationDialog(QDialog):
             self._load_default_image()
 
     def _show_placeholder(self) -> None:
-        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
         self.lbl_call.setText(f"<span style='{_k}'>Callsign:</span> {self._callsign}")
         self.lbl_grid.setText(f"<span style='{_k}'>Grid:</span>")
         self.lbl_county.setText(f"<span style='{_k}'>County:</span>")

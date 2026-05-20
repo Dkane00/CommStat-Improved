@@ -49,9 +49,7 @@ This is the exact pattern that segfaulted on Linux when the user typed a target
 callsign. It hasn't bit `alert.py` / `statrep.py` users yet but the failure
 mode is identical and platform-dependent.
 
-**Recommended fix:** Port the `_UpperCaseValidator(QtGui.QValidator)` approach
-already in `js8_direct_message.py:74-86` to both files (or, better, move the
-validator into `ui_helpers.py` and have all three files import it).
+Need to review the code in `js8_direct_message.py:74-86` as it was recently changed.
 
 ### 1.2 [HIGH] TCP client signals never disconnected when dialogs close
 **Files:** `alert.py:139-142` (and likely `js8sms.py`, `js8mail.py`,

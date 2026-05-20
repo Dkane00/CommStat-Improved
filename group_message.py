@@ -29,9 +29,10 @@ from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
     COLOR_BTN_CYAN, COLOR_BTN_BLUE,
+    RIG_FETCH_DELAY_MS,
 )
 from id_utils import generate_time_based_id
-from ui_helpers import make_button
+from ui_helpers import make_button, apply_standard_dialog_chrome
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -78,7 +79,7 @@ def _labeled_col(lbl_text: str, ctrl: QtWidgets.QWidget) -> QHBoxLayout:
     col = QVBoxLayout()
     col.setSpacing(2)
     lbl = QLabel(lbl_text)
-    lbl.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }")
+    lbl.setStyleSheet("QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }")
     col.addWidget(lbl)
     col.addWidget(ctrl)
     return col
@@ -109,34 +110,24 @@ class GroupMessageDialog(QDialog):
         self._pending_callsign: str  = ""
         self._message_is_expanded: bool = False
 
-        self.setWindowTitle("Group Message")
-        self.setWindowFlags(
-            Qt.Window |
-            Qt.CustomizeWindowHint |
-            Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint |
-            Qt.WindowStaysOnTopHint
-        )
-        self.setFixedSize(_WIN_W, _WIN_H_RF)
-        if os.path.exists("radiation-32.png"):
-            self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
+        apply_standard_dialog_chrome(self, "Group Message", _WIN_W, _WIN_H_RF)
 
         self.setStyleSheet(
             f"QDialog {{ background-color:{_PANEL_BG}; }}"
-            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}"
+            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT}; }}"
             f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" selection-background-color:#cce5ff; selection-color:#000000; }}"
             f"QComboBox QAbstractItemView::item {{ min-height:22px; padding:0 6px; }}"
             f"QPlainTextEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px;"
-            f" font-family:'Kode Mono'; font-size:13px; }}"
+            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
         )
 
         self._setup_ui()
@@ -160,7 +151,7 @@ class GroupMessageDialog(QDialog):
         title_lbl.setFixedHeight(36)
         title_lbl.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         body.addWidget(title_lbl)
@@ -192,7 +183,7 @@ class GroupMessageDialog(QDialog):
         self.freq_field.setStyleSheet(
             "QLineEdit { background-color:white; color:#333333;"
             " border:1px solid #cccccc; border-radius:4px; padding:2px 4px;"
-            " font-family:'Kode Mono'; font-size:13px; }"
+            " font-family:'Kode Mono', monospace; font-size:13px; }"
         )
         settings_row.addLayout(_labeled_col("Freq:", self.freq_field))
 
@@ -221,7 +212,7 @@ class GroupMessageDialog(QDialog):
         # Message label + inputs
         msg_lbl = QLabel("Message:")
         msg_lbl.setStyleSheet(
-            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+            "QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }"
         )
         body.addWidget(msg_lbl)
 
@@ -368,7 +359,7 @@ class GroupMessageDialog(QDialog):
             client.callsign_received.connect(self._on_callsign_received)
             client.frequency_received.connect(self._on_frequency_received)
             client.get_callsign()
-            QtCore.QTimer.singleShot(100, client.get_frequency)
+            QtCore.QTimer.singleShot(RIG_FETCH_DELAY_MS, client.get_frequency)
         else:
             self.freq_field.setText("")
 

@@ -7,7 +7,7 @@ import os
 from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtCore import Qt
 from constants import DEFAULT_COLORS, ICON_FILE
-from ui_helpers import make_button
+from ui_helpers import make_button, apply_standard_dialog_chrome
 
 
 _PROG_BG  = DEFAULT_COLORS.get("program_background", "#000000")
@@ -19,14 +19,7 @@ class HelpDialog(QtWidgets.QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Help")
-        self.setFixedSize(370, 170)
-        self.setWindowFlags(
-            Qt.Window | Qt.CustomizeWindowHint | Qt.WindowTitleHint |
-            Qt.WindowCloseButtonHint | Qt.WindowStaysOnTopHint
-        )
-        if os.path.exists(ICON_FILE):
-            self.setWindowIcon(QtGui.QIcon(ICON_FILE))
+        apply_standard_dialog_chrome(self, "Help", 370, 170)
         self._build_ui()
 
     def _build_ui(self):
@@ -38,14 +31,14 @@ class HelpDialog(QtWidgets.QDialog):
 
         title = QtWidgets.QLabel("JOIN THE TELEGRAM COMMUNITY")
         title.setStyleSheet(
-            f"font-family: 'Roboto Slab'; font-size: 16px; font-weight: 900;"
+            f"font-family: 'Roboto Slab', serif; font-size: 16px; font-weight: 900;"
             f"background-color: {_PROG_BG}; color: {_PROG_FG}; padding: 9px 0px;"
         )
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
         body_style = (
-            "font-family: Roboto; font-size: 13px; font-weight: normal;"
+            "font-family: Roboto, sans-serif; font-size: 13px; font-weight: normal;"
             "color: #333333; background: transparent;"
         )
 
