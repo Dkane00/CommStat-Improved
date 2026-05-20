@@ -52,6 +52,7 @@ _PROG_FG    = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
 _DATA_BG    = DEFAULT_COLORS.get("data_background",    "#F8F6F4")
 _COL_CANCEL = "#555555"
 _COL_PURPLE = "#6f42c1"
+_COL_NAV    = "#e07b39"
 
 # StatRep status field order: (display label, statrep row index)
 STATUS_FIELDS = [
@@ -1268,6 +1269,7 @@ class StatRepDetailDialog(QDialog):
     """Detail view for a StatRep row: QRZ info + 12 status indicators + map + comments."""
 
     pin_changed = pyqtSignal(bool)
+    record_deleted = pyqtSignal()
 
     def __init__(self, record_id: str, callsign: str,
                  internet_available: bool = True,
@@ -1285,6 +1287,7 @@ class StatRepDetailDialog(QDialog):
                  condition_gray: str = "",
                  tcp_pool=None,
                  connector_manager=None,
+                 record_list: list = None,
                  parent=None):
         super().__init__(parent)
         self.setWindowFlags(
@@ -1317,6 +1320,8 @@ class StatRepDetailDialog(QDialog):
         self._thread: Optional[_QRZThread] = None
         self._rc_thread: Optional[_ReadCountThread] = None
         self._map_loaded = False
+        self._last_nav: str = "older"
+        self._record_list: list = list(record_list) if record_list else []
         self._global_id = 0
         self._row_data: dict = {}
         self._sr_datetime: str = ""
@@ -1408,6 +1413,14 @@ class StatRepDetailDialog(QDialog):
         self.btn_delete = _btn("Delete", COLOR_BTN_RED)
         self.btn_delete.clicked.connect(self._on_delete)
         btn_row.addWidget(self.btn_delete)
+
+        btn_newer = _btn("Newer", _COL_NAV)
+        btn_newer.clicked.connect(self._on_newer)
+        btn_row.addWidget(btn_newer)
+
+        btn_older = _btn("Older", _COL_NAV)
+        btn_older.clicked.connect(self._on_older)
+        btn_row.addWidget(btn_older)
 
         self.btn_message_sr = _btn("Message", COLOR_BTN_BLUE)
         self.btn_message_sr.clicked.connect(self._on_message_clicked)
@@ -1612,6 +1625,76 @@ class StatRepDetailDialog(QDialog):
         )
         dlg.exec_()
 
+    def _on_newer(self) -> None:
+        self._last_nav = "newer"
+        self._navigate("newer")
+
+    def _on_older(self) -> None:
+        self._last_nav = "older"
+        self._navigate("older")
+
+    def _navigate(self, direction: str) -> None:
+        if self._record_list:
+            idx = next(
+                (i for i, (rid, _) in enumerate(self._record_list)
+                 if str(rid) == str(self._record_id)),
+                None
+            )
+            if idx is None:
+                return
+            if direction == "newer":
+                if idx <= 0:
+                    return
+                next_id, next_cs = self._record_list[idx - 1]
+            else:
+                if idx >= len(self._record_list) - 1:
+                    return
+                next_id, next_cs = self._record_list[idx + 1]
+            self._reload(next_id, next_cs)
+            return
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                cursor = conn.cursor()
+                if direction == "newer":
+                    cursor.execute(
+                        "SELECT id, from_callsign FROM statrep WHERE id > ? ORDER BY id ASC LIMIT 1",
+                        (self._record_id,)
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT id, from_callsign FROM statrep WHERE id < ? ORDER BY id DESC LIMIT 1",
+                        (self._record_id,)
+                    )
+                row = cursor.fetchone()
+        except sqlite3.Error as e:
+            print(f"[StatRepDetailDialog] Navigate error: {e}")
+            return
+        if not row:
+            return
+        self._reload(row[0], row[1] or "")
+
+    def _reload(self, record_id, callsign: str) -> None:
+        self._save_statrep_memo()
+        if self._thread and self._thread.isRunning():
+            self._thread.result_ready.disconnect()
+            self._thread = None
+        if self._rc_thread and self._rc_thread.isRunning():
+            self._rc_thread.count_ready.disconnect()
+            self._rc_thread = None
+        self._record_id = record_id
+        self.callsign = callsign
+        self._map_loaded = False
+        self._global_id = 0
+        self._row_data = {}
+        self._sr_datetime = ""
+        self._statrep_lat = None
+        self._statrep_lon = None
+        self._statrep_grid = ""
+        self.setWindowTitle(f"StatRep — {callsign}")
+        self.map_view.setHtml("", QUrl("http://localhost/"))
+        self._load_statrep()
+        self._start_qrz()
+
     def _on_delete(self) -> None:
         from ui_helpers import confirm
         if not confirm(
@@ -1629,13 +1712,55 @@ class StatRepDetailDialog(QDialog):
                 urllib.request.urlopen(url, timeout=10).close()
             except Exception:
                 pass
+        deleted_id = self._record_id
         try:
             with sqlite3.connect(DB_PATH, timeout=10) as conn:
-                conn.execute("DELETE FROM statrep WHERE id = ?", (self._record_id,))
+                conn.execute("DELETE FROM statrep WHERE id = ?", (deleted_id,))
                 conn.commit()
         except sqlite3.Error:
             pass
-        self.accept()
+        self.record_deleted.emit()
+        direction = self._last_nav
+        if self._record_list:
+            idx = next(
+                (i for i, (rid, _) in enumerate(self._record_list)
+                 if str(rid) == str(deleted_id)),
+                None
+            )
+            if idx is not None:
+                self._record_list.pop(idx)
+            if self._record_list:
+                if direction == "newer":
+                    next_idx = max(0, idx - 1) if idx is not None else 0
+                else:
+                    next_idx = min(idx, len(self._record_list) - 1) if idx is not None else len(self._record_list) - 1
+                next_id, next_cs = self._record_list[next_idx]
+                self._record_id = next_id
+                self._reload(next_id, next_cs)
+            else:
+                self.accept()
+            return
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                cursor = conn.cursor()
+                if direction == "newer":
+                    cursor.execute(
+                        "SELECT id, from_callsign FROM statrep WHERE id > ? ORDER BY id ASC LIMIT 1",
+                        (deleted_id,)
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT id, from_callsign FROM statrep WHERE id < ? ORDER BY id DESC LIMIT 1",
+                        (deleted_id,)
+                    )
+                row = cursor.fetchone()
+        except sqlite3.Error:
+            row = None
+        if row:
+            self._record_id = row[0]
+            self._reload(row[0], row[1] or "")
+        else:
+            self.accept()
 
     def _start_qrz(self) -> None:
         cached_fresh = get_qrz_cached(self.callsign)
@@ -1766,6 +1891,8 @@ def _text_to_html(text: str, bg: str) -> str:
 class MessageDetailDialog(QDialog):
     """Detail view for a Message row: QRZ info + map + message text."""
 
+    record_deleted = pyqtSignal()
+
     def __init__(self, callsign: str, message_text: str,
                  internet_available: bool = True,
                  module_background: str = "#f5f5f5",
@@ -1796,6 +1923,8 @@ class MessageDetailDialog(QDialog):
         self._thread: Optional[_QRZThread] = None
         self._map_loaded = False
         self._deleted_any = False
+        self._last_nav: str = "older"
+        self._msg_datetime: str = ""
         self.setWindowTitle(f"Message — {callsign}")
         self.setModal(True)
         self.setMinimumSize(996, 555)
@@ -1803,6 +1932,7 @@ class MessageDetailDialog(QDialog):
         if os.path.exists("radiation-32.png"):
             self.setWindowIcon(QtGui.QIcon("radiation-32.png"))
         self._setup_ui()
+        self._fetch_datetime()
         self._start_qrz()
 
     def _setup_ui(self) -> None:
@@ -1846,6 +1976,14 @@ class MessageDetailDialog(QDialog):
         self.btn_delete = _btn("Delete", COLOR_BTN_RED)
         self.btn_delete.clicked.connect(self._on_delete)
         btn_row.addWidget(self.btn_delete)
+
+        btn_newer = _btn("Newer", _COL_NAV)
+        btn_newer.clicked.connect(self._on_newer)
+        btn_row.addWidget(btn_newer)
+
+        btn_older = _btn("Older", _COL_NAV)
+        btn_older.clicked.connect(self._on_older)
+        btn_row.addWidget(btn_older)
 
         self.btn_reply = _btn("Reply", COLOR_BTN_BLUE)
         self.btn_reply.clicked.connect(self._on_reply_clicked)
@@ -1903,39 +2041,31 @@ class MessageDetailDialog(QDialog):
         else:
             self.reject()
 
-    def _on_delete(self) -> None:
-        next_row = None
+    def _fetch_datetime(self) -> None:
+        if not self._msg_id:
+            return
         try:
             with sqlite3.connect(DB_PATH, timeout=10) as conn:
                 cur = conn.cursor()
                 cur.execute("SELECT datetime FROM messages WHERE msg_id = ?", (self._msg_id,))
                 row = cur.fetchone()
-                current_dt = row[0] if row else None
-                cur.execute("DELETE FROM messages WHERE msg_id = ?", (self._msg_id,))
-                conn.commit()
-                self._deleted_any = True
-                if current_dt is not None:
-                    cur.execute(
-                        "SELECT msg_id, from_callsign, message FROM messages "
-                        "WHERE datetime < ? ORDER BY datetime DESC LIMIT 1",
-                        (current_dt,)
-                    )
-                    next_row = cur.fetchone()
+                self._msg_datetime = row[0] if row else ""
         except sqlite3.Error:
-            self.accept()
-            return
-        if not next_row:
-            self.accept()
-            return
-        self._msg_id, self.callsign, self.message_text = next_row[0], next_row[1] or "", next_row[2] or ""
-        self.setWindowTitle(f"Message — {self.callsign}")
-        self.msg_text.setHtml(_text_to_html(self.message_text.replace("||", "\n"), self._data_bg))
+            pass
+
+    def _reload(self, msg_id: str, callsign: str, message_text: str, msg_datetime: str) -> None:
+        self._msg_id = msg_id
+        self.callsign = callsign
+        self.message_text = message_text
+        self._msg_datetime = msg_datetime
+        self.setWindowTitle(f"Message — {callsign}")
+        self.msg_text.setHtml(_text_to_html(message_text.replace("||", "\n"), self._data_bg))
         self._map_loaded = False
         self.map_view.setHtml("", QUrl("http://localhost/"))
         self.contact_memo_edit.blockSignals(True)
         self.contact_memo_edit.clear()
         self.contact_memo_edit.blockSignals(False)
-        self.qrz_info.update_data({"call": self.callsign})
+        self.qrz_info.update_data({"call": callsign})
         if self._thread is not None:
             try:
                 self._thread.result_ready.disconnect()
@@ -1943,6 +2073,77 @@ class MessageDetailDialog(QDialog):
                 pass
             self._thread = None
         self._start_qrz()
+
+    def _on_newer(self) -> None:
+        self._last_nav = "newer"
+        self._navigate("newer")
+
+    def _on_older(self) -> None:
+        self._last_nav = "older"
+        self._navigate("older")
+
+    def _navigate(self, direction: str) -> None:
+        if not self._msg_datetime:
+            return
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                cur = conn.cursor()
+                if direction == "newer":
+                    cur.execute(
+                        "SELECT msg_id, from_callsign, message, datetime FROM messages "
+                        "WHERE datetime > ? ORDER BY datetime ASC LIMIT 1",
+                        (self._msg_datetime,)
+                    )
+                else:
+                    cur.execute(
+                        "SELECT msg_id, from_callsign, message, datetime FROM messages "
+                        "WHERE datetime < ? ORDER BY datetime DESC LIMIT 1",
+                        (self._msg_datetime,)
+                    )
+                row = cur.fetchone()
+        except sqlite3.Error as e:
+            print(f"[MessageDetailDialog] Navigate error: {e}")
+            return
+        if not row:
+            return
+        self._reload(row[0], row[1] or "", row[2] or "", row[3] or "")
+
+    def _on_delete(self) -> None:
+        deleted_dt = self._msg_datetime
+        try:
+            with sqlite3.connect(DB_PATH, timeout=10) as conn:
+                cur = conn.cursor()
+                if not deleted_dt:
+                    cur.execute("SELECT datetime FROM messages WHERE msg_id = ?", (self._msg_id,))
+                    row = cur.fetchone()
+                    deleted_dt = row[0] if row else ""
+                cur.execute("DELETE FROM messages WHERE msg_id = ?", (self._msg_id,))
+                conn.commit()
+                self._deleted_any = True
+                next_row = None
+                if deleted_dt:
+                    direction = self._last_nav
+                    if direction == "newer":
+                        cur.execute(
+                            "SELECT msg_id, from_callsign, message, datetime FROM messages "
+                            "WHERE datetime > ? ORDER BY datetime ASC LIMIT 1",
+                            (deleted_dt,)
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT msg_id, from_callsign, message, datetime FROM messages "
+                            "WHERE datetime < ? ORDER BY datetime DESC LIMIT 1",
+                            (deleted_dt,)
+                        )
+                    next_row = cur.fetchone()
+        except sqlite3.Error:
+            self.accept()
+            return
+        self.record_deleted.emit()
+        if not next_row:
+            self.accept()
+            return
+        self._reload(next_row[0], next_row[1] or "", next_row[2] or "", next_row[3] or "")
 
     def _start_qrz(self) -> None:
         cached_fresh = get_qrz_cached(self.callsign)

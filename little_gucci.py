@@ -760,6 +760,14 @@ class CustomWebEnginePage(QWebEnginePage):
                     def _open_dialog(sr_id=sr_id, callsign=callsign, mw=mw):
                         try:
                             from qrz_lookup import StatRepDetailDialog
+                            _FC = 3
+                            record_list = []
+                            for r in range(mw.statrep_table.rowCount()):
+                                ci = mw.statrep_table.item(r, _FC)
+                                if ci:
+                                    rid = ci.data(QtCore.Qt.UserRole)
+                                    if rid is not None:
+                                        record_list.append((rid, ci.text().strip()))
                             dlg = StatRepDetailDialog(
                                 sr_id, callsign, mw._internet_available,
                                 backbone_url=_BACKBONE,
@@ -776,10 +784,15 @@ class CustomWebEnginePage(QWebEnginePage):
                                 condition_gray=mw.config.get_color('condition_gray'),
                                 tcp_pool=mw.tcp_pool,
                                 connector_manager=mw.connector_manager,
+                                record_list=record_list,
                                 parent=mw
                             )
                             dlg.pin_changed.connect(
                                 lambda _: mw._save_map_position(callback=mw._load_map)
+                            )
+                            dlg.record_deleted.connect(mw._load_statrep_data)
+                            dlg.record_deleted.connect(
+                                lambda: mw._save_map_position(callback=mw._load_map)
                             )
                             dlg.exec_()
                         except Exception as e:
@@ -4248,6 +4261,13 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             if callsign_item:
                 callsign  = callsign_item.text().strip()
                 record_id = callsign_item.data(QtCore.Qt.UserRole)
+                record_list = []
+                for r in range(self.statrep_table.rowCount()):
+                    ci = self.statrep_table.item(r, _FROM_COL)
+                    if ci:
+                        rid = ci.data(QtCore.Qt.UserRole)
+                        if rid is not None:
+                            record_list.append((rid, ci.text().strip()))
                 from qrz_lookup import StatRepDetailDialog
                 dlg = StatRepDetailDialog(
                     record_id, callsign, self._internet_available,
@@ -4265,10 +4285,15 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                     condition_gray=self.config.get_color('condition_gray'),
                     tcp_pool=self.tcp_pool,
                     connector_manager=self.connector_manager,
+                    record_list=record_list,
                     parent=self
                 )
                 dlg.pin_changed.connect(
                     lambda _: self._save_map_position(callback=self._load_map)
+                )
+                dlg.record_deleted.connect(self._load_statrep_data)
+                dlg.record_deleted.connect(
+                    lambda: self._save_map_position(callback=self._load_map)
                 )
                 if dlg.exec_() == 1:
                     self._load_statrep_data()
@@ -4301,6 +4326,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                     msg_id=msg_id,
                     parent=self
                 )
+                dlg.record_deleted.connect(self._load_message_data)
                 if dlg.exec_() == 1:
                     self._load_message_data()
         else:
