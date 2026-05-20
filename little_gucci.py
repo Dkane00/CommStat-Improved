@@ -1769,7 +1769,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.map_loaded = False
         self._last_map_region = self.db.get_default_map()
         self._current_view_mode: str = ""
-        self._region_pin_counts: Dict[str, int] = {"us": 0, "eu": 0, "mideast": 0, "seasia": 0}
+        self._region_pin_counts: Dict[str, int] = {"us": 0, "eu": 0, "mideast": 0, "seasia": 0, "world": 0}
 
         self._setup_window()
         self._setup_ui()
@@ -1954,7 +1954,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _log_startup(self, line: str) -> None:
         """Log a startup status line to console (no timestamp) and live feed (timestamped)."""
         print(line)
-        utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
+        utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         self._add_to_feed(f"{utc_str}\t{line}", "")
 
     def _log_startup_status(self) -> None:
@@ -2198,6 +2198,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Live Radiation Map - top of Tools menu
         create_action(self.tools_menu, "Live Radiation Map", "live_radiation_map", self._on_live_radiation_map)
+        create_action(self.tools_menu, "ISS Pass Predictor", "iss_pass_predictor", self._on_iss_pass_predictor)
         self.tools_menu.addSeparator()
 
         # Tools menu items - solar/radio image dialogs
@@ -2235,6 +2236,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("EU", "eu"),
             ("Mid-East", "mideast"),
             ("SE Asia", "seasia"),
+            ("World", "world"),
             ("Images", "images"),
             ("Alerts", "alerts"),
             ("Contacts", "contacts"),
@@ -2618,7 +2620,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_map_view_mode("images")
         else:
             default = self.db.get_default_map()
-            if default not in ("us", "eu", "mideast", "seasia"):
+            if default not in ("us", "eu", "mideast", "seasia", "world"):
                 default = "us"
             self._set_map_view_mode(default)
 
@@ -2633,6 +2635,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "eu":      ((45.8150, 15.9819),        4),
             "mideast": ((31.7683, 35.2137),        4),
             "seasia":  ((22.4778, 101.1718),       4),
+            "world":   ((33.7948, -83.7132),       1),
         }
 
         self._current_view_mode = mode
@@ -2721,7 +2724,7 @@ class MainWindow(QtWidgets.QMainWindow):
         counts  = getattr(self, "_region_pin_counts", {}) or {}
         current = getattr(self, "_current_view_mode", "")
 
-        for region in ("us", "eu", "mideast", "seasia"):
+        for region in ("us", "eu", "mideast", "seasia", "world"):
             btn = getattr(self, f"_btn_{region}", None)
             if not btn:
                 continue
@@ -2770,9 +2773,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if group:
                 # Show group + ALERT at top, then title in bold below (strip @ symbol)
                 group_display = group.lstrip('@')
-                formatted_title = f'<div style="font-family: \'Kode Mono\'; font-size: 22px; font-weight: bold; margin-top: -10px;">@{group_display} - ALERT</div>'
+                formatted_title = f'<div style="font-family: \'Kode Mono\'; font-size: 22px; font-weight: bold; margin-top: -18px;">@{group_display} - ALERT</div>'
                 if title:
-                    formatted_title += f'<div style="font-family: \'Roboto Slab\'; font-size: 30px; font-weight: 900; margin-top: 44px;">{title}</div>'
+                    formatted_title += f'<div style="font-family: \'Roboto Slab\'; font-size: 30px; font-weight: 900; margin-top: 24px;">{title}</div>'
             else:
                 # No group, just show title in bold
                 formatted_title = f'<div style="font-family: \'Roboto Slab\'; font-size: 26px; font-weight: 900;">{title if title else ""}</div>'
@@ -4009,7 +4012,9 @@ class MainWindow(QtWidgets.QMainWindow):
             "mideast": ( 12.0,  42.0,   25.0,   65.0),
             "seasia":  (-10.0,  30.0,   90.0,  140.0),
         }
-        region_counts = {"us": 0, "eu": 0, "mideast": 0, "seasia": 0}
+        # "world" lights up when any pin falls OUTSIDE the continental US bbox.
+        US_BBOX = REGION_BBOX["us"]
+        region_counts = {"us": 0, "eu": 0, "mideast": 0, "seasia": 0, "world": 0}
 
         # Get StatRep data for pins
         try:
@@ -4073,6 +4078,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     for _region, (_lat_min, _lat_max, _lng_min, _lng_max) in REGION_BBOX.items():
                         if _lat_min <= lat <= _lat_max and _lng_min <= lon <= _lng_max:
                             region_counts[_region] += 1
+                    # "world" counts pins OUTSIDE the continental US bbox
+                    if not (US_BBOX[0] <= lat <= US_BBOX[1] and US_BBOX[2] <= lon <= US_BBOX[3]):
+                        region_counts["world"] += 1
 
                     # Determine pin color and size
                     if status == "1":
@@ -4370,6 +4378,10 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
     def _on_live_radiation_map(self) -> None:
         """Open the Live Radiation Map (gmcmap.com) in the user's browser."""
         QDesktopServices.openUrl(QUrl("https://gmcmap.com/"))
+
+    def _on_iss_pass_predictor(self) -> None:
+        """Open NASA's Spot The Station ISS pass predictor in the user's browser."""
+        QDesktopServices.openUrl(QUrl("https://spotthestation.nasa.gov/"))
 
     def _on_qrz_lookup(self) -> None:
         """Open standalone QRZ Lookup dialog (Tools menu)."""
@@ -5163,7 +5175,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         if not is_connected:
             # For disconnects, add the message here
             from datetime import datetime, timezone
-            utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
+            utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             status_line = f"{utc_str}\t[{rig_name}] Disconnected"
             self.feed_messages.insert(0, status_line)
             self._update_feed_display()
@@ -5232,7 +5244,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
     def _handle_status_message(self, rig_name: str, message: str) -> None:
         """Handle status message from TCP client (for live feed display)."""
-        utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d   %H:%M:%S")
+        utc_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         self._add_to_feed(f"{utc_str}\t{message}", rig_name)
 
     def _capture_contacts(
@@ -5320,7 +5332,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             # Convert UTC milliseconds to datetime strings
             utc_dt = datetime.fromtimestamp(utc_ms / 1000, tz=timezone.utc)
             utc_db = utc_dt.strftime("%Y-%m-%d %H:%M:%S")  # Single space for database
-            utc_display = utc_dt.strftime("%Y-%m-%d   %H:%M:%S")  # 3 spaces for feed display
+            utc_display = utc_dt.strftime("%Y-%m-%d %H:%M:%S")
 
             # Format feed line to match DIRECTED.TXT format:
             # DATETIME    FREQ_MHZ    OFFSET    SNR    CALLSIGN: MESSAGE
@@ -5331,7 +5343,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             # Add to feed buffer (newest first)
             self._add_to_feed(feed_line, rig_name)
 
-            print(f"[{rig_name}] RX.DIRECTED: {from_call} -> {to_call}: {value}")
+            print(f"[{rig_name}] {feed_line}")
 
             # Process the message for database insertion
             # Use dial frequency (freq - offset) for database storage
@@ -5401,7 +5413,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
             if value and from_call:
                 utc_dt = datetime.fromtimestamp(utc_ms / 1000, tz=timezone.utc)
-                utc_str = utc_dt.strftime("%Y-%m-%d   %H:%M:%S")
+                utc_str = utc_dt.strftime("%Y-%m-%d %H:%M:%S")
                 dial_freq_mhz = hz_to_mhz(freq, offset)
                 feed_line = f"{utc_str}\t{dial_freq_mhz:.3f}\t{offset}\t{snr:+03d}\t{from_call}: {value}"
                 self._add_to_feed(feed_line, rig_name)

@@ -618,7 +618,8 @@ class GroupMessageDialog(QDialog):
             QMessageBox.critical(
                 self, "ERROR",
                 f"JS8Call has {selected_call} selected.\n\n"
-                "Go to JS8Call and click the \"Deselect\" button."
+                "Go to JS8Call and click the \"Deselect\" button.\n\n"
+                "The Deselect button is above the waterfall."
             )
             return
 

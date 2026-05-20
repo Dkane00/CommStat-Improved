@@ -28,6 +28,7 @@ from constants import (
     COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
     COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
     COLOR_BTN_BLUE, COLOR_BTN_RED, COLOR_BTN_CYAN,
+    CONTACTS_RETENTION_HOURS,
 )
 from id_utils import generate_time_based_id
 from qrz_client import get_qrz_cached
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
 DATABASE_FILE = "traffic.db3"
 
 MIN_MESSAGE_LENGTH = 1
-MAX_MESSAGE_LENGTH = 250
+MAX_MESSAGE_LENGTH = 500
 
 WINDOW_WIDTH  = 600
 WINDOW_HEIGHT = 460
@@ -54,6 +55,11 @@ QRZ_MISS_TEXT = "Callsign not found in local cache"
 
 NO_RELAY_LABEL = "NO-RELAY"
 UNKNOWN_SNR_SENTINEL = -99
+
+# Newlines in the message body are encoded as || for transmission, matching
+# the StatRep / Message convention. The receiving side (little_gucci.py
+# table display and qrz_lookup MessageDetailDialog) decodes || back to \n.
+NEWLINE_PLACEHOLDER = "||"
 
 # Loose JS8 callsign shape — accepts base calls and slash suffixes
 # (KO4BIA, K2DHS, W3BFO/P, KO4BIA/QRP). Validates typed entries in the
@@ -69,38 +75,62 @@ _COL_HELP   = "#e83e8c"  # matches StatRep help button
 _COL_CANCEL = "#555555"
 
 
-class _UpperCaseValidator(QtGui.QValidator):
-    """Force any QLineEdit input (including paste) to uppercase."""
+class _UpperCaseLineEdit(QtWidgets.QLineEdit):
+    """QLineEdit that auto-uppercases typed characters and pasted text.
 
-    def validate(self, text, pos):
-        return QtGui.QValidator.Acceptable, text.upper(), pos
+    Installed as the line edit inside the editable Target / Relay combos via
+    QComboBox.setLineEdit(). Uppercasing happens in keyPressEvent (typing)
+    and insertFromMimeData (paste / drag-drop), which are the widget-level
+    hooks that run before any text-modified signals are emitted.
+
+    Why not a QValidator: on an editable QComboBox with NoInsert, a
+    validator that rewrites text inside validate() silently blocks typed
+    input until the line edit's text matches an existing item.
+
+    Why not a textChanged / textEdited slot: calling setText() inside a
+    signal slot re-enters Qt's signal-dispatch loop and corrupts the C++
+    iterator on Linux/Qt5 (target textChanged → setText → relay model.clear
+    cascade → relay line-edit textChanged → crash). blockSignals() and
+    QTimer.singleShot() do not avoid this.
+
+    An event filter on the line edit was tried as well, but on Windows the
+    QLineEdit inside an editable QComboBox does not reliably fire installed
+    eventFilters for KeyPress, so typed characters bypass it.
+    """
+
+    def keyPressEvent(self, event):
+        text = event.text()
+        if text and text != text.upper():
+            self.insert(text.upper())
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def insertFromMimeData(self, source):
+        if source is not None and source.hasText():
+            mime = QtCore.QMimeData()
+            mime.setText(source.text().upper())
+            super().insertFromMimeData(mime)
+        else:
+            super().insertFromMimeData(source)
 
 
 class _UpperCaseEventFilter(QtCore.QObject):
     """Intercept key presses on a QPlainTextEdit and force them to uppercase.
 
-    Using an event filter instead of a textChanged/textEdited slot is the only
-    safe approach on Linux/Qt5.  Any slot that calls setText() while Qt is
-    already inside a signal-dispatch loop can corrupt the C++ iterator and
-    segfault — even with blockSignals() and even with QTimer.singleShot(),
-    because the singleShot scheduling call itself can occur while Qt is in a
-    bad internal state (e.g. relay model.clear() fires relay line-edit
-    textChanged, which fires the target line-edit lambda from within the
-    target textChanged chain).
+    Used by the Message body. Line edits (Target / Relay combos) use
+    _UpperCaseLineEdit instead — see that class for the reasoning.
 
     An event filter runs before the widget processes the key and before any
-    signals are emitted, so insert() here is always called outside a signal
-    handler — no re-entry, no crash.
+    signals are emitted, so insertPlainText() here is always called outside
+    a signal handler — no re-entry, no crash.
     """
 
     def eventFilter(self, obj, event):
-        if event.type() == QtCore.QEvent.KeyPress:
+        if event.type() == QtCore.QEvent.KeyPress and isinstance(obj, QPlainTextEdit):
             text = event.text()
             if text and text != text.upper():
-                if isinstance(obj, QPlainTextEdit):
-                    obj.insertPlainText(text.upper())
-                else:
-                    obj.insert(text.upper())
+                obj.insertPlainText(text.upper())
                 return True                # consume original lowercase event
         return False
 
@@ -126,12 +156,14 @@ class JS8DirectMessageDialog(QDialog):
         self._pending_payload = ""
 
         self.setWindowTitle("JS8 Direct Message")
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.setMinimumSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setWindowFlags(
             Qt.Window |
             Qt.CustomizeWindowHint |
             Qt.WindowTitleHint |
             Qt.WindowCloseButtonHint |
+            Qt.WindowMaximizeButtonHint |
             Qt.WindowStaysOnTopHint
         )
 
@@ -224,10 +256,10 @@ class JS8DirectMessageDialog(QDialog):
         self.target_combo.setCompleter(None)
         self.target_combo.setMaxVisibleItems(30)
         self.target_combo.setItemDelegate(QtWidgets.QStyledItemDelegate(self.target_combo))
+        self._wire_uppercase(self.target_combo)  # replaces the line edit; connect line-edit signals AFTER this
         self.target_combo.currentTextChanged.connect(self._on_target_changed)
         self.target_combo.activated.connect(lambda _: self._on_target_committed())
         self.target_combo.lineEdit().editingFinished.connect(self._on_target_committed)
-        self._wire_uppercase(self.target_combo)
         sta_row.addLayout(self._labeled_col("Target:", self.target_combo))
 
         self.relay_combo = QComboBox()
@@ -266,12 +298,11 @@ class JS8DirectMessageDialog(QDialog):
         layout.addWidget(msg_label)
 
         self.body = QPlainTextEdit()
-        self.body.setFixedHeight(96)
+        self.body.setMinimumHeight(144)
+        self.body.setPlaceholderText(f"{MAX_MESSAGE_LENGTH} characters max")
         self.body.installEventFilter(_UpperCaseEventFilter(self.body))
         self.body.textChanged.connect(self._on_body_changed)
-        layout.addWidget(self.body)
-
-        layout.addStretch()
+        layout.addWidget(self.body, 1)  # stretch factor — absorbs extra vertical space
 
         # Buttons: Help (left) · Clear · Transmit · Cancel (right)
         btn_row = QHBoxLayout()
@@ -308,12 +339,13 @@ class JS8DirectMessageDialog(QDialog):
 
     @staticmethod
     def _wire_uppercase(combo: QComboBox) -> None:
-        """Force the combo line edit to uppercase via validator (covers paste too)."""
-        line = combo.lineEdit()
-        if line is None:
-            return
-        line.setValidator(_UpperCaseValidator(line))
-        line.installEventFilter(_UpperCaseEventFilter(line))
+        """Replace the combo's default line edit with _UpperCaseLineEdit so
+        typed and pasted text are forced to uppercase.
+
+        Must be called AFTER setEditable(True) and BEFORE wiring any signals
+        on combo.lineEdit() — setLineEdit() destroys the previous editor, so
+        connections made before this call are lost."""
+        combo.setLineEdit(_UpperCaseLineEdit(combo))
 
     def _effective_target_cs(self) -> str:
         """Target callsign currently in the dropdown — typed or selected."""
@@ -578,23 +610,27 @@ class JS8DirectMessageDialog(QDialog):
     # -------------------------------------------------------------------------
 
     def _on_body_changed(self) -> None:
-        """Force body text to uppercase (handles paste) then refresh transmit state."""
+        """Force body text to uppercase, cap length at MAX_MESSAGE_LENGTH
+        (handles paste in both cases), then refresh transmit state."""
         text = self.body.toPlainText()
-        upper = text.upper()
-        if text != upper:
+        normalized = text.upper()
+        if len(normalized) > MAX_MESSAGE_LENGTH:
+            normalized = normalized[:MAX_MESSAGE_LENGTH]
+        if text != normalized:
             cursor = self.body.textCursor()
             pos = cursor.position()
             self.body.blockSignals(True)
-            self.body.setPlainText(upper)
+            self.body.setPlainText(normalized)
             self.body.blockSignals(False)
             cursor = self.body.textCursor()
-            cursor.setPosition(min(pos, len(upper)))
+            cursor.setPosition(min(pos, len(normalized)))
             self.body.setTextCursor(cursor)
         self._update_transmit_state()
 
     def _update_transmit_state(self) -> None:
         target_ok = bool(_CALLSIGN_PATTERN.match(self._effective_target_cs()))
-        relay_ok = bool(_CALLSIGN_PATTERN.match(self._effective_relay_cs()))
+        relay_cs = self._effective_relay_cs()
+        relay_ok = (not relay_cs) or bool(_CALLSIGN_PATTERN.match(relay_cs))
         body_ok = bool(self.body.toPlainText().strip())
         rig_ok = self._rig_client_connected()
         self.btn_transmit.setEnabled(target_ok and relay_ok and body_ok and rig_ok)
@@ -683,24 +719,26 @@ class JS8DirectMessageDialog(QDialog):
             "roster of callsigns that have been recently heard on the air. "
             "This dialog lets you pick a destination from that roster and send "
             "a point-to-point JS8 directed message &mdash; no typing of "
-            "callsigns required."
+            "callsigns required.<br>"
+            f"Callsigns are removed from the roster if they have not been "
+            f"heard in the past <b>{CONTACTS_RETENTION_HOURS} hours</b>."
         ))
 
         left.addWidget(_section_header("Target & Relay"))
         left.addWidget(_body_label(
             "<b>Target</b> &mdash; the callsign you want to reach.<br>"
-            "<b>Relay</b> &mdash; a station that has recently been heard "
-            "hearing your Target. Pick a Relay when you can't reach the "
-            "Target directly &mdash; CommStat builds the standard JS8 relay "
-            "payload (<i>RELAY&gt; TARGET MSG ...</i>) for you.<br>"
+            "<b>Relay</b> &mdash; <i>optional.</i> A station that has "
+            "recently been heard hearing your Target. Pick a Relay when "
+            "you can't reach the Target directly &mdash; CommStat builds "
+            "the standard JS8 relay payload (<i>RELAY&gt; TARGET MSG "
+            "...</i>) for you. Leave Relay blank to send a non-relayed "
+            "transmission straight to the Target.<br>"
             f"<b>{NO_RELAY_LABEL}</b> &mdash; appears in the "
             "Relay list (in bold) whenever the Target itself has been heard "
-            "directly. Selecting it sends a non-relayed transmission "
-            "straight to the Target.<br>"
+            "directly. Selecting it has the same effect as leaving Relay "
+            "blank &mdash; a direct transmission to the Target.<br>"
             "Both dropdowns are <b>editable</b> &mdash; type a callsign "
-            "manually when the station you want isn't in the roster yet. "
-            "To send a non-relayed transmission to a typed Target, type "
-            "the same callsign in the Relay box."
+            "manually when the station you want isn't in the roster yet."
         ))
 
         left.addWidget(_section_header("Refresh"))
@@ -803,38 +841,89 @@ class JS8DirectMessageDialog(QDialog):
         if not _CALLSIGN_PATTERN.match(target):
             self._show_error("Enter or pick a valid Target callsign.")
             return
-        if not _CALLSIGN_PATTERN.match(relay_cs):
-            self._show_error("Enter or pick a valid Relay callsign (or use NO-RELAY).")
+        if relay_cs and not _CALLSIGN_PATTERN.match(relay_cs):
+            self._show_error("Enter or pick a valid Relay callsign, or leave Relay blank for a direct transmission.")
             return
 
         raw = self.body.toPlainText().strip()
-        text = re.sub(r"[^ -~]+", " ", raw).strip()
+        encoded = (raw.replace('\r\n', NEWLINE_PLACEHOLDER)
+                      .replace('\n',   NEWLINE_PLACEHOLDER)
+                      .replace('\r',   NEWLINE_PLACEHOLDER))
+        text = re.sub(r"[^ -~]+", " ", encoded).strip()
         if len(text) < MIN_MESSAGE_LENGTH:
             self._show_error("Message is empty.")
             return
         if len(text) > MAX_MESSAGE_LENGTH:
             text = text[:MAX_MESSAGE_LENGTH]
+            # Avoid leaving a half-encoded newline (single "|") at the end
+            if text.endswith("|") and not text.endswith(NEWLINE_PLACEHOLDER):
+                text = text[:-1]
 
         msg_id = generate_time_based_id()
-        if relay_cs == target:
+        direct = (not relay_cs) or (relay_cs == target)
+        if direct:
             payload = f"{target} MSG ,{msg_id},{text},{{^%}}"
         else:
             payload = f"{relay_cs}> {target} MSG ,{msg_id},{text},{{^%}}"
 
+        # Stash transmit context so the JS8Call selection check can complete
+        # the send when the response arrives.
         rig_name = self.rig_combo.currentText()
+        self._pending_payload = payload
+        self._pending_msg_id  = msg_id
+        self._pending_target  = target
+        self._pending_relay   = "(direct)" if direct else relay_cs
+        self._pending_rig     = rig_name
+
+        # Mirror the StatRep / Group Message / Alert pattern: ask JS8Call
+        # whether a call is currently selected. If yes, abort with the
+        # standard "Deselect" instruction; if no, transmit in the callback.
         client = self.tcp_pool.get_client(rig_name)
         try:
-            client.send_tx_message(payload)
+            client.call_selected_received.disconnect(self._on_call_selected_for_transmit)
+        except TypeError:
+            pass
+        client.call_selected_received.connect(self._on_call_selected_for_transmit)
+        client.get_call_selected()
+
+    def _on_call_selected_for_transmit(self, rig_name: str, selected_call: str) -> None:
+        """JS8Call response to RX.GET_CALL_SELECTED — proceed only if nothing
+        is selected over there. Matches the pattern used by statrep.py,
+        group_message.py, and alert.py."""
+        if self.rig_combo.currentText() != rig_name:
+            return
+
+        client = self.tcp_pool.get_client(rig_name)
+        if client:
+            try:
+                client.call_selected_received.disconnect(self._on_call_selected_for_transmit)
+            except TypeError:
+                pass
+
+        if selected_call:
+            QMessageBox.critical(
+                self, "ERROR",
+                f"JS8Call has {selected_call} selected.\n\n"
+                "Go to JS8Call and click the \"Deselect\" button.\n\n"
+                "The Deselect button is above the waterfall."
+            )
+            return
+
+        if not client:
+            return
+
+        try:
+            client.send_tx_message(self._pending_payload)
 
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
             print(f"\n{'='*60}")
             print(f"RF DIRECT MESSAGE TRANSMITTED - {now} UTC")
             print(f"{'='*60}")
-            print(f"  Rig:      {rig_name}")
-            print(f"  Target:   {target}")
-            print(f"  Relay:    {'(direct)' if relay_cs == target else relay_cs}")
-            print(f"  Msg ID:   {msg_id}")
-            print(f"  Full TX:  {payload}")
+            print(f"  Rig:      {self._pending_rig}")
+            print(f"  Target:   {self._pending_target}")
+            print(f"  Relay:    {self._pending_relay}")
+            print(f"  Msg ID:   {self._pending_msg_id}")
+            print(f"  Full TX:  {self._pending_payload}")
             print(f"{'='*60}\n")
 
             self.accept()
