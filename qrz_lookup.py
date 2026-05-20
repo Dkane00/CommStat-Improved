@@ -1414,11 +1414,11 @@ class StatRepDetailDialog(QDialog):
         self.btn_delete.clicked.connect(self._on_delete)
         btn_row.addWidget(self.btn_delete)
 
-        btn_newer = _btn("Newer", _COL_NAV)
+        btn_newer = _btn("Next", _COL_NAV)
         btn_newer.clicked.connect(self._on_newer)
         btn_row.addWidget(btn_newer)
 
-        btn_older = _btn("Older", _COL_NAV)
+        btn_older = _btn("Previous", _COL_NAV)
         btn_older.clicked.connect(self._on_older)
         btn_row.addWidget(btn_older)
 
@@ -1977,11 +1977,11 @@ class MessageDetailDialog(QDialog):
         self.btn_delete.clicked.connect(self._on_delete)
         btn_row.addWidget(self.btn_delete)
 
-        btn_newer = _btn("Newer", _COL_NAV)
+        btn_newer = _btn("Next", _COL_NAV)
         btn_newer.clicked.connect(self._on_newer)
         btn_row.addWidget(btn_newer)
 
-        btn_older = _btn("Older", _COL_NAV)
+        btn_older = _btn("Previous", _COL_NAV)
         btn_older.clicked.connect(self._on_older)
         btn_row.addWidget(btn_older)
 
