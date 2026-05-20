@@ -412,10 +412,6 @@ class _QRZInfoSection(QWidget):
         self.lbl_grid    = QLabel(); self.lbl_grid.setFont(_mono_font())
         self.lbl_lat     = QLabel(); self.lbl_lat.setFont(_mono_font())
         self.lbl_lon     = QLabel(); self.lbl_lon.setFont(_mono_font())
-        self.lbl_email   = QLabel(); self.lbl_email.setFont(_mono_font())
-        self.lbl_email.setOpenExternalLinks(True)
-        self.lbl_qrz_profile = QLabel(); self.lbl_qrz_profile.setFont(_mono_font())
-        self.lbl_qrz_profile.setOpenExternalLinks(True)
 
         self.lbl_qrz_status = QLabel()
         self.lbl_qrz_status.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }")
@@ -437,9 +433,7 @@ class _QRZInfoSection(QWidget):
         grid.addWidget(self.lbl_lat,          6, 1)
         grid.addWidget(self.lbl_country,      7, 0)
         grid.addWidget(self.lbl_lon,          7, 1)
-        grid.addWidget(self.lbl_qrz_profile,  8, 0)
-        grid.addWidget(self.lbl_email,        8, 1)
-        grid.setRowStretch(9, 1)
+        grid.setRowStretch(8, 1)
         outer.addLayout(grid, 2)
 
         # ── Column 3 (1/3): image + photo status + moddate ───────────────
@@ -499,7 +493,7 @@ class _QRZInfoSection(QWidget):
 
     def add_statrep_rows(self) -> None:
         """Add separator + StatRep fields below the QRZ section, spanning all three columns."""
-        self._grid.setRowStretch(9, 0)
+        self._grid.setRowStretch(8, 0)
 
         sr_grid = QGridLayout()
         sr_grid.setSpacing(2)
@@ -604,25 +598,15 @@ class _QRZInfoSection(QWidget):
         self.lbl_lat.setText(f'<span style="{_k}">Lat:</span> {d["lat"]}' if d["lat"] else "")
         self.lbl_lon.setText(f'<span style="{_k}">Lon:</span> {d["lon"]}' if d["lon"] else "")
 
-        if d["email"]:
-            self.lbl_email.setText(f'<a href="mailto:{d["email"]}">{d["email"]}</a>')
-        else:
-            self.lbl_email.setText("")
-
-        if d["call"]:
-            url = f"https://www.qrz.com/db/{d['call']}"
-            self.lbl_qrz_profile.setText(f'<a href="{url}">{url}</a>')
-        else:
-            self.lbl_qrz_profile.setText("")
+        profile_url = f"https://www.qrz.com/db/{d['call']}" if d["call"] else ""
 
         self.lbl_moddate.setText(
             f"QRZ profile last modified: {d['moddate'].split()[0]}" if d["moddate"] else ""
         )
 
         self.lbl_image.clear()
-        self.lbl_image.set_url("")
+        self.lbl_image.set_url(profile_url)
         if d["image"]:
-            self.lbl_image.set_url(d["image"])
             self._img_loader = _ImageLoader(d["image"])
             self._img_loader.image_loaded.connect(self._on_image_loaded)
             self._img_loader.gif_loaded.connect(self._on_gif_loaded)
@@ -675,7 +659,6 @@ class _QRZInfoSection(QWidget):
         self.lbl_name.clear()
         self.lbl_addr1.clear()
         self.lbl_addr2.clear()
-        self.lbl_qrz_profile.clear()
         self.lbl_moddate.clear()
         _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.lbl_county.setText(f"<span style='{_k}'>County:</span>")
@@ -688,7 +671,6 @@ class _QRZInfoSection(QWidget):
         self.lbl_grid.setText(f"<span style='{_k}'>Grid:</span>")
         self.lbl_lat.setText(f"<span style='{_k}'>Lat:</span>")
         self.lbl_lon.setText(f"<span style='{_k}'>Lon:</span>")
-        self.lbl_email.setText("")
         self.lbl_image.set_url("")
         self._load_default_image()
 
@@ -700,8 +682,8 @@ class _QRZInfoSection(QWidget):
         self.clear_qrz_status()
         for w in (self.lbl_call, self.lbl_name, self.lbl_addr1, self.lbl_addr2,
                   self.lbl_county, self.lbl_country, self.lbl_last_seen, self.lbl_license,
-                  self.lbl_grid, self.lbl_lat, self.lbl_lon, self.lbl_email,
-                  self.lbl_qrz_profile, self.lbl_image, self.lbl_moddate):
+                  self.lbl_grid, self.lbl_lat, self.lbl_lon,
+                  self.lbl_image, self.lbl_moddate):
             w.clear()
 
 
