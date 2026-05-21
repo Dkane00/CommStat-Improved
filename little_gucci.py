@@ -1731,11 +1731,19 @@ class DatabaseManager:
 # =============================================================================
 # MainWindow - Main application window
 class _MenuBarMenu(QtWidgets.QMenu):
-    """QMenu that shifts its popup position 50 px down so it clears the menu bar."""
-    _Y_OFFSET = 50
+    """QMenu anchored to the bottom edge of its parent QMenuBar.
+
+    On macOS/Windows Qt already places the popup just below the menu bar,
+    so this is a no-op. On some Linux setups Qt places the popup overlapping
+    the menu bar — only then do we shift it down to the menu bar's bottom.
+    """
 
     def showEvent(self, event):
-        self.move(self.x(), self.y() + self._Y_OFFSET)
+        parent = self.parent()
+        if isinstance(parent, QtWidgets.QMenuBar):
+            target_y = parent.mapToGlobal(QtCore.QPoint(0, parent.height())).y()
+            if self.y() < target_y:
+                self.move(self.x(), target_y)
         super().showEvent(event)
 
 
