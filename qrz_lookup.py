@@ -17,9 +17,11 @@ import os
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import urllib.parse
 import urllib.request
+import webbrowser
 from typing import Dict, Optional
 
 import folium
@@ -38,7 +40,7 @@ from id_utils import generate_time_based_id
 from qrz_client import QRZClient, get_qrz_cached, load_qrz_config
 from constants import (
     DEFAULT_COLORS, COLOR_INPUT_TEXT, COLOR_INPUT_BORDER,
-    COLOR_BTN_RED, COLOR_BTN_BLUE, COLOR_BTN_CYAN,
+    COLOR_BTN_RED, COLOR_BTN_BLUE, COLOR_BTN_CYAN, COLOR_BTN_GREEN,
     RIG_FREQ_DELAY_MS,
 )
 # Single source of truth for mouse-wheel zoom dampening — see little_gucci.py
@@ -1315,6 +1317,8 @@ class StatRepDetailDialog(QDialog):
         self._statrep_lat: Optional[float] = None
         self._statrep_lon: Optional[float] = None
         self._statrep_grid: str = ""
+        self._print_view: Optional[QWebEngineView] = None
+        self._print_busy: bool = False
         self.setWindowTitle(f"StatRep — {callsign}")
         self.setModal(True)
         self.setMinimumSize(996, 696)
@@ -1420,6 +1424,10 @@ class StatRepDetailDialog(QDialog):
         btn_forward = _btn("Forward", COLOR_BTN_CYAN)
         btn_forward.clicked.connect(self._on_forward)
         btn_row.addWidget(btn_forward)
+
+        btn_print = _btn("Print", COLOR_BTN_GREEN)
+        btn_print.clicked.connect(self._on_print)
+        btn_row.addWidget(btn_print)
 
         btn_close = _btn("Close", _COL_CANCEL)
         btn_close.clicked.connect(self.reject)
@@ -1600,6 +1608,285 @@ class StatRepDetailDialog(QDialog):
         )
         dlg.prefill(self._row_data)
         dlg.exec_()
+
+    def _font_data_uri(self, ttf_path: str) -> str:
+        """Read a .ttf file and return a base64 data URI for @font-face embedding."""
+        try:
+            with open(ttf_path, "rb") as f:
+                return "data:font/ttf;base64," + base64.b64encode(f.read()).decode("ascii")
+        except Exception:
+            return ""
+
+    def _pixmap_to_data_uri(self, pixmap: QPixmap) -> str:
+        """Encode a QPixmap as a base64 data URI for embedding in HTML."""
+        if pixmap is None or pixmap.isNull():
+            return ""
+        ba = QByteArray()
+        buf = QBuffer(ba)
+        buf.open(QBuffer.WriteOnly)
+        pixmap.save(buf, "PNG")
+        buf.close()
+        return "data:image/png;base64," + bytes(ba.toBase64()).decode("ascii")
+
+    def _build_print_html(self) -> str:
+        """Build a self-contained HTML document mirroring the on-screen detail view."""
+        status_key_map = ["map", "power", "water", "med", "telecom", "travel",
+                          "internet", "fuel", "food", "crime", "civil", "political"]
+        status_cells_hdr = []
+        status_cells_val = []
+        for (label_text, _), key in zip(STATUS_FIELDS, status_key_map):
+            val = str(self._row_data.get(key) or "")
+            color, _tip = self._status_colors.get(val, ("rgb(255,255,255)", "No status"))
+            status_cells_hdr.append(
+                f'<td style="background-color:{self._title_bg};color:{self._title_fg};'
+                f'font-weight:bold;text-align:center;padding:4px 2px;'
+                f'border:1px solid #D2D0CF;">{label_text}</td>'
+            )
+            status_cells_val.append(
+                f'<td style="background-color:{color};height:18px;'
+                f'border:1px solid #D2D0CF;">&nbsp;</td>'
+            )
+        status_table = (
+            '<table style="width:100%;border-collapse:collapse;'
+            'font-family:Roboto,sans-serif;font-size:12px;">'
+            f'<tr>{"".join(status_cells_hdr)}</tr>'
+            f'<tr>{"".join(status_cells_val)}</tr>'
+            '</table>'
+        )
+
+        qrz_lines = [
+            self.qrz_info.lbl_call.text(),
+            self.qrz_info.lbl_name.text(),
+            self.qrz_info.lbl_addr1.text(),
+            self.qrz_info.lbl_addr2.text(),
+            self.qrz_info.lbl_county.text(),
+            self.qrz_info.lbl_country.text(),
+            self.qrz_info.lbl_license.text(),
+            self.qrz_info.lbl_grid.text(),
+            self.qrz_info.lbl_lat.text(),
+            self.qrz_info.lbl_lon.text(),
+        ]
+        qrz_block = "<br>".join(t for t in qrz_lines if t)
+
+        moddate = self.qrz_info.lbl_moddate.text()
+        moddate_html = f'<div style="font-size:11px;color:#555;">{moddate}</div>' if moddate else ""
+
+        photo_html = ""
+        try:
+            pm = self.qrz_info.lbl_image.pixmap()
+            uri = self._pixmap_to_data_uri(pm) if pm is not None else ""
+            if uri:
+                photo_html = (
+                    f'<img src="{uri}" style="max-height:160px;max-width:200px;'
+                    f'border:1px solid #ccc;">'
+                )
+        except Exception:
+            photo_html = ""
+
+        sr_meta_pairs = [
+            (self.qrz_info.lbl_sr_posted.text(),    self.qrz_info.lbl_sr_source.text()),
+            (self.qrz_info.lbl_sr_group.text(),     self.qrz_info.lbl_sr_delivered.text()),
+            (self.qrz_info.lbl_sr_global_id.text(), self.qrz_info.lbl_sr_grid.text()),
+            (self.qrz_info.lbl_sr_sr_id.text(),     self.qrz_info.lbl_sr_freq.text()),
+        ]
+        sr_meta_rows = "".join(
+            f'<tr><td style="padding:2px 16px 2px 0;width:50%;">{left}</td>'
+            f'<td style="padding:2px 0;width:50%;">{right}</td></tr>'
+            for left, right in sr_meta_pairs
+        )
+        sr_meta_html = (
+            f'<table style="border-collapse:collapse;width:100%;">{sr_meta_rows}</table>'
+        )
+
+        map_html = ""
+        if self._map_loaded:
+            try:
+                map_pm = self.map_view.grab()
+                uri = self._pixmap_to_data_uri(map_pm)
+                if uri:
+                    map_html = (
+                        f'<img src="{uri}" style="max-width:100%;'
+                        f'border:1px solid #ccc;">'
+                    )
+            except Exception:
+                map_html = ""
+        if not map_html and self._statrep_grid:
+            map_html = (
+                f'<div style="font-family:\'Kode Mono\',monospace;font-size:13px;'
+                f'color:#0000CC;">'
+                f'Grid: {self._statrep_grid}</div>'
+            )
+
+        raw_comments = (self._row_data.get("comments") or "").replace("||", "\n")
+        if raw_comments:
+            comments_html = _text_to_html(raw_comments, self._data_bg)
+            comments_html = (
+                comments_html.replace("<html>", "").replace("</html>", "")
+                             .replace("<body", "<div").replace("</body>", "</div>")
+            )
+        else:
+            comments_html = ""
+
+        note_html = ""
+        note_text = self.statrep_memo_edit.toPlainText().strip()
+        if note_text:
+            note_html = (
+                '<div class="section-title">Status Report Note</div>'
+                f'<pre style="white-space:pre-wrap;font-family:\'Kode Mono\',monospace;'
+                f'font-size:12px;margin:0;color:#0000CC;">{note_text}</pre>'
+            )
+
+        contact_note_html = ""
+        contact_text = self.contact_memo_edit.text().strip()
+        if contact_text:
+            contact_note_html = (
+                '<div class="section-title">Contact Note</div>'
+                f'<div style="font-family:\'Kode Mono\',monospace;font-size:12px;'
+                f'color:#0000CC;">'
+                f'{contact_text}</div>'
+            )
+
+        generated = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        title_dt = self._sr_datetime or ""
+
+        font_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+        roboto_reg   = self._font_data_uri(os.path.join(font_dir, "Roboto-Regular.ttf"))
+        roboto_bold  = self._font_data_uri(os.path.join(font_dir, "Roboto-Bold.ttf"))
+        slab_bold    = self._font_data_uri(os.path.join(font_dir, "RobotoSlab-Bold.ttf"))
+        kode_reg     = self._font_data_uri(os.path.join(font_dir, "KodeMono-Regular.ttf"))
+
+        font_face_css = ""
+        if roboto_reg:
+            font_face_css += (
+                f"@font-face {{ font-family:'Roboto'; font-style:normal; font-weight:400;"
+                f" src:url({roboto_reg}) format('truetype'); }}"
+            )
+        if roboto_bold:
+            font_face_css += (
+                f"@font-face {{ font-family:'Roboto'; font-style:normal; font-weight:700;"
+                f" src:url({roboto_bold}) format('truetype'); }}"
+            )
+        if slab_bold:
+            font_face_css += (
+                f"@font-face {{ font-family:'Roboto Slab'; font-style:normal; font-weight:700;"
+                f" src:url({slab_bold}) format('truetype'); }}"
+            )
+        if kode_reg:
+            font_face_css += (
+                f"@font-face {{ font-family:'Kode Mono'; font-style:normal; font-weight:400;"
+                f" src:url({kode_reg}) format('truetype'); }}"
+            )
+
+        return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>StatRep — {self.callsign}</title>
+<style>
+  {font_face_css}
+  body {{ background:#ffffff; color:#000000;
+          font-family: Roboto, Arial, sans-serif; font-size:13px;
+          margin:24px; }}
+  h1 {{ font-family: 'Roboto Slab', Roboto, serif; font-weight:700;
+        font-size:22px; margin:0 0 4px 0; color:{self._program_bg}; }}
+  .subhead {{ font-size:13px; color:#555; margin-bottom:14px; }}
+  .section-title {{ font-family: 'Roboto Slab', Roboto, serif; font-weight:700;
+                    font-size:17px; margin:14px 0 6px 0;
+                    border-bottom:1px solid #aaa; padding-bottom:2px; }}
+  .qrz-row {{ display:flex; gap:16px; }}
+  .qrz-text {{ flex:1; font-family:'Kode Mono', monospace; font-size:12px;
+               line-height:1.5; color:#0000CC; }}
+  .qrz-text span {{ color:#000000; }}
+  .qrz-photo {{ flex:0 0 auto; text-align:right; }}
+  .sr-meta {{ font-family:'Kode Mono', monospace; font-size:12px; line-height:1.5;
+              color:#0000CC; }}
+  .sr-meta span {{ color:#000000; }}
+  .map-box {{ text-align:center; page-break-inside:avoid; }}
+  .status-box {{ page-break-inside:avoid; }}
+  .comments-box {{ font-family:'Kode Mono', monospace; font-size:12px;
+                   border:1px solid #ccc; padding:8px; color:#0000CC;
+                   background-color:{self._data_bg}; }}
+  .comments-box a {{ color:#0078d7; }}
+  .footer {{ font-size:10px; color:#888; margin-top:20px;
+             border-top:1px solid #ddd; padding-top:6px; }}
+</style></head>
+<body>
+  <h1>Status Report — {self.callsign}</h1>
+  <div class="subhead">{title_dt}</div>
+
+  <div class="section-title">QRZ Lookup</div>
+  <div class="qrz-row">
+    <div class="qrz-text">{qrz_block}</div>
+    <div class="qrz-photo">{photo_html}{moddate_html}</div>
+  </div>
+
+  <div class="section-title">Status Indicators</div>
+  <div class="status-box">{status_table}</div>
+
+  <div class="section-title">Status Report Details</div>
+  <div class="sr-meta">{sr_meta_html}</div>
+
+  <div class="section-title">Location</div>
+  <div class="map-box">{map_html}</div>
+
+  <div class="section-title">Comments</div>
+  <div class="comments-box">{comments_html}</div>
+
+  {note_html}
+  {contact_note_html}
+
+  <div class="footer">Generated by CommStat — {generated}</div>
+</body></html>"""
+
+    def _on_print(self) -> None:
+        if self._print_busy:
+            return
+        self._print_busy = True
+
+        try:
+            html = self._build_print_html()
+        except Exception as e:
+            print(f"[StatRepDetailDialog] PDF build error: {e}")
+            self._print_busy = False
+            return
+
+        safe_cs  = (self.callsign or "unknown").replace("/", "_").replace(" ", "_")
+        safe_sr  = (str(self._row_data.get("sr_id") or "")).replace("/", "_").replace(" ", "_")
+        ts       = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        fname    = f"statrep_{safe_cs}_{safe_sr}_{ts}.pdf" if safe_sr else f"statrep_{safe_cs}_{ts}.pdf"
+        pdf_path = os.path.join(tempfile.gettempdir(), fname)
+
+        view = QWebEngineView()
+        self._print_view = view
+
+        def _on_load_finished(ok: bool) -> None:
+            if not ok:
+                print("[StatRepDetailDialog] PDF error: HTML failed to load")
+                self._cleanup_print_view()
+                return
+            view.page().printToPdf(pdf_path)
+
+        def _on_pdf_done(file_path: str, success: bool) -> None:
+            if success and file_path:
+                try:
+                    abs_path = os.path.abspath(file_path).replace("\\", "/")
+                    webbrowser.open("file:///" + abs_path)
+                except Exception as e:
+                    print(f"[StatRepDetailDialog] PDF open error: {e}")
+            else:
+                print(f"[StatRepDetailDialog] PDF error: printToPdf failed for {file_path}")
+            self._cleanup_print_view()
+
+        view.loadFinished.connect(_on_load_finished)
+        view.page().pdfPrintingFinished.connect(_on_pdf_done)
+        view.setHtml(html, QUrl("http://localhost/"))
+
+    def _cleanup_print_view(self) -> None:
+        v = self._print_view
+        self._print_view = None
+        self._print_busy = False
+        if v is not None:
+            try:
+                v.deleteLater()
+            except Exception:
+                pass
 
     def _on_message_clicked(self) -> None:
         dlg = QRZLookupDialog(
