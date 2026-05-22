@@ -4471,6 +4471,12 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         # News ticker animation timer
         self.newsfeed_timer = QTimer(self)
         self.newsfeed_timer.timeout.connect(self._tick_newsfeed)
+        # Owned single-shot for the type-on→scroll-off pause; named so we can
+        # cancel it when the animation is restarted from outside the natural
+        # _next_headline chain (resize debounce, RSS refresh, feed change).
+        self.newsfeed_pause_timer = QTimer(self)
+        self.newsfeed_pause_timer.setSingleShot(True)
+        self.newsfeed_pause_timer.timeout.connect(self._start_scroll_phase)
         self._newsfeed_frame = 0
         self._newsfeed_phase = 0  # 0 = type-on, 1 = scroll-off
         self._scroll_start = 0.0
@@ -4589,7 +4595,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             if self._newsfeed_frame >= visible:
                 # Window is full — pause before scrolling
                 self.newsfeed_timer.stop()
-                QTimer.singleShot(NEWSFEED_PAUSE_MS, self._start_scroll_phase)
+                self.newsfeed_pause_timer.start(NEWSFEED_PAUSE_MS)
         else:
             # Scroll-off: wall-clock-based so duration is accurate on Windows
             elapsed = time.monotonic() - self._scroll_start
@@ -4672,7 +4678,10 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             padding = ' ' * self.newsfeed_chars
             self.newsfeed_text = ticker_text + padding
 
-            # Setup and start animation
+            # Setup and start animation — cancel any pending pause from a
+            # previous cycle so it can't fire scroll-off mid-type-on.
+            self.newsfeed_timer.stop()
+            self.newsfeed_pause_timer.stop()
             self._newsfeed_frame = 0
             self._newsfeed_phase = 0
             self.newsfeed_timer.start(NEWSFEED_TYPE_INTERVAL_MS)
@@ -4694,6 +4703,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         if feed_name == "Disable" or not self._internet_available or not self.headlines:
             return
         self.newsfeed_timer.stop()
+        self.newsfeed_pause_timer.stop()
         self._display_current_headline()
 
     def _on_feed_changed(self, feed_name: str) -> None:
@@ -4703,6 +4713,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         self.headlines = []
         self.headline_index = 0
         self.newsfeed_timer.stop()
+        self.newsfeed_pause_timer.stop()
         if feed_name == "Disable":
             self.newsfeed_label.setText("      +++  News Feed Disabled  +++")
         elif self._internet_available:
