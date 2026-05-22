@@ -226,9 +226,32 @@ class GroupsDialog(QDialog):
             max_len=80,
         )
 
-        self.table.setCellWidget(row, 0, self._iw_name)
+        # Qt force-stretches a QLineEdit installed via setCellWidget. Wrap the
+        # fixed-width name input in a QWidget + HBoxLayout so the container
+        # fills the cell while the input keeps its size. Comment stays
+        # unwrapped — the Stretch column gives it the full remaining width.
+        def _wrap_fixed(input_widget: QLineEdit, width_px: int) -> QWidget:
+            input_widget.setFixedWidth(width_px)
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(input_widget)
+            layout.addStretch()
+            return container
+
+        _name_w = 136
+
+        # Col 0 is ResizeToContents and would clamp back to data width, clipping
+        # the input. Switch to Interactive and force a width that holds it;
+        # _exit_edit_mode restores ResizeToContents.
+        _hh = self.table.horizontalHeader()
+        _hh.setSectionResizeMode(0, QHeaderView.Interactive)
+        self.table.setColumnWidth(0, _name_w + 16)
+
+        self.table.setCellWidget(row, 0, _wrap_fixed(self._iw_name, _name_w))
         self.table.setCellWidget(row, 1, self._iw_comment)
-        self.table.setRowHeight(row, 34)
+        self.table.setRowHeight(row, 42)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
 
         self.btn_add.setVisible(False)
@@ -289,6 +312,9 @@ class GroupsDialog(QDialog):
 
         self.table.setRowHeight(row, self.table.verticalHeader().defaultSectionSize())
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+
+        # Restore col 0 to auto-fit after edit-mode widening.
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
 
         self.btn_add.setVisible(True)
         self.btn_edit.setVisible(True)

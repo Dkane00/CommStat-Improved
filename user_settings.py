@@ -236,11 +236,24 @@ class UserSettingsDialog(QDialog):
             idx = self._iw_region.findData(_DEFAULT_REGION)
         self._iw_region.setCurrentIndex(max(idx, 0))
 
-        self.table.setCellWidget(row, 0, self._iw_callsign)
-        self.table.setCellWidget(row, 1, self._iw_grid)
-        self.table.setCellWidget(row, 2, self._iw_state)
+        # Qt force-stretches a QLineEdit installed via setCellWidget. Wrap each
+        # input in a QWidget + HBoxLayout (input on left, stretch on right) so
+        # the container fills the cell while the input keeps its fixed width.
+        def _wrap_fixed(input_widget: QLineEdit, width_px: int) -> QWidget:
+            input_widget.setFixedWidth(width_px)
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(input_widget)
+            layout.addStretch()
+            return container
+
+        self.table.setCellWidget(row, 0, _wrap_fixed(self._iw_callsign, 136))
+        self.table.setCellWidget(row, 1, _wrap_fixed(self._iw_grid,      90))
+        self.table.setCellWidget(row, 2, _wrap_fixed(self._iw_state,     40))
         self.table.setCellWidget(row, 3, self._iw_region)
-        self.table.setRowHeight(row, 34)
+        self.table.setRowHeight(row, 42)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
 
         self.btn_add.setVisible(False)

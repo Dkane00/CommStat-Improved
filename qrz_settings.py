@@ -371,10 +371,25 @@ class QRZSettingsDialog(QDialog):
             " selection-background-color:#cce5ff; selection-color:#000000; }"
         )
 
-        self.table.setCellWidget(row, 0, self._iw_username)
+        # Qt force-stretches a QLineEdit installed via setCellWidget. Wrap the
+        # fixed-width username input in a QWidget + HBoxLayout so the container
+        # fills the cell while the input keeps its size. Password stays
+        # unwrapped — col 1 is Stretch and passwords benefit from the room.
+        # Enable combo is unwrapped — combos look fine at column width.
+        def _wrap_fixed(input_widget: QLineEdit, width_px: int) -> QWidget:
+            input_widget.setFixedWidth(width_px)
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(input_widget)
+            layout.addStretch()
+            return container
+
+        self.table.setCellWidget(row, 0, _wrap_fixed(self._iw_username, 136))
         self.table.setCellWidget(row, 1, self._iw_password)
         self.table.setCellWidget(row, 2, self._iw_enable)
-        self.table.setRowHeight(row, 34)
+        self.table.setRowHeight(row, 42)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
 
         # Hide Add/Edit/Delete; Test stays visible for inline testing

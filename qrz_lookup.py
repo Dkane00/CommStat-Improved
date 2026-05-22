@@ -2345,7 +2345,7 @@ class DeliveryConfirmationDialog(QDialog):
             confirm_lbl.setFont(QFont("Roboto", -1, QFont.Bold))
             confirm_lbl.setStyleSheet(
                 f"QLabel {{ color:{footer_color}; background-color: transparent;"
-                " font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; padding-top:6px; }}"
+                " font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; padding-top:6px; }"
             )
         main.addWidget(confirm_lbl)
         main.addStretch()

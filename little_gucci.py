@@ -33,6 +33,30 @@ import ssl
 # Print a C-level traceback on segfaults so silent Qt crashes (especially on
 # Linux) leave something actionable in the terminal instead of vanishing.
 faulthandler.enable()
+
+
+def _enable_windows_vt_mode() -> None:
+    # Classic Windows conhost ignores ANSI escapes by default, so ConsoleColors
+    # leak as raw "←[92m...←[0m" sequences. Enabling VT processing on the
+    # console stdout/stderr handles makes the escapes render as color.
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        ENABLE_VT = 0x0004
+        for std_handle in (-11, -12):  # STD_OUTPUT_HANDLE, STD_ERROR_HANDLE
+            handle = kernel32.GetStdHandle(std_handle)
+            if not handle or handle == ctypes.c_void_p(-1).value:
+                continue
+            mode = ctypes.c_uint32()
+            if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                kernel32.SetConsoleMode(handle, mode.value | ENABLE_VT)
+    except Exception:
+        pass
+
+
+_enable_windows_vt_mode()
 import time
 import tempfile
 import webbrowser
@@ -3191,13 +3215,13 @@ class MainWindow(QtWidgets.QMainWindow):
             with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
                 conn.execute(query, tuple(data.values()))
                 conn.commit()
-            print(f"{ConsoleColors.SUCCESS}[{rig_name}] Added {msg_type.upper()}{extra_info} from: {from_callsign}{ConsoleColors.RESET}")
+            print(f"{ConsoleColors.SUCCESS}[{rig_name}] Added {msg_type.upper()} {data.get(id_field, '')}{extra_info} from: {from_callsign}{ConsoleColors.RESET}")
             return msg_type
         except sqlite3.IntegrityError as e:
             if id_field in str(e) or "UNIQUE" in str(e):
                 id_val = data.get(id_field, "unknown")
                 incoming_global_id = data.get('global_id', 0)
-                print(f"[{rig_name}] Skipping {msg_type} from {from_callsign} — already received (Global ID: {incoming_global_id})")
+                print(f"[{rig_name}] Skipping duplicate {msg_type.upper()} {data.get(id_field, '')} from {from_callsign} — already received (Global ID: {incoming_global_id})")
                 if incoming_global_id:
                     try:
                         with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
@@ -3351,13 +3375,13 @@ class MainWindow(QtWidgets.QMainWindow):
                     _directive_slot = ("::EXPIRED::", "_show_expired_popup", "Expired")
                 if _directive_slot is not None:
                     _tag, _slot, _label = _directive_slot
-                    print(f"[BACKBONE] {_tag} raw line: {line!r}")
+                    print(f"[COMMSRVR] {_tag} raw line: {line!r}")
                     # Strip optional leading ID prefix before the directive
                     raw_payload = re.sub(r'^\d+:\s*', '', line)
                     raw_payload = raw_payload[len(_tag):]
                     if "," in raw_payload:
                         callsign, msg_text = raw_payload.split(",", 1)
-                        print(f"[BACKBONE] {_label} — callsign={callsign.strip()!r}  msg={msg_text.strip()!r}")
+                        print(f"[COMMSRVR] {_label} — callsign={callsign.strip()!r}  msg={msg_text.strip()!r}")
                         QtCore.QMetaObject.invokeMethod(
                             self, _slot,
                             QtCore.Qt.QueuedConnection,
@@ -3365,7 +3389,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             QtCore.Q_ARG(str, msg_text.strip())
                         )
                     else:
-                        print(f"[BACKBONE] {_tag} payload missing comma, skipping: {raw_payload!r}")
+                        print(f"[COMMSRVR] {_tag} payload missing comma, skipping: {raw_payload!r}")
                     continue
 
                 # Check if line starts with a number followed by colon
@@ -3448,7 +3472,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
                     # Parse using unified parser (source=2 for Internet)
                     msg_type, _ = self._parse_commstat_message(
-                        "BACKBONE", from_callsign, message_value, target, "", freq, db, utc, source=2, global_id=data_id
+                        "COMMSRVR", from_callsign, message_value, target, "", freq, db, utc, source=2, global_id=data_id
                     )
 
                     if msg_type:
@@ -3657,9 +3681,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 return
 
             if "::DELIVERED::" in content_stripped:
-                print(f"[BACKBONE] ::DELIVERED:: detected in content: {content_stripped!r}")
+                print(f"[COMMSRVR] ::DELIVERED:: detected in content: {content_stripped!r}")
             if "::EXPIRED::" in content_stripped:
-                print(f"[BACKBONE] ::EXPIRED:: detected in content: {content_stripped!r}")
+                print(f"[COMMSRVR] ::EXPIRED:: detected in content: {content_stripped!r}")
 
             if (re.search(r'^\d+:\s+\d{4}-\d{2}-\d{2}', content_stripped, re.MULTILINE) or
                     re.search(r'^\d+:\s+::STATREP-DELETE::', content_stripped, re.MULTILINE) or
@@ -5366,6 +5390,13 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         value = message.get("value", "")
         params = message.get("params", {})
 
+        # JS8Call appends a non-ASCII terminator (e.g. ♦) at end of every value.
+        # A non-ASCII char anywhere else usually means a corrupt/garbled decode —
+        # surface it so the operator can see the frame was mangled.
+        _v_stripped = value.rstrip() if value else ""
+        if _v_stripped and any(ord(c) > 127 for c in _v_stripped[:-1]):
+            print(f"{ConsoleColors.WARNING}[{rig_name}] Malformed Data — non-ASCII character in payload: {value!r}{ConsoleColors.RESET}")
+
         # Handle RX.DIRECTED messages
         if msg_type == "RX.DIRECTED":
             from_call = params.get("FROM", "")
@@ -5662,7 +5693,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             except sqlite3.Error:
                 _existing = None
             if _existing:
-                print(f"[{rig_name}] Skipping duplicate STATREP from {from_callsign} (Global ID: {global_id})")
+                print(f"[{rig_name}] Skipping duplicate STATREP {sr_id} from {from_callsign} — already received (Global ID: {global_id})")
                 return ("", None)
 
         # Build data dict for insertion

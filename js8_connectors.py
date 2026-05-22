@@ -47,7 +47,7 @@ _COL_CONNECTED    = "#1a7f37"
 _COL_DISCONNECTED = "#cc0000"
 _COL_DISABLED     = "#888888"
 
-_WIN_W = 660
+_WIN_W = 860
 _WIN_H = 380
 
 _TABLE_COLS = ["Rig Name", "Server", "Port", "State", "Status", "Auto", "Comment"]
@@ -302,15 +302,40 @@ class JS8ConnectorsDialog(QDialog):
         self._iw_rig.textChanged.connect(lambda _: self._on_inline_changed())
         self._iw_port.textChanged.connect(lambda _: self._on_inline_changed())
 
+        # Qt ignores setMaximumWidth on a QLineEdit installed directly via
+        # setCellWidget — the embedded widget gets stretched to fill the cell.
+        # Wrap each constrained input in a QWidget+HBoxLayout so the container
+        # fills the cell while the input itself keeps its fixed width.
+        def _wrap_fixed(input_widget: QLineEdit, width_px: int) -> QWidget:
+            input_widget.setFixedWidth(width_px)
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            layout.addWidget(input_widget)
+            layout.addStretch()
+            return container
+
+        _rig_w, _server_w, _port_w, _state_w = 112, 121, 60, 40
+
+        # Cols 0–3 are ResizeToContents and would clamp back to data width,
+        # cutting off the inputs. Switch them to Interactive and force a width
+        # that holds the input plus a little cell padding; _exit_edit_mode
+        # restores ResizeToContents.
+        _hh = self.table.horizontalHeader()
+        for _c, _w in ((0, _rig_w), (1, _server_w), (2, _port_w), (3, _state_w)):
+            _hh.setSectionResizeMode(_c, QHeaderView.Interactive)
+            self.table.setColumnWidth(_c, _w + 16)
+
         # Install on all columns except the live Status column
-        self.table.setCellWidget(row, 0, self._iw_rig)
-        self.table.setCellWidget(row, 1, self._iw_server)
-        self.table.setCellWidget(row, 2, self._iw_port)
-        self.table.setCellWidget(row, 3, self._iw_state)
+        self.table.setCellWidget(row, 0, _wrap_fixed(self._iw_rig,    _rig_w))
+        self.table.setCellWidget(row, 1, _wrap_fixed(self._iw_server, _server_w))
+        self.table.setCellWidget(row, 2, _wrap_fixed(self._iw_port,   _port_w))
+        self.table.setCellWidget(row, 3, _wrap_fixed(self._iw_state,  _state_w))
         # col 4 (_STATUS_COL) intentionally skipped
         self.table.setCellWidget(row, _AUTO_COL, self._iw_auto)
         self.table.setCellWidget(row, _COMMENT_COL, self._iw_comment)
-        self.table.setRowHeight(row, 34)
+        self.table.setRowHeight(row, 42)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
 
         self.btn_add.setVisible(False)
@@ -402,6 +427,11 @@ class JS8ConnectorsDialog(QDialog):
         self.table.setRowHeight(row, self.table.verticalHeader().defaultSectionSize())
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
 
+        # Restore the four columns to auto-fit after edit-mode widening.
+        _hh = self.table.horizontalHeader()
+        for _c in (0, 1, 2, 3):
+            _hh.setSectionResizeMode(_c, QHeaderView.ResizeToContents)
+
         self.btn_add.setVisible(True)
         self.btn_edit.setVisible(True)
         self.btn_delete.setVisible(True)
@@ -418,8 +448,8 @@ class JS8ConnectorsDialog(QDialog):
         if self._in_edit_mode:
             return
         connectors = self.connector_manager.get_all_connectors()
-        if len(connectors) >= 3:
-            QMessageBox.warning(self, "Limit Reached", "Maximum 3 connectors allowed.")
+        if len(connectors) >= 5:
+            QMessageBox.warning(self, "Limit Reached", "Maximum 5 connectors allowed.")
             return
         row = self.table.rowCount()
         self.table.insertRow(row)
