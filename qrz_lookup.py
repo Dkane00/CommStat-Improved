@@ -27,7 +27,7 @@ from typing import Dict, Optional
 import folium
 import maidenhead as mh
 from PyQt5 import QtGui
-from PyQt5.QtCore import QBuffer, QByteArray, Qt, QThread, QUrl, pyqtSignal
+from PyQt5.QtCore import QBuffer, QByteArray, QSize, Qt, QThread, QUrl, pyqtSignal
 from PyQt5.QtGui import QColor, QCursor, QDesktopServices, QFont, QMovie, QPainter, QPixmap
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import (
@@ -318,6 +318,20 @@ class _MemoTextEdit(QTextEdit):
         self.focus_lost.emit()
 
 
+class _GrowPlainTextEdit(QPlainTextEdit):
+    # Why: QPlainTextEdit's default sizeHint (~256×192) inflates the parent
+    # dialog past its resize() target, and the inherited minimumSizeHint
+    # (~4 rows, from QAbstractScrollArea) prevents the field from collapsing
+    # to a single row when the user shrinks the window. Override both so the
+    # field's preferred AND minimum height track minimumHeight; the Expanding
+    # vertical policy still lets it grow on resize.
+    def sizeHint(self) -> QSize:
+        return QSize(super().sizeHint().width(), self.minimumHeight() or 34)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(super().minimumSizeHint().width(), self.minimumHeight() or 34)
+
+
 class _ToggleSwitch(QWidget):
     """iOS-style toggle switch that emits toggled(bool) on state change."""
     toggled = pyqtSignal(bool)
@@ -467,7 +481,7 @@ class _QRZInfoSection(QWidget):
     def add_statrep_memo_row(self) -> QPlainTextEdit:
         """Add a multi-line status-report-note input that grows to fill extra vertical space."""
         self._main_layout.addSpacing(10)
-        memo_input = QPlainTextEdit()
+        memo_input = _GrowPlainTextEdit()
         memo_input.setFont(_mono_font())
         memo_input.setMinimumHeight(34)
         memo_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
