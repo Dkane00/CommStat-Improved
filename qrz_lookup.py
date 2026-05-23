@@ -2109,9 +2109,9 @@ class StatRepDetailDialog(QDialog):
         except sqlite3.Error as e:
             print(f"[StatRepDetailDialog] StatRep memo save error: {e}")
 
-    def closeEvent(self, event) -> None:
+    def done(self, result: int) -> None:
         self._save_statrep_memo()
-        super().closeEvent(event)
+        super().done(result)
 
     def _on_qrz_result(self, result) -> None:
         if not result:
