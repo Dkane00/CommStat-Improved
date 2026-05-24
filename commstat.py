@@ -27,7 +27,7 @@ DATABASE_TEMPLATE = SCRIPT_DIR / "traffic.db3.template"
 
 def apply_update() -> bool:
     """
-    Check for and apply pending update.
+    Check for and apply pending update.lets
 
     Returns:
         True if update was applied, False otherwise.

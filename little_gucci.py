@@ -84,6 +84,7 @@ from PyQt5.QtCore import QBuffer, QIODevice, QTimer, QDateTime, Qt, QUrl
 from PyQt5.QtWidgets import qApp
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage, QWebEngineProfile
 from PyQt5.QtWebEngineCore import QWebEngineUrlSchemeHandler, QWebEngineUrlScheme, QWebEngineUrlRequestJob
+from PyQt5.QtMultimedia import QSoundEffect
 from filter import FilterDialog
 from groups import GroupsDialog
 from js8mail import JS8MailDialog
@@ -858,12 +859,33 @@ class ConfigManager:
 
         # Load toggle settings from config if it exists
         default_feed = list(DEFAULT_RSS_FEEDS.keys())[0]
+        sound_defaults = self._default_sound_files()
+
+        def _legacy_default(legacy_val: Optional[bool]) -> bool:
+            # If the old single-toggle `notification_sounds` key is still in the
+            # config file, use its value to seed all three per-event enable flags
+            # once. Otherwise default to True.
+            return True if legacy_val is None else legacy_val
+
         if not self.config_path.exists():
-            self.directed_config = {'hide_heartbeat': False, 'show_all_groups': True, 'show_every_group': True, 'hide_map': False, 'show_alerts': False, 'show_contacts': False, 'selected_rss_feed': default_feed, 'apply_text_normalization': False, 'unchecked_groups': ''}
+            self.directed_config = {
+                'hide_heartbeat': False, 'show_all_groups': True, 'show_every_group': True,
+                'hide_map': False, 'show_alerts': False, 'show_contacts': False,
+                'selected_rss_feed': default_feed, 'apply_text_normalization': False,
+                'unchecked_groups': '',
+                'sound_alert_enabled':   True, 'sound_alert_file':   sound_defaults['alert'],
+                'sound_message_enabled': True, 'sound_message_file': sound_defaults['message'],
+                'sound_statrep_enabled': True, 'sound_statrep_file': sound_defaults['statrep'],
+            }
             return
 
         config = ConfigParser()
         config.read(self.config_path)
+
+        legacy_master = None
+        if config.has_section("DIRECTEDCONFIG") and config.has_option("DIRECTEDCONFIG", "notification_sounds"):
+            legacy_master = config.getboolean("DIRECTEDCONFIG", "notification_sounds")
+        seed = _legacy_default(legacy_master)
 
         if config.has_section("DIRECTEDCONFIG"):
             self.directed_config = {
@@ -876,9 +898,46 @@ class ConfigManager:
                 'selected_rss_feed': config.get("DIRECTEDCONFIG", "selected_rss_feed", fallback=default_feed),
                 'apply_text_normalization': config.getboolean("DIRECTEDCONFIG", "apply_text_normalization", fallback=True),
                 'unchecked_groups': config.get("DIRECTEDCONFIG", "unchecked_groups", fallback=""),
+                'sound_alert_enabled':   config.getboolean("DIRECTEDCONFIG", "sound_alert_enabled",   fallback=seed),
+                'sound_alert_file':      config.get("DIRECTEDCONFIG", "sound_alert_file",      fallback=sound_defaults['alert']),
+                'sound_message_enabled': config.getboolean("DIRECTEDCONFIG", "sound_message_enabled", fallback=seed),
+                'sound_message_file':    config.get("DIRECTEDCONFIG", "sound_message_file",    fallback=sound_defaults['message']),
+                'sound_statrep_enabled': config.getboolean("DIRECTEDCONFIG", "sound_statrep_enabled", fallback=seed),
+                'sound_statrep_file':    config.get("DIRECTEDCONFIG", "sound_statrep_file",    fallback=sound_defaults['statrep']),
             }
         else:
-            self.directed_config = {'hide_heartbeat': False, 'show_all_groups': True, 'show_every_group': True, 'hide_map': False, 'show_alerts': False, 'show_contacts': False, 'selected_rss_feed': default_feed, 'apply_text_normalization': False, 'unchecked_groups': ''}
+            self.directed_config = {
+                'hide_heartbeat': False, 'show_all_groups': True, 'show_every_group': True,
+                'hide_map': False, 'show_alerts': False, 'show_contacts': False,
+                'selected_rss_feed': default_feed, 'apply_text_normalization': False,
+                'unchecked_groups': '',
+                'sound_alert_enabled':   True, 'sound_alert_file':   sound_defaults['alert'],
+                'sound_message_enabled': True, 'sound_message_file': sound_defaults['message'],
+                'sound_statrep_enabled': True, 'sound_statrep_file': sound_defaults['statrep'],
+            }
+
+    @staticmethod
+    def _default_sound_files() -> Dict[str, str]:
+        # First-run defaults: scan SOUNDS_DIR and pick a file per event by
+        # keyword. Falls back to the first .wav alphabetically, or "" if none.
+        try:
+            files = sorted(f for f in os.listdir(SOUNDS_DIR) if f.lower().endswith('.wav'))
+        except OSError:
+            files = []
+        first = files[0] if files else ""
+
+        def pick(*keywords: str) -> str:
+            for kw in keywords:
+                for f in files:
+                    if kw in f.lower():
+                        return f
+            return first
+
+        return {
+            'alert':   pick('alarm', 'alert'),
+            'message': pick('bell', 'ding'),
+            'statrep': pick('ping', 'triple', 'dit'),
+        }
 
     def get_color(self, key: str) -> str:
         """Get a color value by key."""
@@ -925,6 +984,18 @@ class ConfigManager:
 
     def set_show_alerts(self, value: bool) -> None:
         self._save_setting('show_alerts', value)
+
+    def get_sound_enabled(self, event: str) -> bool:
+        return self.directed_config.get(f'sound_{event}_enabled', True)
+
+    def set_sound_enabled(self, event: str, value: bool) -> None:
+        self._save_setting(f'sound_{event}_enabled', value)
+
+    def get_sound_file(self, event: str) -> str:
+        return self.directed_config.get(f'sound_{event}_file', '')
+
+    def set_sound_file(self, event: str, filename: str) -> None:
+        self._save_setting(f'sound_{event}_file', filename)
 
     def get_show_contacts(self) -> bool:
         return self.directed_config.get('show_contacts', False)
@@ -1773,6 +1844,66 @@ class _MenuBarMenu(QtWidgets.QMenu):
 
 # =============================================================================
 
+class SoundPlayer:
+    """
+    Plays short notification sounds for inbound StatRep / Message / Alert events.
+
+    Per-event filename and enable flag live in ConfigManager; the dialog can
+    call reload(event) to swap files at runtime without restarting the app.
+    QSoundEffect instances are held on the instance so Qt's async playback
+    doesn't get GC'd mid-play. Missing files are tolerated silently.
+    """
+
+    EVENTS = ("statrep", "message", "alert")
+    VOLUME = 0.8
+
+    def __init__(self, config: "ConfigManager", sounds_dir: str = SOUNDS_DIR):
+        self.config = config
+        self.sounds_dir = Path(sounds_dir)
+        self._effects: Dict[str, QSoundEffect] = {}
+        self._preview: Optional[QSoundEffect] = None
+        self.reload_all()
+
+    def reload(self, event: str) -> None:
+        filename = self.config.get_sound_file(event)
+        if not filename:
+            self._effects.pop(event, None)
+            return
+        path = self.sounds_dir / filename
+        if not path.exists():
+            self._effects.pop(event, None)
+            return
+        effect = QSoundEffect()
+        effect.setSource(QUrl.fromLocalFile(str(path.resolve())))
+        effect.setVolume(self.VOLUME)
+        self._effects[event] = effect
+
+    def reload_all(self) -> None:
+        for event in self.EVENTS:
+            self.reload(event)
+
+    def play(self, msg_type: str) -> None:
+        if not self.config.get_sound_enabled(msg_type):
+            return
+        effect = self._effects.get(msg_type)
+        if effect is not None:
+            effect.play()
+
+    def preview(self, filename: str) -> None:
+        # Ignores the per-event enabled flag — used by the Sound Settings dialog
+        # Play button so the user can audition a clip before turning it on.
+        if not filename:
+            return
+        path = self.sounds_dir / filename
+        if not path.exists():
+            return
+        effect = QSoundEffect()
+        effect.setSource(QUrl.fromLocalFile(str(path.resolve())))
+        effect.setVolume(self.VOLUME)
+        self._preview = effect
+        effect.play()
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window for CommStat."""
 
@@ -1787,6 +1918,8 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.config = config
         self.db = db
+
+        self._sound_player = SoundPlayer(config)
 
         # Internet connectivity state
         self._internet_available = False
@@ -2121,6 +2254,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ("manage_groups",  "Manage Groups",   self._on_manage_groups),
             ("js8_connectors", "JS8 Connectors",  self._on_js8_connectors),
             ("qrz_enable",     "QRZ Settings",    self._on_qrz_enable),
+            ("sound_settings", "Sound Settings",  self._on_sound_settings),
         ]
 
         # Create actions for dropdown menu
@@ -3216,6 +3350,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 conn.execute(query, tuple(data.values()))
                 conn.commit()
             print(f"{ConsoleColors.SUCCESS}[{rig_name}] Added {msg_type.upper()} {data.get(id_field, '')}{extra_info} from: {from_callsign}{ConsoleColors.RESET}")
+            self._sound_player.play(msg_type)
             return msg_type
         except sqlite3.IntegrityError as e:
             if id_field in str(e) or "UNIQUE" in str(e):
@@ -6189,6 +6324,12 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         """Open User Settings dialog."""
         Cls = self._resolve_dialog_class("user_settings", "UserSettingsDialog")
         dlg = Cls(self.db, parent=self)
+        dlg.exec_()
+
+    def _on_sound_settings(self) -> None:
+        """Open Sound Settings dialog (per-event sound file + enable)."""
+        Cls = self._resolve_dialog_class("sound_settings", "SoundSettingsDialog")
+        dlg = Cls(self.config, self._sound_player, parent=self)
         dlg.exec_()
 
     def _show_image_dialog(
