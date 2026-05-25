@@ -105,7 +105,7 @@ class JS8ConnectorsDialog(QDialog):
         title_lbl.setFixedHeight(36)
         title_lbl.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         body.addWidget(title_lbl)
@@ -134,10 +134,10 @@ class JS8ConnectorsDialog(QDialog):
         self.table.setStyleSheet(
             f"QTableWidget {{ background-color:{_DATA_BG}; alternate-background-color:{_DATA_BG};"
             f" gridline-color:#cccccc; color:{_DATA_FG};"
-            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QTableWidget::item {{ padding:4px 6px; }}"
             f"QHeaderView::section {{ background-color:{_TITLE_BG}; color:{_TITLE_FG};"
-            f" padding:5px 6px; border:none; font-family:Roboto, sans-serif; font-size:13px;"
+            f" padding:5px 6px; border:none; font-family:Roboto; font-size:13px;"
             f" font-weight:bold; }}"
             f"QTableWidget::item:selected {{ background-color:#cce5ff; color:#000000; }}"
         )

@@ -586,12 +586,12 @@ class StatRepDialog(QDialog):
             QLineEdit {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
-                font-family: 'Kode Mono', monospace; font-size: 13px;
+                font-family: 'Kode Mono'; font-size: 13px;
             }}
             QComboBox {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px; padding: 2px 4px;
-                font-family: 'Kode Mono', monospace; font-size: 13px;
+                font-family: 'Kode Mono'; font-size: 13px;
                 combobox-popup: 0;
             }}
             QComboBox:disabled {{
@@ -618,7 +618,7 @@ class StatRepDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
@@ -888,7 +888,7 @@ class StatRepDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
@@ -897,7 +897,7 @@ class StatRepDialog(QDialog):
             lbl = QtWidgets.QLabel(text)
             lbl.setStyleSheet(
                 "QLabel { background-color: transparent; color: #000000;"
-                " font-family: Roboto, sans-serif; font-size: 13px; font-weight: bold;"
+                " font-family: Roboto; font-size: 13px; font-weight: bold;"
                 " padding-bottom: 2px; border-bottom: 1px solid #999999; }"
             )
             return lbl
@@ -908,7 +908,7 @@ class StatRepDialog(QDialog):
             lbl.setWordWrap(True)
             lbl.setStyleSheet(
                 "QLabel { background-color: transparent; color: #000000;"
-                " font-family: Roboto, sans-serif; font-size: 13px; padding-left: 8px; }"
+                " font-family: Roboto; font-size: 13px; padding-left: 8px; }"
             )
             return lbl
 
@@ -942,7 +942,7 @@ class StatRepDialog(QDialog):
             box.setStyleSheet(
                 f"QFrame {{ background-color: {bg}; border-radius: 4px; }}"
                 f"QLabel {{ background-color: transparent; color: {fg};"
-                f" font-family: Roboto, sans-serif; font-size: 13px; font-weight: bold; }}"
+                f" font-family: Roboto; font-size: 13px; font-weight: bold; }}"
             )
             v = QtWidgets.QVBoxLayout(box)
             v.setContentsMargins(8, 6, 8, 6)
@@ -953,7 +953,7 @@ class StatRepDialog(QDialog):
             desc.setAlignment(Qt.AlignCenter)
             desc.setStyleSheet(
                 f"QLabel {{ background-color: transparent; color: {fg};"
-                f" font-family: Roboto, sans-serif; font-size: 13px; font-weight: normal; }}"
+                f" font-family: Roboto; font-size: 13px; font-weight: normal; }}"
             )
             v.addWidget(name)
             v.addWidget(desc)

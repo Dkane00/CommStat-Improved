@@ -43,13 +43,13 @@ class FilterDialog(QDialog):
         self.setStyleSheet(f"""
             QDialog {{ background-color: {_DATA_BG}; }}
             QLabel {{
-                color: {COLOR_INPUT_TEXT}; font-family: Roboto, sans-serif;
+                color: {COLOR_INPUT_TEXT}; font-family: Roboto;
                 font-size: 13px; font-weight: bold;
             }}
             QDateEdit {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px;
-                padding: 2px 4px; font-family: 'Kode Mono', monospace; font-size: 13px;
+                padding: 2px 4px; font-family: 'Kode Mono'; font-size: 13px;
             }}
         """)
 

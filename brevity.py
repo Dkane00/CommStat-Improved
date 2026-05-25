@@ -1046,7 +1046,7 @@ class BrevityApp(QMainWindow):
             }}
             QLabel {{
                 color: {self.panel_fg};
-                font-family: Roboto, sans-serif;
+                font-family: Roboto;
                 font-weight: bold;
                 font-size: 13px;
             }}
@@ -1103,7 +1103,7 @@ class BrevityApp(QMainWindow):
         title_bar.setFixedHeight(36)
         title_bar.setStyleSheet(
             f"QLabel {{ background-color: {_PROG_BG}; color: {_PROG_FG};"
-            f" font-family: 'Roboto Slab', serif; font-size: 16px; font-weight: 900;"
+            f" font-family: 'Roboto Slab'; font-size: 16px; font-weight: 900;"
             f" padding-top: 9px; padding-bottom: 9px; }}"
         )
         main_layout.addWidget(title_bar)
@@ -1127,7 +1127,7 @@ class BrevityApp(QMainWindow):
 
         decode_button = QPushButton("Decode")
         decode_button.setFixedWidth(100)
-        decode_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_GREEN}; color: white; font-family: Roboto, sans-serif; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
+        decode_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_GREEN}; color: white; font-family: Roboto; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
         decode_inner_layout.addWidget(decode_button)
 
         decode_layout.addLayout(decode_inner_layout)
@@ -1235,27 +1235,27 @@ class BrevityApp(QMainWindow):
 
         clear_button = QPushButton("Clear")
         clear_button.setFixedWidth(120)
-        clear_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_RED}; color: white; font-family: Roboto, sans-serif; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
+        clear_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_RED}; color: white; font-family: Roboto; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
         action_layout.addWidget(clear_button)
 
         copy_code_button = QPushButton("Copy Code")
         copy_code_button.setFixedWidth(120)
-        copy_code_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_GREEN}; color: white; font-family: Roboto, sans-serif; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
+        copy_code_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_GREEN}; color: white; font-family: Roboto; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
         action_layout.addWidget(copy_code_button)
 
         copy_sitrep_button = QPushButton("Copy Report")
         copy_sitrep_button.setFixedWidth(120)
-        copy_sitrep_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_CYAN}; color: white; font-family: Roboto, sans-serif; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
+        copy_sitrep_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_CYAN}; color: white; font-family: Roboto; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
         action_layout.addWidget(copy_sitrep_button)
 
         copy_all_button = QPushButton("Copy All")
         copy_all_button.setFixedWidth(120)
-        copy_all_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_BLUE}; color: white; font-family: Roboto, sans-serif; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
+        copy_all_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_BLUE}; color: white; font-family: Roboto; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
         action_layout.addWidget(copy_all_button)
 
         cancel_button = QPushButton("Cancel")
         cancel_button.setFixedWidth(120)
-        cancel_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_RED}; color: white; font-family: Roboto, sans-serif; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
+        cancel_button.setStyleSheet(f"QPushButton {{ background-color: {COLOR_BTN_RED}; color: white; font-family: Roboto; font-size: 15px; font-weight: bold; padding: 4px 8px; border: none; }}")
         action_layout.addWidget(cancel_button)
 
         main_layout.addLayout(action_layout)

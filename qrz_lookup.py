@@ -98,7 +98,7 @@ def _btn(label: str, color: str, min_w: int = 90) -> QPushButton:
     b.setMinimumWidth(min_w)
     b.setStyleSheet(
         f"QPushButton {{ background-color:{color}; color:#ffffff; border:none;"
-        f" padding:6px 14px; border-radius:4px; font-family:Roboto, sans-serif; font-size:15px;"
+        f" padding:6px 14px; border-radius:4px; font-family:Roboto; font-size:15px;"
         f" font-weight:bold; }}"
         f"QPushButton:hover {{ background-color:{color}; opacity:0.9; }}"
         f"QPushButton:pressed {{ background-color:{color}; }}"
@@ -433,7 +433,7 @@ class _QRZInfoSection(QWidget):
         self.lbl_lon     = QLabel(); self.lbl_lon.setFont(_mono_font())
 
         self.lbl_qrz_status = QLabel()
-        self.lbl_qrz_status.setStyleSheet("QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }")
+        self.lbl_qrz_status.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }")
         self.lbl_qrz_status.setWordWrap(True)
         self.lbl_qrz_status.setVisible(False)
 
@@ -558,7 +558,7 @@ class _QRZInfoSection(QWidget):
     # ── Last Seen lookup ──────────────────────────────────────────────────────
 
     def _fetch_last_seen(self, target: str) -> None:
-        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.lbl_last_seen.setText(f'<span style="{_k}">Last Seen:</span> …')
         threading.Thread(target=self._last_seen_thread, args=(target,), daemon=True).start()
 
@@ -580,7 +580,7 @@ class _QRZInfoSection(QWidget):
             self.last_seen_updated.emit("—")
 
     def _on_last_seen_updated(self, value: str) -> None:
-        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.lbl_last_seen.setText(f'<span style="{_k}">Last Seen:</span> {value}')
 
     def update_data(self, data: dict) -> None:
@@ -597,7 +597,7 @@ class _QRZInfoSection(QWidget):
             city_state = (city_state + " " + d["zip"]).strip()
         self.lbl_addr2.setText(city_state)
 
-        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.lbl_county.setText(f'<span style="{_k}">County:</span> {d["county"]}' if d["county"] else "")
         self.lbl_country.setText(f'<span style="{_k}">Country:</span> {d["country"]}' if d["country"] else "")
 
@@ -679,7 +679,7 @@ class _QRZInfoSection(QWidget):
         self.lbl_addr1.clear()
         self.lbl_addr2.clear()
         self.lbl_moddate.clear()
-        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.lbl_county.setText(f"<span style='{_k}'>County:</span>")
         self.lbl_country.setText(f"<span style='{_k}'>Country:</span>")
         if not self._skip_last_seen:
@@ -752,7 +752,7 @@ class QRZLookupDialog(QDialog):
             f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
         )
         main = QVBoxLayout(self)
         main.setContentsMargins(15, 15, 15, 15)
@@ -789,7 +789,7 @@ class QRZLookupDialog(QDialog):
         self.lbl_status = QLabel()
         self.lbl_status.setFont(QFont("Roboto"))
         self.lbl_status.setStyleSheet(
-            f"QLabel {{ color:{self._module_fg}; font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }}"
+            f"QLabel {{ color:{self._module_fg}; font-family:Roboto; font-size:13px; font-weight:bold; }}"
         )
         main.addWidget(self.lbl_status)
 
@@ -806,7 +806,7 @@ class QRZLookupDialog(QDialog):
         self.msg_edit.setStyleSheet(
             f"background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px;"
+            f" font-family:'Kode Mono'; font-size:13px;"
         )
         from PyQt5.QtGui import QFontMetrics
         _fm = QFontMetrics(self.msg_edit.font())
@@ -1004,10 +1004,10 @@ class JS8MessageDialog(QDialog):
             f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; combobox-popup:0; }}"
+            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
             f"QComboBox QAbstractItemView::item {{ min-height:22px; padding:0 6px; }}"
         )
         main = QVBoxLayout(self)
@@ -1087,7 +1087,7 @@ class JS8MessageDialog(QDialog):
         self.freq_edit.setStyleSheet(
             f"background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px;"
+            f" font-family:'Kode Mono'; font-size:13px;"
         )
         rf_row.addWidget(freq_lbl)
         rf_row.addWidget(self.freq_edit)
@@ -1101,7 +1101,7 @@ class JS8MessageDialog(QDialog):
         self.msg_edit.setStyleSheet(
             f"background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px;"
+            f" font-family:'Kode Mono'; font-size:13px;"
         )
         self.msg_edit.setFixedHeight(34)
         self.msg_edit.textChanged.connect(self._on_msg_changed)
@@ -1494,7 +1494,7 @@ class StatRepDetailDialog(QDialog):
         _source_map = {1: "RF via JS8Call", 2: "Internet", 3: "Internet Only"}
         source_text  = _source_map.get(int(source), "Unknown")
 
-        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.qrz_info.lbl_sr_posted.setText(
             f'<span style="{_k}">Posted:</span>  {row[0]}' if row[0] else f'<span style="{_k}">Posted:</span>'
         )
@@ -1560,7 +1560,7 @@ class StatRepDetailDialog(QDialog):
         if not text:
             return
         count_str = text.split(",", 1)[0].strip()
-        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.qrz_info.lbl_sr_delivered.setText(f'<span style="{_k}">Delivered To:</span>  {count_str} CommStat users')
 
     def _save_pinned(self, checked: bool) -> None:
@@ -1662,7 +1662,7 @@ class StatRepDetailDialog(QDialog):
             )
         status_table = (
             '<table style="width:100%;border-collapse:collapse;'
-            'font-family:Roboto,sans-serif;font-size:12px;">'
+            'font-family:Roboto;font-size:12px;">'
             f'<tr>{"".join(status_cells_hdr)}</tr>'
             f'<tr>{"".join(status_cells_val)}</tr>'
             '</table>'
@@ -1796,25 +1796,25 @@ class StatRepDetailDialog(QDialog):
 <style>
   {font_face_css}
   body {{ background:#ffffff; color:#000000;
-          font-family: Roboto, Arial, sans-serif; font-size:13px;
+          font-family: Roboto, Arial; font-size:13px;
           margin:24px; }}
-  h1 {{ font-family: 'Roboto Slab', Roboto, serif; font-weight:700;
+  h1 {{ font-family: 'Roboto Slab', Roboto; font-weight:700;
         font-size:22px; margin:0 0 4px 0; color:{self._program_bg}; }}
   .subhead {{ font-size:13px; color:#555; margin-bottom:14px; }}
-  .section-title {{ font-family: 'Roboto Slab', Roboto, serif; font-weight:700;
+  .section-title {{ font-family: 'Roboto Slab', Roboto; font-weight:700;
                     font-size:17px; margin:14px 0 6px 0;
                     border-bottom:1px solid #aaa; padding-bottom:2px; }}
   .qrz-row {{ display:flex; gap:16px; }}
-  .qrz-text {{ flex:1; font-family:'Kode Mono', monospace; font-size:12px;
+  .qrz-text {{ flex:1; font-family:'Kode Mono'; font-size:12px;
                line-height:1.5; color:#0000CC; }}
   .qrz-text span {{ color:#000000; }}
   .qrz-photo {{ flex:0 0 auto; text-align:right; }}
-  .sr-meta {{ font-family:'Kode Mono', monospace; font-size:12px; line-height:1.5;
+  .sr-meta {{ font-family:'Kode Mono'; font-size:12px; line-height:1.5;
               color:#0000CC; }}
   .sr-meta span {{ color:#000000; }}
   .map-box {{ text-align:center; page-break-inside:avoid; }}
   .status-box {{ page-break-inside:avoid; }}
-  .comments-box {{ font-family:'Kode Mono', monospace; font-size:12px;
+  .comments-box {{ font-family:'Kode Mono'; font-size:12px;
                    border:1px solid #ccc; padding:8px; color:#0000CC;
                    background-color:{self._data_bg}; }}
   .comments-box a {{ color:#0078d7; }}
@@ -2173,7 +2173,7 @@ def _text_to_html(text: str, bg: str) -> str:
     lines = linked.replace("\n", "<br>")
     return (
         f'<html><body style="background-color:{bg};color:#000000;'
-        f'font-family:\'Kode Mono\', monospace;font-size:13px;">{lines}</body></html>'
+        f'font-family:\'Kode Mono\';font-size:13px;">{lines}</body></html>'
     )
 
 
@@ -2563,7 +2563,7 @@ class DeliveryConfirmationDialog(QDialog):
             f"QLabel {{ color:{self._module_fg}; background-color: transparent; font-size: 13px; }}"
             f"QPlainTextEdit {{ background-color:{msg_bg}; color:{msg_fg};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px 8px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; {msg_weight} }}"
+            f" font-family:'Kode Mono'; font-size:13px; {msg_weight} }}"
         )
 
         main = QVBoxLayout(self)
@@ -2646,7 +2646,7 @@ class DeliveryConfirmationDialog(QDialog):
             confirm_lbl.setFont(QFont("Roboto", -1, QFont.Bold))
             confirm_lbl.setStyleSheet(
                 f"QLabel {{ color:{footer_color}; background-color: transparent;"
-                " font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; padding-top:6px; }"
+                " font-family:Roboto; font-size:13px; font-weight:bold; padding-top:6px; }"
             )
         main.addWidget(confirm_lbl)
         main.addStretch()
@@ -2685,7 +2685,7 @@ class DeliveryConfirmationDialog(QDialog):
 
     def _update_data(self, data: dict) -> None:
         d = _normalize_qrz(data)
-        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
 
         self.lbl_call.setText(f"<span style='{_k}'>Callsign:</span> {d['call']}")
         self.lbl_name.setText(f"<b>{d['name']}</b>" if d["name"] else "")
@@ -2716,7 +2716,7 @@ class DeliveryConfirmationDialog(QDialog):
             self._load_default_image()
 
     def _show_placeholder(self) -> None:
-        _k = "font-family:Roboto, sans-serif; font-weight:bold; font-size:13px;"
+        _k = "font-family:Roboto; font-weight:bold; font-size:13px;"
         self.lbl_call.setText(f"<span style='{_k}'>Callsign:</span> {self._callsign}")
         self.lbl_grid.setText(f"<span style='{_k}'>Grid:</span>")
         self.lbl_county.setText(f"<span style='{_k}'>County:</span>")

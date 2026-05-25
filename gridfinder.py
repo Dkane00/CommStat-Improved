@@ -187,12 +187,12 @@ class GridFinderApp(QMainWindow):
             QLineEdit {{
                 background-color: white; color: {COLOR_INPUT_TEXT};
                 border: 1px solid {COLOR_INPUT_BORDER}; border-radius: 4px;
-                padding: 4px; font-family: 'Kode Mono', monospace; font-size: 13px;
+                padding: 4px; font-family: 'Kode Mono'; font-size: 13px;
             }}
             QTableWidget {{
                 background-color: {_DATA_BG}; color: {_DATA_FG};
                 border: 1px solid {COLOR_INPUT_BORDER};
-                font-family: 'Kode Mono', monospace; font-size: 13px;
+                font-family: 'Kode Mono'; font-size: 13px;
                 gridline-color: #cccccc;
             }}
             QTableWidget::item {{
@@ -204,11 +204,11 @@ class GridFinderApp(QMainWindow):
             QHeaderView::section {{
                 background-color: {_TITLE_BG}; color: {_TITLE_FG};
                 border: 1px solid {COLOR_INPUT_BORDER};
-                padding: 4px; font-family: Roboto, sans-serif; font-size: 13px; font-weight: bold;
+                padding: 4px; font-family: Roboto; font-size: 13px; font-weight: bold;
             }}
             QStatusBar {{
                 background-color: {_PANEL_BG}; color: {_PANEL_FG};
-                font-family: Roboto, sans-serif; font-size: 13px;
+                font-family: Roboto; font-size: 13px;
             }}
         """)
 

@@ -31,14 +31,14 @@ class HelpDialog(QtWidgets.QDialog):
 
         title = QtWidgets.QLabel("JOIN THE TELEGRAM COMMUNITY")
         title.setStyleSheet(
-            f"font-family: 'Roboto Slab', serif; font-size: 16px; font-weight: 900;"
+            f"font-family: 'Roboto Slab'; font-size: 16px; font-weight: 900;"
             f"background-color: {_PROG_BG}; color: {_PROG_FG}; padding: 9px 0px;"
         )
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
         body_style = (
-            "font-family: Roboto, sans-serif; font-size: 13px; font-weight: normal;"
+            "font-family: Roboto; font-size: 13px; font-weight: normal;"
             "color: #333333; background: transparent;"
         )
 

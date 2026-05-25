@@ -202,7 +202,7 @@ class QRZSettingsDialog(QDialog):
         title_lbl.setFixedHeight(36)
         title_lbl.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         body.addWidget(title_lbl)
@@ -230,10 +230,10 @@ class QRZSettingsDialog(QDialog):
         self.table.setStyleSheet(
             f"QTableWidget {{ background-color:{_DATA_BG}; alternate-background-color:{_DATA_BG};"
             f" gridline-color:#cccccc; color:{_DATA_FG};"
-            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QTableWidget::item {{ padding:4px 6px; }}"
             f"QHeaderView::section {{ background-color:{_TITLE_BG}; color:{_TITLE_FG};"
-            f" padding:5px 6px; border:none; font-family:Roboto, sans-serif; font-size:13px;"
+            f" padding:5px 6px; border:none; font-family:Roboto; font-size:13px;"
             f" font-weight:bold; }}"
             f"QTableWidget::item:selected {{ background-color:#cce5ff; color:#000000; }}"
         )
@@ -248,7 +248,7 @@ class QRZSettingsDialog(QDialog):
             f" QRZ XML Data subscription. Any active paid QRZ subscription qualifies.</span>"
         )
         note_lbl.setWordWrap(True)
-        note_lbl.setStyleSheet(f"QLabel {{ font-family:Roboto, sans-serif; font-size:13px; }}")
+        note_lbl.setStyleSheet(f"QLabel {{ font-family:Roboto; font-size:13px; }}")
         body.addWidget(note_lbl)
 
         # ── Action buttons ────────────────────────────────────────────────────
@@ -293,7 +293,7 @@ class QRZSettingsDialog(QDialog):
         self.test_status_lbl.setWordWrap(True)
         self.test_status_lbl.setStyleSheet(
             "QLabel { color:#333333; border:1px solid #cccccc; border-radius:4px;"
-            " background-color:#f0f0f0; padding:6px; font-family:Roboto, sans-serif; font-size:13px; }"
+            " background-color:#f0f0f0; padding:6px; font-family:Roboto; font-size:13px; }"
         )
         self.test_status_lbl.setVisible(False)
         body.addWidget(self.test_status_lbl)
@@ -366,7 +366,7 @@ class QRZSettingsDialog(QDialog):
         self._iw_enable.setStyleSheet(
             "QComboBox { background-color:white; color:#333333;"
             " border:1px solid #cccccc; border-radius:4px; padding:2px 4px;"
-            " font-family:'Kode Mono', monospace; font-size:13px; }"
+            " font-family:'Kode Mono'; font-size:13px; }"
             "QComboBox QAbstractItemView { background-color:white; color:#333333;"
             " selection-background-color:#cce5ff; selection-color:#000000; }"
         )
@@ -495,7 +495,7 @@ class QRZSettingsDialog(QDialog):
         self.btn_test.setText("Testing...")
         self.test_status_lbl.setStyleSheet(
             "color:#555555; border:1px solid #cccccc; border-radius:4px;"
-            " background-color:#f0f0f0; padding:6px; font-family:Roboto, sans-serif; font-size:13px;"
+            " background-color:#f0f0f0; padding:6px; font-family:Roboto; font-size:13px;"
         )
         self.test_status_lbl.setText("Connecting to QRZ.com…")
         self.test_status_lbl.setVisible(True)
@@ -513,7 +513,7 @@ class QRZSettingsDialog(QDialog):
         color = "#1a7f37" if success else "#AA0000"
         self.test_status_lbl.setStyleSheet(
             f"color:{color}; border:1px solid #cccccc; border-radius:4px;"
-            " background-color:#f0f0f0; padding:6px; font-family:Roboto, sans-serif; font-size:13px;"
+            " background-color:#f0f0f0; padding:6px; font-family:Roboto; font-size:13px;"
         )
         self.test_status_lbl.setText(message)
         self.test_status_lbl.setVisible(True)

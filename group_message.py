@@ -79,7 +79,7 @@ def _labeled_col(lbl_text: str, ctrl: QtWidgets.QWidget) -> QHBoxLayout:
     col = QVBoxLayout()
     col.setSpacing(2)
     lbl = QLabel(lbl_text)
-    lbl.setStyleSheet("QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }")
+    lbl.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }")
     col.addWidget(lbl)
     col.addWidget(ctrl)
     return col
@@ -114,20 +114,20 @@ class GroupMessageDialog(QDialog):
 
         self.setStyleSheet(
             f"QDialog {{ background-color:{_PANEL_BG}; }}"
-            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}"
+            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; combobox-popup:0; }}"
+            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT}; }}"
             f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" selection-background-color:#cce5ff; selection-color:#000000; }}"
             f"QComboBox QAbstractItemView::item {{ min-height:22px; padding:0 6px; }}"
             f"QPlainTextEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
         )
 
         self._setup_ui()
@@ -151,7 +151,7 @@ class GroupMessageDialog(QDialog):
         title_lbl.setFixedHeight(36)
         title_lbl.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         body.addWidget(title_lbl)
@@ -183,7 +183,7 @@ class GroupMessageDialog(QDialog):
         self.freq_field.setStyleSheet(
             "QLineEdit { background-color:white; color:#333333;"
             " border:1px solid #cccccc; border-radius:4px; padding:2px 4px;"
-            " font-family:'Kode Mono', monospace; font-size:13px; }"
+            " font-family:'Kode Mono'; font-size:13px; }"
         )
         settings_row.addLayout(_labeled_col("Freq:", self.freq_field))
 
@@ -212,7 +212,7 @@ class GroupMessageDialog(QDialog):
         # Message label + inputs
         msg_lbl = QLabel("Message:")
         msg_lbl.setStyleSheet(
-            "QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }"
+            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
         )
         body.addWidget(msg_lbl)
 

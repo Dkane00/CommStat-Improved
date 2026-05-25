@@ -331,7 +331,7 @@ class MainWindow(QtWidgets.QWidget):
         self.log_view = QtWidgets.QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumBlockCount(300)
-        self.log_view.setStyleSheet("font-family:Consolas,monospace; font-size:11px;")
+        self.log_view.setStyleSheet("font-family:Consolas; font-size:11px;")
         root.addWidget(self.log_view)
 
         self._auto_build_value()

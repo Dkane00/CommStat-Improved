@@ -181,16 +181,16 @@ class JS8DirectMessageDialog(QDialog):
     def _setup_ui(self) -> None:
         self.setStyleSheet(
             f"QDialog {{ background-color:{_PANEL_BG}; }}"
-            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto, sans-serif; font-size:13px; }}"
+            f"QLabel {{ color:{_PANEL_FG}; font-family:Roboto; font-size:13px; }}"
             f"QLineEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QPlainTextEdit {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:4px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" font-family:'Kode Mono'; font-size:13px; }}"
             f"QComboBox {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px; padding:2px 4px;"
-            f" font-family:'Kode Mono', monospace; font-size:13px; combobox-popup:0; }}"
+            f" font-family:'Kode Mono'; font-size:13px; combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT}; }}"
             f"QComboBox QAbstractItemView {{ background-color:white; color:{COLOR_INPUT_TEXT};"
             f" selection-background-color:#cce5ff; selection-color:#000000; }}"
@@ -208,7 +208,7 @@ class JS8DirectMessageDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
@@ -294,7 +294,7 @@ class JS8DirectMessageDialog(QDialog):
 
         # Message body (~4 visual rows)
         msg_label = QLabel("Message:")
-        msg_label.setStyleSheet("QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }")
+        msg_label.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }")
         layout.addWidget(msg_label)
 
         self.body = QPlainTextEdit()
@@ -332,7 +332,7 @@ class JS8DirectMessageDialog(QDialog):
         col = QVBoxLayout()
         col.setSpacing(2)
         lbl = QLabel(lbl_text)
-        lbl.setStyleSheet("QLabel { font-family:Roboto, sans-serif; font-size:13px; font-weight:bold; }")
+        lbl.setStyleSheet("QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }")
         col.addWidget(lbl)
         col.addWidget(ctrl)
         return col
@@ -371,7 +371,7 @@ class JS8DirectMessageDialog(QDialog):
             self.qrz_info_label.setText(QRZ_MISS_TEXT)
             self.qrz_info_label.setStyleSheet(
                 "QLabel { background-color:transparent; color:#000000;"
-                " padding-left:2px; font-family:Roboto, sans-serif; font-size:13px;"
+                " padding-left:2px; font-family:Roboto; font-size:13px;"
                 " font-weight:bold; }"
             )
             return
@@ -386,7 +386,7 @@ class JS8DirectMessageDialog(QDialog):
             self.qrz_info_label.setText(QRZ_MISS_TEXT)
             self.qrz_info_label.setStyleSheet(
                 "QLabel { background-color:transparent; color:#000000;"
-                " padding-left:2px; font-family:Roboto, sans-serif; font-size:13px;"
+                " padding-left:2px; font-family:Roboto; font-size:13px;"
                 " font-weight:bold; }"
             )
             return
@@ -394,7 +394,7 @@ class JS8DirectMessageDialog(QDialog):
         self.qrz_info_label.setText(text)
         self.qrz_info_label.setStyleSheet(
             "QLabel { background-color:transparent; color:#000000;"
-            " padding-left:2px; font-family:'Kode Mono', monospace; font-size:13px; }"
+            " padding-left:2px; font-family:'Kode Mono'; font-size:13px; }"
         )
 
     def _effective_relay_cs(self) -> str:
@@ -673,7 +673,7 @@ class JS8DirectMessageDialog(QDialog):
         title.setFixedHeight(36)
         title.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         layout.addWidget(title)
@@ -682,7 +682,7 @@ class JS8DirectMessageDialog(QDialog):
             lbl = QLabel(text)
             lbl.setStyleSheet(
                 "QLabel { background-color:transparent; color:#000000;"
-                " font-family:Roboto, sans-serif; font-size:13px; font-weight:bold;"
+                " font-family:Roboto; font-size:13px; font-weight:bold;"
                 " padding-bottom:2px; border-bottom:1px solid #999999; }"
             )
             return lbl
@@ -693,7 +693,7 @@ class JS8DirectMessageDialog(QDialog):
             lbl.setWordWrap(True)
             lbl.setStyleSheet(
                 "QLabel { background-color:transparent; color:#000000;"
-                " font-family:Roboto, sans-serif; font-size:13px; padding-left:8px; }"
+                " font-family:Roboto; font-size:13px; padding-left:8px; }"
             )
             return lbl
 
@@ -815,7 +815,7 @@ class JS8DirectMessageDialog(QDialog):
         self.btn_refresh.setText("Done!")
         self.btn_refresh.setStyleSheet(
             "QPushButton { background-color:#28a745; color:#ffffff; border:none;"
-            " padding:6px 14px; border-radius:4px; font-family:Roboto, sans-serif;"
+            " padding:6px 14px; border-radius:4px; font-family:Roboto;"
             " font-size:15px; font-weight:bold; }"
         )
         QtCore.QTimer.singleShot(1500, self._restore_refresh_button)

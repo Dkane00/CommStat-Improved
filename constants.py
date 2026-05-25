@@ -37,9 +37,9 @@ FONT_MONO     = "Kode Mono"
 
 # CSS font-family stacks — use in stylesheets for graceful fallback if fonts
 # are not installed (e.g. fresh Linux install without bundled .ttf files).
-FONT_ROBOTO_STACK = "Roboto, sans-serif"
-FONT_MONO_STACK   = "'Kode Mono', monospace"
-FONT_SLAB_STACK   = "'Roboto Slab', serif"
+FONT_ROBOTO_STACK = "Roboto"
+FONT_MONO_STACK   = "'Kode Mono'"
+FONT_SLAB_STACK   = "'Roboto Slab'"
 FONT_SIZE     = 13   # body / inputs
 FONT_SIZE_SM  = 13   # hints & tips
 FONT_SIZE_LG  = 16   # section / dialog headers

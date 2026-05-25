@@ -2234,7 +2234,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenuBar {{
                 background-color: {menu_bg};
                 color: {menu_fg};
-                font-family: Roboto, sans-serif;
+                font-family: Roboto;
                 font-size: 13px;
                 font-weight: bold;
             }}
@@ -2247,11 +2247,11 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenu {{
                 background-color: {panel_bg};
                 color: {panel_fg};
-                font-family: Roboto, sans-serif;
+                font-family: Roboto;
                 font-size: 13px;
             }}
             QMenu::item {{
-                font-family: Roboto, sans-serif;
+                font-family: Roboto;
                 font-size: 13px;
                 padding: 3px 12px;
             }}
@@ -2432,7 +2432,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setStatusBar(self.statusbar)
         self.statusbar.setStyleSheet(
             "QStatusBar, QStatusBar QLabel, QStatusBar QPushButton {"
-            " font-family: Roboto, sans-serif; font-size: 12px; font-weight: normal; }"
+            " font-family: Roboto; font-size: 12px; font-weight: normal; }"
         )
 
         # Map view toggle buttons (left side of status bar)
@@ -2612,7 +2612,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QTableWidget {{
                 background-color: {data_bg};
                 color: {data_fg};
-                font-family: Roboto, sans-serif;
+                font-family: Roboto;
                 font-size: 13px;
                 gridline-color: #D2D0CF;
                 border: 1px solid #D2D0CF;
@@ -2620,7 +2620,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QTableWidget QHeaderView::section {{
                 background-color: {title_bg};
                 color: {title_fg};
-                font-family: Roboto, sans-serif;
+                font-family: Roboto;
                 font-weight: bold;
                 padding: 4px;
                 border: 1px solid {title_bg};
@@ -2641,7 +2641,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QHeaderView::section {{
                 background-color: {title_bg};
                 color: {title_fg};
-                font-family: Roboto, sans-serif;
+                font-family: Roboto;
                 font-weight: bold;
                 font-size: 13px;
                 padding: 4px;
@@ -2788,7 +2788,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.alert_delete_btn = QtWidgets.QPushButton("Delete")
         self.alert_delete_btn.setStyleSheet(
-            "QPushButton { background-color: #dc3545; color: white; font-family: Roboto, sans-serif; font-size: 13px; font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
+            "QPushButton { background-color: #dc3545; color: white; font-family: Roboto; font-size: 13px; font-weight: bold; border-radius: 4px; padding: 4px 12px; }"
             "QPushButton:hover { background-color: #c82333; }"
             "QPushButton:pressed { background-color: #bd2130; }"
         )
@@ -2806,8 +2806,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Default styling (will be updated when alert is displayed)
         self.alert_display.setStyleSheet("background-color: #333333;")
         self.alert_title_label.setStyleSheet("color: #ffffff;")
-        self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto, sans-serif;")
-        self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto, sans-serif;")
+        self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
+        self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
 
         # Add to same layout position as map
         self.main_layout.addWidget(self.alert_display, 4, 0, 2, 1, Qt.AlignLeft | Qt.AlignTop)
@@ -2966,7 +2966,7 @@ class MainWindow(QtWidgets.QMainWindow):
             date_formatted = date_received[:16] if len(date_received) > 16 else date_received
 
             # Build date/callsign line with bold labels (use Roboto font)
-            date_line = f'<span style="font-family: Roboto, sans-serif;"><b>Date Received:</b> {date_formatted}'
+            date_line = f'<span style="font-family: Roboto;"><b>Date Received:</b> {date_formatted}'
             if from_callsign:
                 date_line += f"&nbsp;&nbsp;&nbsp;<b>Sent By:</b> {from_callsign}"
             date_line += "</span>"
@@ -2978,17 +2978,17 @@ class MainWindow(QtWidgets.QMainWindow):
             if group:
                 # Show group + ALERT at top, then title in bold below (strip @ symbol)
                 group_display = group.lstrip('@')
-                formatted_title = f'<div style="font-family: \'Kode Mono\', monospace; font-size: 22px; font-weight: bold; margin-top: -18px;">@{group_display} - ALERT</div>'
+                formatted_title = f'<div style="font-family: \'Kode Mono\'; font-size: 22px; font-weight: bold; margin-top: -18px;">@{group_display} - ALERT</div>'
                 if title:
-                    formatted_title += f'<div style="font-family: \'Roboto Slab\', serif; font-size: 30px; font-weight: 900; margin-top: 24px;">{title}</div>'
+                    formatted_title += f'<div style="font-family: \'Roboto Slab\'; font-size: 30px; font-weight: 900; margin-top: 24px;">{title}</div>'
             else:
                 # No group, just show title in bold
-                formatted_title = f'<div style="font-family: \'Roboto Slab\', serif; font-size: 26px; font-weight: 900;">{title if title else ""}</div>'
+                formatted_title = f'<div style="font-family: \'Roboto Slab\'; font-size: 26px; font-weight: 900;">{title if title else ""}</div>'
 
             self.alert_display.setStyleSheet(f"background-color: {bg_color};")
             self.alert_title_label.setStyleSheet(f"color: {text_color};")
-            self.alert_message_label.setStyleSheet(f"color: {text_color}; font-family: Roboto, sans-serif;")
-            self.alert_date_label.setStyleSheet(f"color: {text_color}; font-family: Roboto, sans-serif;")
+            self.alert_message_label.setStyleSheet(f"color: {text_color}; font-family: Roboto;")
+            self.alert_date_label.setStyleSheet(f"color: {text_color}; font-family: Roboto;")
             self.alert_title_label.setText(formatted_title)
             self.alert_message_label.setText(message)
             self.alert_date_label.setText(date_line)
@@ -2996,8 +2996,8 @@ class MainWindow(QtWidgets.QMainWindow):
             # No alerts - show placeholder
             self.alert_display.setStyleSheet("background-color: #333333;")
             self.alert_title_label.setStyleSheet("color: #ffffff;")
-            self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto, sans-serif;")
-            self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto, sans-serif;")
+            self.alert_message_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
+            self.alert_date_label.setStyleSheet("color: #ffffff; font-family: Roboto;")
             self.alert_title_label.setText("No Alerts")
             self.alert_message_label.setText("")
             self.alert_date_label.setText("")
@@ -4747,19 +4747,19 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                 label_status.setText(" Disabled ")
                 label_status.setStyleSheet(
                     "background-color: #888888; color: white;"
-                    " font-family: Roboto, sans-serif; font-size: 12px; font-weight: normal;"
+                    " font-family: Roboto; font-size: 12px; font-weight: normal;"
                 )
             elif is_connected:
                 label_status.setText(" Connected ")
                 label_status.setStyleSheet(
                     "background-color: #00dd00; color: black;"
-                    " font-family: Roboto, sans-serif; font-size: 12px; font-weight: normal;"
+                    " font-family: Roboto; font-size: 12px; font-weight: normal;"
                 )
             else:
                 label_status.setText(" Disconnected ")
                 label_status.setStyleSheet(
                     "background-color: #dd0000; color: white;"
-                    " font-family: Roboto, sans-serif; font-size: 12px; font-weight: normal;"
+                    " font-family: Roboto; font-size: 12px; font-weight: normal;"
                 )
 
     def _tick_newsfeed(self) -> None:
@@ -5314,7 +5314,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                 padding: 4px 8px;
                 background-color: {panel_bg};
                 color: {panel_fg};
-                font-family: Roboto, sans-serif;
+                font-family: Roboto;
                 font-size: 13px;
             }}
             QCheckBox::indicator {{
@@ -5361,7 +5361,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                     padding: 4px 8px;
                     background-color: {panel_bg};
                     color: {panel_fg};
-                    font-family: Roboto, sans-serif;
+                    font-family: Roboto;
                     font-size: 13px;
                 }}
                 QCheckBox::indicator {{

@@ -75,7 +75,7 @@ COLOR_OPTIONS = [
 _READONLY_STYLE = (
     f"QLineEdit {{ background-color:{COLOR_DISABLED_BG}; color:{COLOR_DISABLED_TEXT};"
     f" border:1px solid {COLOR_INPUT_BORDER}; border-radius:4px;"
-    f" padding:2px 6px; font-family:'Kode Mono', monospace; font-size:13px; }}"
+    f" padding:2px 6px; font-family:'Kode Mono'; font-size:13px; }}"
 )
 
 
@@ -137,12 +137,12 @@ class AlertDialog(QDialog):
     def _setup_ui(self) -> None:
         self.setStyleSheet(
             f"QDialog {{ background-color:{_PANEL_BG}; }}"
-            f"QLabel {{ font-family:Roboto, sans-serif; font-size:13px; color:{_PANEL_FG}; }}"
+            f"QLabel {{ font-family:Roboto; font-size:13px; color:{_PANEL_FG}; }}"
             f"QLineEdit {{ background-color:white; color:#333333; border:1px solid #cccccc;"
-            f" border-radius:4px; padding:2px 6px; font-family:'Kode Mono', monospace; font-size:13px; }}"
+            f" border-radius:4px; padding:2px 6px; font-family:'Kode Mono'; font-size:13px; }}"
             f"QLineEdit:focus {{ border:1px solid #007bff; }}"
             f"QComboBox {{ background-color:white; color:#333333; border:1px solid #cccccc;"
-            f" border-radius:4px; padding:2px 4px; font-family:'Kode Mono', monospace; font-size:13px;"
+            f" border-radius:4px; padding:2px 4px; font-family:'Kode Mono'; font-size:13px;"
             f" combobox-popup:0; }}"
             f"QComboBox:disabled {{ background-color:{COLOR_DISABLED_BG};"
             f" color:{COLOR_DISABLED_TEXT}; }}"
@@ -162,7 +162,7 @@ class AlertDialog(QDialog):
         title_lbl.setFixedHeight(36)
         title_lbl.setStyleSheet(
             f"QLabel {{ background-color:{_PROG_BG}; color:{_PROG_FG};"
-            f" font-family:'Roboto Slab', serif; font-size:16px; font-weight:900;"
+            f" font-family:'Roboto Slab'; font-size:16px; font-weight:900;"
             f" padding-top:9px; padding-bottom:9px; }}"
         )
         body.addWidget(title_lbl)
