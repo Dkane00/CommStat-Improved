@@ -3350,7 +3350,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 conn.execute(query, tuple(data.values()))
                 conn.commit()
             print(f"{ConsoleColors.SUCCESS}[{rig_name}] Added {msg_type.upper()} {data.get(id_field, '')}{extra_info} from: {from_callsign}{ConsoleColors.RESET}")
-            self._sound_player.play(msg_type)
+            QtCore.QMetaObject.invokeMethod(
+                self, "_play_notification_sound",
+                QtCore.Qt.QueuedConnection,
+                QtCore.Q_ARG(str, msg_type),
+            )
             return msg_type
         except sqlite3.IntegrityError as e:
             if id_field in str(e) or "UNIQUE" in str(e):
@@ -6325,6 +6329,11 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         Cls = self._resolve_dialog_class("user_settings", "UserSettingsDialog")
         dlg = Cls(self.db, parent=self)
         dlg.exec_()
+
+    @QtCore.pyqtSlot(str)
+    def _play_notification_sound(self, msg_type: str) -> None:
+        """Play a notification sound on the main thread (safe for cross-thread calls)."""
+        self._sound_player.play(msg_type)
 
     def _on_sound_settings(self) -> None:
         """Open Sound Settings dialog (per-event sound file + enable)."""
