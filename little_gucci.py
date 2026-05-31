@@ -145,6 +145,14 @@ SOLAR_IMAGE_DIALOGS = [
      "Loading solar conditions...", "Failed to load solar data"),
 ]
 
+# Live weather map links opened in the user's browser from the Tools menu.
+WEATHER_MAP_LINKS = [
+    ("Windy.com", "https://www.windy.com/"),
+    ("Zoom Earth", "https://zoom.earth/"),
+    ("Ventusky", "https://www.ventusky.com/"),
+    ("Nat'l Weather Service", "https://www.weather.gov/"),
+]
+
 
 def hz_to_mhz(freq_hz: float, offset: float = 0) -> float:
     """Convert frequency in Hz to MHz, optionally subtracting an offset first."""
@@ -2251,6 +2259,13 @@ class MainWindow(QtWidgets.QMainWindow):
         # Create the Transmit menu
         self.transmit_menu = _MenuBarMenu("Transmit", self.menubar)
         self.menubar.addMenu(self.transmit_menu)
+        # Section headers throughout the menus are disabled QActions; style them
+        # bold with the menu background/foreground colors. In each of these menus
+        # the disabled items are exclusively section titles.
+        section_header_qss = (
+            f"QMenu::item:disabled {{ background-color: {menu_bg}; color: {menu_fg}; font-weight: bold; }}"
+        )
+        self.transmit_menu.setStyleSheet(section_header_qss)
 
         hybrid_lbl = QtWidgets.QAction("HYBRID TOOLS", self)
         hybrid_lbl.setEnabled(False)
@@ -2294,6 +2309,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Create the Filter menu
         self.filter_menu = _MenuBarMenu("Filter", self.menubar)
         self.menubar.addMenu(self.filter_menu)
+        self.filter_menu.setStyleSheet(section_header_qss)
 
         # Helper to create styled menu checkboxes
 
@@ -2352,6 +2368,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Create Tools dropdown menu
         self.tools_menu = _MenuBarMenu("Tools", self.menubar)
         self.menubar.addMenu(self.tools_menu)
+        self.tools_menu.setStyleSheet(section_header_qss)
 
         # Helper to create menu actions
         def create_action(menu, label, key, handler):
@@ -2360,12 +2377,38 @@ class MainWindow(QtWidgets.QMainWindow):
             menu.addAction(action)
             self.actions[key] = action
 
-        # Live Radiation Map - top of Tools menu
-        create_action(self.tools_menu, "Live Radiation Map", "live_radiation_map", self._on_live_radiation_map)
-        create_action(self.tools_menu, "ISS Pass Predictor", "iss_pass_predictor", self._on_iss_pass_predictor)
-        self.tools_menu.addSeparator()
+        # Helper to create a non-clickable bold section header in a menu.
+        def add_section_header(menu, text):
+            header = QtWidgets.QAction(text, self)
+            header.setEnabled(False)
+            font = header.font()
+            font.setBold(True)
+            header.setFont(font)
+            menu.addAction(header)
 
-        # Tools menu items - solar/radio image dialogs
+        # WEATHER MAPS section - browser links
+        add_section_header(self.tools_menu, "WEATHER MAPS")
+        for label, url in WEATHER_MAP_LINKS:
+            create_action(
+                self.tools_menu, label, "weather_" + label.lower().replace(" ", "_").replace(".", "_"),
+                lambda checked=False, u=url: QDesktopServices.openUrl(QUrl(u))
+            )
+
+        self.tools_menu.addSeparator()
+        create_action(self.tools_menu, "Live Radiation Map", "live_radiation_map", self._on_live_radiation_map)
+        for label, key, url in [
+            ("World Internet Outages", "internet_outages",  "https://radar.cloudflare.com/outage-center"),
+            ("US Power Outages",       "power_outages",     "https://poweroutage.us/"),
+            ("USGS Earthquakes",       "usgs_earthquakes",  "https://earthquake.usgs.gov/earthquakes/map/"),
+            ("Real-Time Lightning",    "lightning_map",     "https://www.lightningmaps.org/"),
+        ]:
+            create_action(
+                self.tools_menu, label, key,
+                lambda checked=False, u=url: QDesktopServices.openUrl(QUrl(u))
+            )
+
+        # HAMSQL Tools section - solar/radio image dialogs
+        add_section_header(self.tools_menu, "HAMSQL Tools")
         for menu_label, url, link, load_text, err_prefix in SOLAR_IMAGE_DIALOGS:
             create_action(
                 self.tools_menu, menu_label, menu_label.lower().replace(" ", "_"),
@@ -2413,8 +2456,23 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusbar.addWidget(btn)
             setattr(self, f"_btn_{mode}", btn)
 
-        hint_label = QtWidgets.QLabel(" - - -")
+        hint_label = QtWidgets.QLabel("  ")
         self.statusbar.addWidget(hint_label)
+
+        # Quick-link buttons after the divider, styled with the menu colors.
+        for label, url in [
+            ("Weather", "https://www.ventusky.com/"),
+            ("Radiation", "https://gmcmap.com/"),
+            ("Power", "https://poweroutage.us/"),
+            ("Internet", "https://radar.cloudflare.com/outage-center"),
+        ]:
+            btn = QtWidgets.QPushButton(label)
+            btn.setFixedHeight(18)
+            btn.setFixedWidth(70)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(f"background-color: {menu_bg}; color: {menu_fg};")
+            btn.clicked.connect(lambda checked, u=url: QDesktopServices.openUrl(QUrl(u)))
+            self.statusbar.addWidget(btn)
 
         # Add "Rig Status:" label (no sunken effect, permanent on right)
         rig_status_header = QtWidgets.QLabel(" Rig Status: ")
@@ -4610,10 +4668,6 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
     def _on_live_radiation_map(self) -> None:
         """Open the Live Radiation Map (gmcmap.com) in the user's browser."""
         QDesktopServices.openUrl(QUrl("https://gmcmap.com/"))
-
-    def _on_iss_pass_predictor(self) -> None:
-        """Open NASA's Spot The Station ISS pass predictor in the user's browser."""
-        QDesktopServices.openUrl(QUrl("https://spotthestation.nasa.gov/"))
 
     def _on_qrz_lookup(self) -> None:
         """Open standalone QRZ Lookup dialog (Tools menu)."""
