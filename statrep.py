@@ -677,11 +677,6 @@ class StatRepDialog(QDialog):
         self.delivery_combo.currentTextChanged.connect(self._on_delivery_changed)
         rig_row.addLayout(_labeled_col("Delivery:", self.delivery_combo))
 
-        # Help button to the right of Delivery dropdown
-        self.help_btn = make_button("Help", _COL_PINK)
-        self.help_btn.clicked.connect(self._on_help_clicked)
-        rig_row.addLayout(_labeled_col("", self.help_btn))
-
         rig_row.addStretch()
         layout.addLayout(rig_row)
 
@@ -796,7 +791,7 @@ class StatRepDialog(QDialog):
         for col in range(5):
             btn_grid.setColumnStretch(col, 1)
 
-        # Row 0: Forward Mode indicator (cols 0-2), Grid Finder (col 3), Brevity (col 4)
+        # Row 0: Forward Mode indicator (cols 0-1), Help (col 2), Grid Finder (col 3), Brevity (col 4)
         self._forward_mode_label = QtWidgets.QLabel("Forward Mode")
         self._forward_mode_label.setAlignment(QtCore.Qt.AlignCenter)
         self._forward_mode_label.setFont(label_font())
@@ -805,7 +800,11 @@ class StatRepDialog(QDialog):
         )
         self._forward_mode_label.setMinimumHeight(28)
         self._forward_mode_label.hide()
-        btn_grid.addWidget(self._forward_mode_label, 0, 0, 1, 3)
+        btn_grid.addWidget(self._forward_mode_label, 0, 0, 1, 2)
+
+        self.help_btn = make_button("Help", _COL_PINK)
+        self.help_btn.clicked.connect(self._on_help_clicked)
+        btn_grid.addWidget(self.help_btn, 0, 2)
 
         self.btn_gf = make_button("Grid Finder", COLOR_BTN_GREEN)
         self.btn_gf.clicked.connect(self._on_grid_finder)

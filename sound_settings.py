@@ -214,6 +214,7 @@ class SoundSettingsDialog(QDialog):
         if self._suppress_signals:
             return
         self.config.set_sound_enabled(event, enabled)
+        self.sound_player.reload(event)
 
     def _combo_for(self, event: str) -> QComboBox:
         for row_idx, (e, _label) in enumerate(_ROWS):

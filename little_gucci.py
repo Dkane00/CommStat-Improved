@@ -1822,6 +1822,9 @@ class SoundPlayer:
         self.reload_all()
 
     def reload(self, event: str) -> None:
+        if not self.config.get_sound_enabled(event):
+            self._effects.pop(event, None)
+            return
         filename = self.config.get_sound_file(event)
         if not filename:
             self._effects.pop(event, None)
