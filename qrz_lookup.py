@@ -46,8 +46,8 @@ from little_gucci import MAP_WHEEL_PX_PER_ZOOM
 from ui_helpers import apply_standard_dialog_chrome
 
 DB_PATH = "traffic.db3"
-_BACKBONE_URL  = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
-_DATAFEED_URL  = _BACKBONE_URL + "/datafeed-808585.php"
+_COMMSRVR_URL  = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
+_DATAFEED_URL  = _COMMSRVR_URL + "/datafeed-808585.php"
 
 _PROG_BG    = DEFAULT_COLORS.get("program_background", "#000000")
 _PROG_FG    = DEFAULT_COLORS.get("program_foreground", "#FFFFFF")
@@ -253,18 +253,18 @@ def _get_local_callsign() -> str:
 
 
 class _ReadCountThread(QThread):
-    """Fetches the delivery read-count (and last-seen) from the backbone server."""
+    """Fetches the delivery read-count (and last-seen) from the commsrvr server."""
     count_ready = pyqtSignal(str)
 
-    def __init__(self, backbone_url: str, callsign: str, global_id: int):
+    def __init__(self, commsrvr_url: str, callsign: str, global_id: int):
         super().__init__()
-        self.backbone_url = backbone_url
+        self.commsrvr_url = commsrvr_url
         self.callsign = callsign
         self.global_id = global_id
 
     def run(self) -> None:
         try:
-            url = (f"{self.backbone_url}/get-read-count-808585.php"
+            url = (f"{self.commsrvr_url}/get-read-count-808585.php"
                    f"?cs={urllib.parse.quote(self.callsign)}&id={self.global_id}")
             with urllib.request.urlopen(url, timeout=10) as resp:
                 text = resp.read().decode().strip()
@@ -610,7 +610,7 @@ class _QRZInfoSection(QWidget):
                 self.last_seen_updated.emit("—")
                 return
             url = (
-                f"{_BACKBONE_URL}/get-last-seen-808585.php"
+                f"{_COMMSRVR_URL}/get-last-seen-808585.php"
                 f"?cs={urllib.parse.quote(my_cs)}&lookup={urllib.parse.quote(target)}"
             )
             with urllib.request.urlopen(url, timeout=8) as resp:
@@ -1018,7 +1018,7 @@ class QRZLookupDialog(QDialog):
 
         # Write to the local messages table so the sent message shows up in the
         # message log, mirroring group_message.py's internet path. Done here on
-        # the send (not in the backbone callback) for the same reason.
+        # the send (not in the commsrvr callback) for the same reason.
         self._save_to_local_messages(my_cs, cs, text, msg_id, now)
         if self._refresh_callback:
             self._refresh_callback()
@@ -1370,7 +1370,7 @@ class StatRepDetailDialog(QDialog):
 
     def __init__(self, record_id: str, callsign: str,
                  internet_available: bool = True,
-                 backbone_url: str = "",
+                 commsrvr_url: str = "",
                  module_background: str = "#f5f5f5",
                  module_foreground: str = "#333333",
                  title_bar_background: str = "#555555",
@@ -1400,7 +1400,7 @@ class StatRepDetailDialog(QDialog):
         self._record_id = record_id
         self.callsign = callsign
         self.internet_available = internet_available
-        self._backbone_url = backbone_url
+        self._commsrvr_url = commsrvr_url
         self._module_bg = module_background
         self._module_fg = module_foreground
         self._title_bg = title_bar_background
@@ -1620,11 +1620,11 @@ class StatRepDetailDialog(QDialog):
         )
         self.qrz_info.lbl_sr_delivered.setText(f'<span style="{_k}">Delivered To:</span>')
 
-        if global_id and self._backbone_url and self.internet_available:
+        if global_id and self._commsrvr_url and self.internet_available:
             local_cs = _get_local_callsign()
             if local_cs:
                 rc_token = self._reload_token
-                self._rc_thread = _ReadCountThread(self._backbone_url, local_cs, global_id)
+                self._rc_thread = _ReadCountThread(self._commsrvr_url, local_cs, global_id)
                 self._rc_thread.count_ready.connect(
                     lambda text, t=rc_token: self._on_read_count(text) if t == self._reload_token else None
                 )
@@ -2148,10 +2148,10 @@ class StatRepDetailDialog(QDialog):
             "be deleted locally.",
         ):
             return
-        if self._global_id and self._backbone_url:
+        if self._global_id and self._commsrvr_url:
             try:
                 local_cs = _get_local_callsign()
-                url = (f"{self._backbone_url}/statrep-delete-808585.php"
+                url = (f"{self._commsrvr_url}/statrep-delete-808585.php"
                        f"?cs={urllib.parse.quote(local_cs)}&id={self._global_id}")
                 with urllib.request.urlopen(url, timeout=10):
                     pass
@@ -2745,10 +2745,10 @@ class MessageDetailDialog(QDialog):
         # map already loaded — nothing more to do for message detail view
 
 
-# ── Dialog: Delivery Confirmation popup (backbone ::DELIVERED::) ──────────
+# ── Dialog: Delivery Confirmation popup (commsrvr ::DELIVERED::) ──────────
 
 class DeliveryConfirmationDialog(QDialog):
-    """Two-column popup shown when the backbone confirms a message delivery.
+    """Two-column popup shown when the commsrvr confirms a message delivery.
 
     Patterned after the QRZ Lookup dialog:
       - Title bar (program colors): "DELIVERY CONFIRMATION"
@@ -3025,7 +3025,7 @@ class DeliveryConfirmationDialog(QDialog):
             self.resize(self.width() + deficit + 4, self.height())
 
 
-# ── Dialog: Message Expired popup (backbone ::EXPIRED::) ──────────────────
+# ── Dialog: Message Expired popup (commsrvr ::EXPIRED::) ──────────────────
 
 class MessageExpiredDialog(DeliveryConfirmationDialog):
     """Variant of DeliveryConfirmationDialog shown when a message's delivery

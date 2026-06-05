@@ -47,8 +47,8 @@ MAX_TITLE_LENGTH    = 20
 MAX_MESSAGE_LENGTH  = 131
 DATABASE_FILE       = "traffic.db3"
 
-_BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
-_DATAFEED  = _BACKBONE + "/datafeed-808585.php"
+_COMMSRVR = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
+_DATAFEED  = _COMMSRVR + "/datafeed-808585.php"
 
 INTERNET_RIG = "INTERNET ONLY"
 
@@ -518,7 +518,7 @@ class AlertDialog(QDialog):
         marker = "{%%3}" if self.rig_combo.currentText() == INTERNET_RIG else "{%%}"
         return f"{callsign}: {target} ,{self.alert_id},{color},{title},{message},{marker}"
 
-    def _submit_to_backbone_async(self, frequency: int, callsign: str, alert_data: str, now: str) -> None:
+    def _submit_to_commsrvr_async(self, frequency: int, callsign: str, alert_data: str, now: str) -> None:
         def submit_thread():
             try:
                 data_string = f"{now}\t{frequency}\t0\t30\t{alert_data}"
@@ -529,9 +529,9 @@ class AlertDialog(QDialog):
                 with urllib.request.urlopen(req, timeout=10) as response:
                     result = response.read().decode('utf-8').strip()
                 if result != "1":
-                    print(f"[Backbone] Alert submission failed - server returned: {result}")
+                    print(f"[Commsrvr] Alert submission failed - server returned: {result}")
             except Exception as e:
-                print(f"[Backbone] Error submitting alert: {e}")
+                print(f"[Commsrvr] Error submitting alert: {e}")
 
         threading.Thread(target=submit_thread, daemon=True).start()
 
@@ -556,7 +556,7 @@ class AlertDialog(QDialog):
         if frequency > 0:
             if self.delivery_combo.currentText() != "Limited Reach":
                 alert_data = f"{callsign}: {target} ,{self.alert_id},{color},{title},{message},{{%%}}"
-                self._submit_to_backbone_async(frequency, callsign, alert_data, datetime_str)
+                self._submit_to_commsrvr_async(frequency, callsign, alert_data, datetime_str)
 
     def _save_only(self) -> None:
         if self.rig_combo.currentText() == INTERNET_RIG:
@@ -603,7 +603,7 @@ class AlertDialog(QDialog):
             self._pending_message  = self._build_message(callsign, color, title, message)
             self._save_to_database(callsign, color, title, message, frequency=0)
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
-            self._submit_to_backbone_async(0, callsign, self._pending_message, now)
+            self._submit_to_commsrvr_async(0, callsign, self._pending_message, now)
             self.close()
             if self.on_alert_saved:
                 self.on_alert_saved()
