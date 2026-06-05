@@ -93,10 +93,10 @@ from constants import *
 # Constants
 # =============================================================================
 
-# Backbone server for remote announcements and slideshow images
+# Commsrvr server for remote announcements and slideshow images
 # This allows the developer to push messages/images to all CommStat users
-_BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
-_PING = _BACKBONE + "/heartbeat-808585.php"
+_COMMSRVR = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
+_PING = _COMMSRVR + "/heartbeat-808585.php"
 
 # Pixels of mouse-wheel scroll required to advance one Leaflet zoom level
 # on the bottom-left map. Leaflet default is 60; raised to dampen sensitivity.
@@ -751,7 +751,7 @@ class CustomWebEnginePage(QWebEnginePage):
                                 return items
                             dlg = StatRepDetailDialog(
                                 sr_id, callsign, mw._internet_available,
-                                backbone_url=_BACKBONE,
+                                commsrvr_url=_COMMSRVR,
                                 module_background=mw.config.get_color('module_background'),
                                 module_foreground=mw.config.get_color('module_foreground'),
                                 title_bar_background=mw.config.get_color('title_bar_background'),
@@ -2029,8 +2029,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.slideshow_timer.stop()
         if hasattr(self, 'internet_timer'):
             self.internet_timer.stop()
-        if hasattr(self, 'backbone_timer'):
-            self.backbone_timer.stop()
+        if hasattr(self, 'commsrvr_timer'):
+            self.commsrvr_timer.stop()
 
         # Disconnect all TCP connections gracefully
         if hasattr(self, 'tcp_pool'):
@@ -2115,7 +2115,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_live_feed()
         self._load_message_data()
 
-        # Backbone check will start automatically after 30 seconds via timer
+        # Commsrvr check will start automatically after 30 seconds via timer
 
     def _check_internet_on_startup(self) -> None:
         """Check internet connectivity at startup."""
@@ -2179,10 +2179,10 @@ class MainWindow(QtWidgets.QMainWindow):
             print("Internet connectivity: Now available")
             self.internet_timer.stop()
             # Send first heartbeat after the HEARTBEAT_DELAY_MS delay, then start timer
-            def start_backbone_heartbeat():
-                self._check_backbone()  # Send first heartbeat immediately
-                self.backbone_timer.start(180000)  # Then start 3 minute interval timer
-            QTimer.singleShot(HEARTBEAT_DELAY_MS, start_backbone_heartbeat)
+            def start_commsrvr_heartbeat():
+                self._check_commsrvr()  # Send first heartbeat immediately
+                self.commsrvr_timer.start(180000)  # Then start 3 minute interval timer
+            QTimer.singleShot(HEARTBEAT_DELAY_MS, start_commsrvr_heartbeat)
         elif not self._internet_available:
             print("Internet connectivity: Still not available (will retry in 30 minutes)")
 
@@ -3054,8 +3054,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.alert_index = max(0, count - 1)
         self._show_alert_display()
 
-    def _fetch_backbone_content(self) -> Optional[str]:
-        """Fetch and extract content from backbone server.
+    def _fetch_commsrvr_content(self) -> Optional[str]:
+        """Fetch and extract content from commsrvr server.
 
         Returns:
             Extracted content string, or None on error.
@@ -3100,7 +3100,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return None
 
     def _handle_db_update(self, content: str) -> bool:
-        """Handle database update from backbone server.
+        """Handle database update from commsrvr server.
 
         Expected format:
         db_update
@@ -3178,7 +3178,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return False
 
     def _handle_program_update(self, content: str) -> bool:
-        """Handle program update from backbone server.
+        """Handle program update from commsrvr server.
 
         Expected format:
         program_update
@@ -3441,7 +3441,7 @@ class MainWindow(QtWidgets.QMainWindow):
         snr: int,
         utc: str,
         format_code: str,  # "F!304" or "F!301"
-        source: int = 1,  # 1=Radio (TCP), 2=Internet (backbone)
+        source: int = 1,  # 1=Radio (TCP), 2=Internet (commsrvr)
         global_id: int = 0
     ) -> str:
         """
@@ -3527,8 +3527,8 @@ class MainWindow(QtWidgets.QMainWindow):
             rig_name, "statrep", data, "sr_id", "statrep", from_callsign
         )
 
-    def _handle_backbone_data_messages(self, content: str) -> bool:
-        """Handle backbone server data messages with ID prefixes.
+    def _handle_commsrvr_data_messages(self, content: str) -> bool:
+        """Handle commsrvr server data messages with ID prefixes.
 
         Expected format (one or more lines):
         113:  2026-02-06 18:32:32    14118000    0    30    N0DDK: @MAGNET ,EM83CV,3,T31,321311111331,GA,{&%}
@@ -3538,7 +3538,7 @@ class MainWindow(QtWidgets.QMainWindow):
         ID: date time freq_hz unused(0) snr callsign: message_data
 
         Args:
-            content: The backbone response content with ID-prefixed messages
+            content: The commsrvr response content with ID-prefixed messages
 
         Returns:
             True if at least one message was processed, False otherwise
@@ -3714,7 +3714,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Trigger UI refresh for processed data types (on main thread)
             if data_types_processed:
                 QtCore.QMetaObject.invokeMethod(
-                    self, "_refresh_backbone_data",
+                    self, "_refresh_commsrvr_data",
                     QtCore.Qt.QueuedConnection,
                     QtCore.Q_ARG(set, data_types_processed)
                 )
@@ -3722,7 +3722,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return processed_count > 0
 
         except Exception as e:
-            print(f"Error handling backbone data messages: {e}")
+            print(f"Error handling commsrvr data messages: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -3731,7 +3731,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _mark_message_delivered(self, callsign: str, date: str, msg_id: str) -> None:
         """Flag a sent message as delivered and refresh the message table.
 
-        Fired when the backbone returns ::DELIVERED::CALLSIGN,DATE,MSG_ID,...
+        Fired when the commsrvr returns ::DELIVERED::CALLSIGN,DATE,MSG_ID,...
         The row we sent has the recipient in the target column, so match on
         target/date/msg_id. Runs on the GUI thread (queued) so the table
         refresh — which touches Qt widgets — is safe.
@@ -3751,7 +3751,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot(str, str)
     def _show_delivered_popup(self, callsign: str, message: str) -> None:
-        """Show a delivery confirmation popup when the backbone confirms a message was delivered."""
+        """Show a delivery confirmation popup when the commsrvr confirms a message was delivered."""
         print(f"[DELIVERED] Showing popup — callsign={callsign!r}  message={message!r}")
         from qrz_lookup import DeliveryConfirmationDialog
         dlg = DeliveryConfirmationDialog(
@@ -3767,7 +3767,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot(str, str)
     def _show_expired_popup(self, callsign: str, message: str) -> None:
-        """Show an expiry popup when the backbone reports a message expired before retrieval."""
+        """Show an expiry popup when the commsrvr reports a message expired before retrieval."""
         print(f"[EXPIRED] Showing popup — callsign={callsign!r}  message={message!r}")
         from qrz_lookup import MessageExpiredDialog
         dlg = MessageExpiredDialog(
@@ -3782,8 +3782,8 @@ class MainWindow(QtWidgets.QMainWindow):
         dlg.exec_()
 
     @QtCore.pyqtSlot(set)
-    def _refresh_backbone_data(self, data_types: set) -> None:
-        """Refresh UI for data received from backbone server (called from main thread).
+    def _refresh_commsrvr_data(self, data_types: set) -> None:
+        """Refresh UI for data received from commsrvr server (called from main thread).
 
         Args:
             data_types: Set of data types to refresh ('statrep', 'alert', 'message')
@@ -3892,21 +3892,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.slideshow_index = (self.slideshow_index + 1) % len(self.slideshow_items)
         self._show_current_image()
 
-    def _check_backbone_content_async(self) -> None:
-        """Background thread to check backbone for updates."""
+    def _check_commsrvr_content_async(self) -> None:
+        """Background thread to check commsrvr for updates."""
         try:
-            content = self._fetch_backbone_content()
+            content = self._fetch_commsrvr_content()
             if not content:
                 return
 
-            self._backbone_fail_count = 0
+            self._commsrvr_fail_count = 0
 
             if content.strip() == '1':
                 return
 
             # Check if server returns "0"
             if content.strip() == '0':
-                print("Backbone server reply = 0")
+                print("Commsrvr server reply = 0")
                 return
             content_stripped = content.strip()
 
@@ -3926,12 +3926,12 @@ class MainWindow(QtWidgets.QMainWindow):
                     re.search(r'^\d+:\s+::STATREP-DELETE::', content_stripped, re.MULTILINE) or
                     re.search(r'::DELIVERED::', content_stripped) or
                     re.search(r'::EXPIRED::', content_stripped)):
-                self._handle_backbone_data_messages(content_stripped)
+                self._handle_commsrvr_data_messages(content_stripped)
 
         except Exception as e:
-            self._backbone_fail_count += 1
-            if self._backbone_fail_count >= self._backbone_max_failures:
-                self.backbone_timer.stop()
+            self._commsrvr_fail_count += 1
+            if self._commsrvr_fail_count >= self._commsrvr_max_failures:
+                self.commsrvr_timer.stop()
 
     def _setup_live_feed(self) -> None:
         """Create the live feed text area."""
@@ -4543,7 +4543,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                 from qrz_lookup import StatRepDetailDialog
                 dlg = StatRepDetailDialog(
                     record_id, callsign, self._internet_available,
-                    backbone_url=_BACKBONE,
+                    commsrvr_url=_COMMSRVR,
                     module_background=self.config.get_color('module_background'),
                     module_foreground=self.config.get_color('module_foreground'),
                     title_bar_background=self.config.get_color('title_bar_background'),
@@ -4723,17 +4723,17 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         if not self._internet_available:
             self.internet_timer.start(INTERNET_CHECK_INTERVAL)
 
-        # Backbone check timer - runs every 3 minutes, starts 30 seconds after launch
-        self._backbone_fail_count = 0
-        self._backbone_max_failures = 20
-        self.backbone_timer = QTimer(self)
-        self.backbone_timer.timeout.connect(self._check_backbone)
+        # Commsrvr check timer - runs every 3 minutes, starts 30 seconds after launch
+        self._commsrvr_fail_count = 0
+        self._commsrvr_max_failures = 20
+        self.commsrvr_timer = QTimer(self)
+        self.commsrvr_timer.timeout.connect(self._check_commsrvr)
         if self._internet_available:
             # Delay first heartbeat by HEARTBEAT_DELAY_MS, then start timer for subsequent heartbeats
-            def start_backbone_heartbeat():
-                self._check_backbone()  # Send first heartbeat immediately
-                self.backbone_timer.start(180000)  # Then start 3 minute interval timer
-            QTimer.singleShot(HEARTBEAT_DELAY_MS, start_backbone_heartbeat)
+            def start_commsrvr_heartbeat():
+                self._check_commsrvr()  # Send first heartbeat immediately
+                self.commsrvr_timer.start(180000)  # Then start 3 minute interval timer
+            QTimer.singleShot(HEARTBEAT_DELAY_MS, start_commsrvr_heartbeat)
 
         # News ticker animation timer
         self.newsfeed_timer = QTimer(self)
@@ -4773,11 +4773,11 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         elif self._internet_available:
             self._start_rss_fetch()
 
-    def _check_backbone(self) -> None:
-        """Check backbone server for content updates (runs in background thread)."""
+    def _check_commsrvr(self) -> None:
+        """Check commsrvr server for content updates (runs in background thread)."""
         if not self._internet_available:
             return
-        thread = threading.Thread(target=self._check_backbone_content_async, daemon=True)
+        thread = threading.Thread(target=self._check_commsrvr_content_async, daemon=True)
         thread.start()
 
     def _update_time(self) -> None:
@@ -5287,7 +5287,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                         font.setBold(True)
                         item.setFont(font)
                 # Bold the message ID (col 5) with a "Delivered" tooltip once the
-                # backbone confirms delivery (delivered = 1 in the messages table).
+                # commsrvr confirms delivery (delivered = 1 in the messages table).
                 elif is_message_table and col_num == 5 and len(row_data) > 8 and row_data[8]:
                     font = item.font()
                     font.setBold(True)
@@ -5815,7 +5815,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         value = re.sub(r'^(\w+)/\w+:', r'\1:', value)
 
         # Strip non-ASCII characters (e.g., JS8Call EOL diamond ♦) so the
-        # backbone regex can correctly match and discard the {^%} terminator
+        # commsrvr regex can correctly match and discard the {^%} terminator
         value = re.sub(r'[^ -~]', '', value).strip()
 
         return value
@@ -5844,11 +5844,11 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             message_value: Message text
             from_callsign: Sender callsign (base callsign without suffix)
             target: Target @GROUP or callsign
-            grid: Grid square from TCP params or empty for backbone
+            grid: Grid square from TCP params or empty for commsrvr
             freq: Frequency in Hz
             snr: Signal-to-noise ratio in dB
             utc: UTC timestamp string "YYYY-MM-DD HH:MM:SS"
-            source: 1=Radio (TCP), 2=Internet (backbone)
+            source: 1=Radio (TCP), 2=Internet (commsrvr)
 
         Returns:
             (message_type, None) where message_type is "statrep" or ""
@@ -5904,7 +5904,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         sr_fields = list(srcode[:12])  # Use only first 12 digits
         date_only, _ = parse_message_datetime(utc)
 
-        # Backbone duplicate detection: if we already have this record, only update global_id
+        # Commsrvr duplicate detection: if we already have this record, only update global_id
         if source == 2:
             try:
                 with sqlite3.connect(DATABASE_FILE, timeout=10) as _conn:
@@ -5979,7 +5979,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
         New format: @GROUP ,ALERT_ID,COLOR,TITLE,MESSAGE,{%%}
         Old format: @GROUP ,COLOR,TITLE,MESSAGE,{%%}
-        Legacy backbone format: LRT ,COLOR,TITLE,MESSAGE,{%%}
+        Legacy commsrvr format: LRT ,COLOR,TITLE,MESSAGE,{%%}
 
         Args:
             rig_name: Name of the rig/source
@@ -5989,7 +5989,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             freq: Frequency in Hz
             snr: Signal-to-noise ratio in dB
             utc: UTC timestamp string "YYYY-MM-DD HH:MM:SS"
-            source: 1=Radio (TCP), 2=Internet (backbone)
+            source: 1=Radio (TCP), 2=Internet (commsrvr)
 
         Returns:
             (message_type, None) where message_type is "alert" or ""
@@ -6002,7 +6002,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             alert_target = match.group(1).strip()
             fields_str = match.group(2).strip()
         else:
-            # Try LRT pattern (legacy backbone format)
+            # Try LRT pattern (legacy commsrvr format)
             match = re.search(r'LRT\s*,(.+?)\{\%\%\}', message_value)
             if match:
                 alert_target = target if target else "@ALL"
@@ -6098,7 +6098,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         Parse MESSAGE format.
 
         TCP format: CALLSIGN: TARGET MSG message_text
-        Backbone format: @GROUP MSG ,MSG_ID,MESSAGE_TEXT,{^%}
+        Commsrvr format: @GROUP MSG ,MSG_ID,MESSAGE_TEXT,{^%}
 
         Args:
             rig_name: Name of the rig/source
@@ -6108,7 +6108,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             freq: Frequency in Hz
             snr: Signal-to-noise ratio in dB
             utc: UTC timestamp string "YYYY-MM-DD HH:MM:SS"
-            source: 1=Radio (TCP), 2=Internet (backbone)
+            source: 1=Radio (TCP), 2=Internet (commsrvr)
 
         Returns:
             (message_type, None) where message_type is "message" or ""
@@ -6119,14 +6119,14 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         msg_target = target
         message_text = None
 
-        # Try to parse backbone format: [SENDER: ]@GROUP MSG ,MSG_ID,MESSAGE[,{^%}]
+        # Try to parse commsrvr format: [SENDER: ]@GROUP MSG ,MSG_ID,MESSAGE[,{^%}]
         # Callsign prefix is optional — new JS8Call omits it (sender is in from_callsign param).
         # Old JS8Call includes it; strip_duplicate_callsign reduces any double prefix first.
-        backbone_pattern = re.match(r'^(?:\w+:\s+)?(@?\w+)\s+MSG\s+,([^,]+),(.+?)(?:\s*,\{\^%\})?$', message_value, re.IGNORECASE)
-        if backbone_pattern:
-            msg_target = backbone_pattern.group(1).strip()
-            msg_id = backbone_pattern.group(2).strip()
-            message_text = backbone_pattern.group(3).strip()
+        commsrvr_pattern = re.match(r'^(?:\w+:\s+)?(@?\w+)\s+MSG\s+,([^,]+),(.+?)(?:\s*,\{\^%\})?$', message_value, re.IGNORECASE)
+        if commsrvr_pattern:
+            msg_target = commsrvr_pattern.group(1).strip()
+            msg_id = commsrvr_pattern.group(2).strip()
+            message_text = commsrvr_pattern.group(3).strip()
         else:
             # Try TCP MSG pattern: [CALLSIGN: ]TARGET MSG message_text
             tcp_pattern = re.match(r'^(?:\w+:\s+)?(@?\w+)\s+MSG\s+(.+)$', message_value, re.IGNORECASE)
@@ -6134,7 +6134,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                 msg_target = tcp_pattern.group(1).strip()
                 message_text = tcp_pattern.group(2).strip()
             elif source == 2:
-                # Backbone fallback: accept raw message (for older formats)
+                # Commsrvr fallback: accept raw message (for older formats)
                 message_text = message_value
                 msg_target = target if target else ""
             else:
@@ -6277,11 +6277,11 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             from_callsign: Sender callsign (base callsign without suffix)
             message_value: Message text (already preprocessed)
             target: Target @GROUP or callsign
-            grid: Grid square from TCP params or empty for backbone
+            grid: Grid square from TCP params or empty for commsrvr
             freq: Frequency in Hz
             snr: Signal-to-noise ratio in dB
             utc: UTC timestamp string "YYYY-MM-DD HH:MM:SS"
-            source: 1=Radio (TCP), 2=Internet (backbone)
+            source: 1=Radio (TCP), 2=Internet (commsrvr)
 
         Returns:
             (message_type, data_dict) where:

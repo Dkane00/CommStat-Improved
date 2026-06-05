@@ -44,9 +44,9 @@ if TYPE_CHECKING:
 
 DATABASE_FILE = "traffic.db3"
 
-# Backbone server (base64 encoded)
-_BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
-_DATAFEED = _BACKBONE + "/datafeed-808585.php"
+# Commsrvr server (base64 encoded)
+_COMMSRVR = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
+_DATAFEED = _COMMSRVR + "/datafeed-808585.php"
 
 # Status codes
 STATUS_GREEN = "1"
@@ -284,8 +284,8 @@ class StatRepDialog(QDialog):
             print(f"Error reading groups from database: {e}")
         return []
 
-    def _is_backbone_enabled(self) -> bool:
-        """Check if backbone submission is enabled.
+    def _is_commsrvr_enabled(self) -> bool:
+        """Check if commsrvr submission is enabled.
 
         Returns:
             True if enabled (always enabled, can be controlled via config.ini if needed)
@@ -293,8 +293,8 @@ class StatRepDialog(QDialog):
         # Always enabled by default. Could read from config.ini if user wants control.
         return True
 
-    def _submit_to_backbone_async(self, frequency: int, on_complete=None) -> None:
-        """Start background thread to submit statrep to backbone server.
+    def _submit_to_commsrvr_async(self, frequency: int, on_complete=None) -> None:
+        """Start background thread to submit statrep to commsrvr server.
 
         Args:
             frequency: Transmission frequency in Hz.
@@ -302,7 +302,7 @@ class StatRepDialog(QDialog):
                 request completes (success or failure).  global_id is 0 on
                 failure or when the server returns a non-numeric response.
         """
-        if not self._is_backbone_enabled():
+        if not self._is_commsrvr_enabled():
             if on_complete:
                 on_complete(0)
             return
@@ -333,12 +333,12 @@ class StatRepDialog(QDialog):
                 # Server returns the assigned global_id as an integer string
                 if result.isdigit():
                     global_id = int(result)
-                    print(f"[Backbone] Statrep submitted successfully (global_id={global_id})")
+                    print(f"[Commsrvr] Statrep submitted successfully (global_id={global_id})")
                 else:
-                    print(f"[Backbone] Statrep submission failed - server returned: {result}")
+                    print(f"[Commsrvr] Statrep submission failed - server returned: {result}")
 
             except Exception as e:
-                print(f"[Backbone] Failed to submit statrep: {e}")
+                print(f"[Commsrvr] Failed to submit statrep: {e}")
             finally:
                 if on_complete:
                     on_complete(global_id)
@@ -1347,7 +1347,7 @@ class StatRepDialog(QDialog):
 
         Args:
             frequency: The frequency in Hz at the time of transmission.
-            global_id: The global ID returned by the backbone server (0 if unknown).
+            global_id: The global ID returned by the commsrvr server (0 if unknown).
         """
         if hasattr(self, '_pending_save_data') and self._pending_save_data:
             d = self._pending_save_data
@@ -1459,13 +1459,13 @@ class StatRepDialog(QDialog):
             if not getattr(self, '_forward_origin', None):
                 self._pending_save_data = self._capture_save_data(0)
 
-                def _on_internet_backbone_complete(global_id: int) -> None:
+                def _on_internet_commsrvr_complete(global_id: int) -> None:
                     self._save_to_database(0, global_id)
                     QtCore.QTimer.singleShot(0, self._refresh_and_close)
 
-                self._submit_to_backbone_async(0, on_complete=_on_internet_backbone_complete)
+                self._submit_to_commsrvr_async(0, on_complete=_on_internet_commsrvr_complete)
             else:
-                self._submit_to_backbone_async(0)
+                self._submit_to_commsrvr_async(0)
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
             print(f"\n{'='*60}")
             print(f"STATREP TRANSMITTED (Internet) - {now} UTC")
@@ -1556,18 +1556,18 @@ class StatRepDialog(QDialog):
             if not getattr(self, '_forward_origin', None):
                 self._pending_save_data = self._capture_save_data(frequency)
                 if self.delivery_combo.currentText() == "Limited Reach":
-                    # No backbone submission — save immediately with no global_id
+                    # No commsrvr submission — save immediately with no global_id
                     self._save_to_database(frequency, 0)
                 else:
-                    # Delay DB write until backbone returns the assigned global_id
+                    # Delay DB write until commsrvr returns the assigned global_id
                     deferred_close = True
-                    def _on_radio_backbone_complete(global_id: int) -> None:
+                    def _on_radio_commsrvr_complete(global_id: int) -> None:
                         self._save_to_database(frequency, global_id)
                         QtCore.QTimer.singleShot(0, self._refresh_and_close)
-                    self._submit_to_backbone_async(frequency, on_complete=_on_radio_backbone_complete)
+                    self._submit_to_commsrvr_async(frequency, on_complete=_on_radio_commsrvr_complete)
             elif self.delivery_combo.currentText() != "Limited Reach":
-                # Forwarding path — still submit to backbone, no DB write
-                self._submit_to_backbone_async(frequency)
+                # Forwarding path — still submit to commsrvr, no DB write
+                self._submit_to_commsrvr_async(frequency)
 
             # Print to terminal
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")

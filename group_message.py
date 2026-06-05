@@ -47,8 +47,8 @@ MAX_MESSAGE_LENGTH   = 1500
 MAX_MESSAGE_LENGTH_INTERNET = 1500
 DATABASE_FILE = "traffic.db3"
 
-_BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
-_DATAFEED  = _BACKBONE + "/datafeed-808585.php"
+_COMMSRVR = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
+_DATAFEED  = _COMMSRVR + "/datafeed-808585.php"
 
 INTERNET_RIG = "INTERNET ONLY"
 
@@ -474,10 +474,10 @@ class GroupMessageDialog(QDialog):
         return f"{group} MSG ,{self.msg_id},{message},{marker}"
 
     # -------------------------------------------------------------------------
-    # Backbone / database
+    # Commsrvr / database
     # -------------------------------------------------------------------------
 
-    def _submit_to_backbone_async(self, frequency: int, callsign: str, message_data: str, now: str) -> None:
+    def _submit_to_commsrvr_async(self, frequency: int, callsign: str, message_data: str, now: str) -> None:
         def submit_thread():
             try:
                 data_string = f"{now}\t{frequency}\t0\t30\t{message_data}"
@@ -486,11 +486,11 @@ class GroupMessageDialog(QDialog):
                 with urllib.request.urlopen(req, timeout=10) as response:
                     result = response.read().decode('utf-8').strip()
                 if result == "1":
-                    print(f"[Backbone] Message submitted successfully")
+                    print(f"[Commsrvr] Message submitted successfully")
                 else:
-                    print(f"[Backbone] Message submission failed - server returned: {result}")
+                    print(f"[Commsrvr] Message submission failed - server returned: {result}")
             except Exception as e:
-                print(f"[Backbone] Error submitting message: {e}")
+                print(f"[Commsrvr] Error submitting message: {e}")
 
         threading.Thread(target=submit_thread, daemon=True).start()
 
@@ -514,7 +514,7 @@ class GroupMessageDialog(QDialog):
         if frequency > 0 and self.delivery_combo.currentText() != "Limited Reach":
             group        = "@" + self.group_combo.currentText()
             message_data = f"{callsign}: {group} MSG ,{self.msg_id},{message},{{^%}}"
-            self._submit_to_backbone_async(frequency, callsign, message_data, datetime_str)
+            self._submit_to_commsrvr_async(frequency, callsign, message_data, datetime_str)
 
     # -------------------------------------------------------------------------
     # Actions
@@ -575,7 +575,7 @@ class GroupMessageDialog(QDialog):
                 f" MSG ,{self.msg_id},{message},{{^%3}}"
             )
             self._save_to_database(callsign, message, frequency=0)
-            self._submit_to_backbone_async(0, callsign, message_data, now)
+            self._submit_to_commsrvr_async(0, callsign, message_data, now)
             if self.refresh_callback:
                 self.refresh_callback()
             self.accept()
