@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 MIN_CALLSIGN_LENGTH = 4
 MAX_CALLSIGN_LENGTH = 8
 MAX_TITLE_LENGTH    = 20
-MAX_MESSAGE_LENGTH  = 131
+MAX_MESSAGE_LENGTH  = 277
 DATABASE_FILE       = "traffic.db3"
 
 _BACKBONE = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
@@ -258,7 +258,7 @@ class AlertDialog(QDialog):
 
         self.message_field = QLineEdit()
         self.message_field.setMaxLength(MAX_MESSAGE_LENGTH)
-        self.message_field.setPlaceholderText("131 characters max")
+        self.message_field.setPlaceholderText("277 characters max")
         body.addWidget(self.message_field)
 
         body.addStretch()
