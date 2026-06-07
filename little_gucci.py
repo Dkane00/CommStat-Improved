@@ -827,6 +827,7 @@ class ConfigManager:
             self.directed_config = {
                 'hide_heartbeat': False, 'show_all_groups': True, 'show_every_group': True,
                 'hide_map': False, 'show_alerts': False, 'show_contacts': False,
+                'save_all_alerts': False, 'save_all_messages': False,
                 'selected_rss_feed': default_feed, 'apply_text_normalization': False,
                 'unchecked_groups': '',
                 'sound_alert_enabled':   True, 'sound_alert_file':   sound_defaults['alert'],
@@ -851,6 +852,8 @@ class ConfigManager:
                 'hide_map': config.getboolean("DIRECTEDCONFIG", "hide_map", fallback=False),
                 'show_alerts': config.getboolean("DIRECTEDCONFIG", "show_alerts", fallback=False),
                 'show_contacts': config.getboolean("DIRECTEDCONFIG", "show_contacts", fallback=False),
+                'save_all_alerts': config.getboolean("DIRECTEDCONFIG", "save_all_alerts", fallback=False),
+                'save_all_messages': config.getboolean("DIRECTEDCONFIG", "save_all_messages", fallback=False),
                 'selected_rss_feed': config.get("DIRECTEDCONFIG", "selected_rss_feed", fallback=default_feed),
                 'apply_text_normalization': config.getboolean("DIRECTEDCONFIG", "apply_text_normalization", fallback=True),
                 'unchecked_groups': config.get("DIRECTEDCONFIG", "unchecked_groups", fallback=""),
@@ -865,6 +868,7 @@ class ConfigManager:
             self.directed_config = {
                 'hide_heartbeat': False, 'show_all_groups': True, 'show_every_group': True,
                 'hide_map': False, 'show_alerts': False, 'show_contacts': False,
+                'save_all_alerts': False, 'save_all_messages': False,
                 'selected_rss_feed': default_feed, 'apply_text_normalization': False,
                 'unchecked_groups': '',
                 'sound_alert_enabled':   True, 'sound_alert_file':   sound_defaults['alert'],
@@ -940,6 +944,18 @@ class ConfigManager:
 
     def set_show_alerts(self, value: bool) -> None:
         self._save_setting('show_alerts', value)
+
+    def get_save_all_alerts(self) -> bool:
+        return self.directed_config.get('save_all_alerts', False)
+
+    def set_save_all_alerts(self, value: bool) -> None:
+        self._save_setting('save_all_alerts', value)
+
+    def get_save_all_messages(self) -> bool:
+        return self.directed_config.get('save_all_messages', False)
+
+    def set_save_all_messages(self, value: bool) -> None:
+        self._save_setting('save_all_messages', value)
 
     def get_sound_enabled(self, event: str) -> bool:
         return self.directed_config.get(f'sound_{event}_enabled', True)
@@ -2344,6 +2360,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.hide_live_feed_checkbox = self._create_menu_checkbox(
             self.filter_menu, "Hide Live Feed",
             False, self._on_toggle_hide_live_feed)
+
+        # ALERTS & MESSAGES section
+        self.filter_menu.addSeparator()
+        alerts_messages_label = QtWidgets.QAction("ALERTS & MESSAGES", self)
+        alerts_messages_label.setEnabled(False)  # Disabled as a section title
+        self.filter_menu.addAction(alerts_messages_label)
+
+        self.save_all_alerts_checkbox = self._create_menu_checkbox(
+            self.filter_menu, "Save all Alerts",
+            self.config.get_save_all_alerts(), self._on_toggle_save_all_alerts)
+
+        self.save_all_messages_checkbox = self._create_menu_checkbox(
+            self.filter_menu, "Save all Messages",
+            self.config.get_save_all_messages(), self._on_toggle_save_all_messages)
 
         # STATREP & MESSAGES section
         self.filter_menu.addSeparator()
@@ -5117,6 +5147,14 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
         self._load_statrep_data()
         self._save_map_position(callback=self._load_map)
 
+    def _on_toggle_save_all_alerts(self, checked: bool) -> None:
+        """Save all incoming group alerts, not just those for groups in the local table."""
+        self.config.set_save_all_alerts(checked)
+
+    def _on_toggle_save_all_messages(self, checked: bool) -> None:
+        """Save all incoming group messages, not just those for groups in the local table."""
+        self.config.set_save_all_messages(checked)
+
     def _on_toggle_hide_live_feed(self, checked: bool) -> None:
         """Hide/show the live feed. Session-only — resets on restart."""
         self._hide_live_feed = checked
@@ -6052,11 +6090,13 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             if alert_target.upper() not in user_callsigns:
                 return ("", None)
         else:
-            # @GROUP — only save if we're a member of that group (active or not)
-            group_name = alert_target[1:].upper()
-            all_groups = self.db.get_all_groups()
-            if group_name not in all_groups:
-                return ("", None)
+            # @GROUP — only save if we're a member of that group (active or not),
+            # unless "Save all Alerts" is enabled, which imports every group alert.
+            if not self.config.get_save_all_alerts():
+                group_name = alert_target[1:].upper()
+                all_groups = self.db.get_all_groups()
+                if group_name not in all_groups:
+                    return ("", None)
 
         # Build data dict for insertion
         data = {
@@ -6153,12 +6193,14 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
         # Check if message is to a group we're in or to one of our callsigns
         if msg_target.startswith("@"):
-            # Group message - only save if we're a member of that group
-            group_name = msg_target[1:].upper()  # Remove @ and normalize
-            all_groups = self.db.get_all_groups()
-            if group_name not in all_groups:
-                # Skip messages to groups we're not in
-                return ("", None)
+            # Group message - only save if we're a member of that group, unless
+            # "Save all Messages" is enabled, which imports every group message.
+            if not self.config.get_save_all_messages():
+                group_name = msg_target[1:].upper()  # Remove @ and normalize
+                all_groups = self.db.get_all_groups()
+                if group_name not in all_groups:
+                    # Skip messages to groups we're not in
+                    return ("", None)
         else:
             # Direct message - only save if to one of our callsigns
             target_call = msg_target.upper()
