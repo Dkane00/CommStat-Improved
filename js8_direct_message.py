@@ -12,6 +12,8 @@ that has been observed hearing the target.
 import os
 import re
 import sqlite3
+from datetime import datetime, timezone
+from html import escape
 from typing import TYPE_CHECKING
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -368,20 +370,17 @@ class JS8DirectMessageDialog(QDialog):
             self.qrz_info_label.clear()
             return
 
-        cached = get_qrz_cached(cs, include_stale=True)
-        if not cached:
-            self.qrz_info_label.setText(QRZ_MISS_TEXT)
-            self.qrz_info_label.setStyleSheet(
-                "QLabel { background-color:transparent; color:#000000;"
-                " padding-left:2px; font-family:Roboto; font-size:13px;"
-                " font-weight:bold; }"
-            )
-            return
+        # "Last Seen" replaces the QRZ country field — sourced from the
+        # contacts roster (insert_date), so it's available even when QRZ
+        # has no cache entry for the callsign.
+        last_seen = self._last_seen_text(cs)
 
-        name    = (cached.get("name")    or "").strip()
-        city    = (cached.get("city")    or "").strip()
-        state   = (cached.get("state")   or "").strip()
-        country = (cached.get("country") or "").strip()
+        cached = get_qrz_cached(cs, include_stale=True)
+        name = city = state = ""
+        if cached:
+            name  = (cached.get("name")  or "").strip()
+            city  = (cached.get("city")  or "").strip()
+            state = (cached.get("state") or "").strip()
 
         location_parts = []
         if city and state:
@@ -391,9 +390,11 @@ class JS8DirectMessageDialog(QDialog):
         elif state:
             location_parts.append(state)
 
-        parts = [p for p in (name, ", ".join(location_parts) if location_parts else "", country) if p]
-        text = " | ".join(parts)
-        if not text:
+        location = ", ".join(location_parts) if location_parts else ""
+        info_text = " | ".join(p for p in (name, location) if p)
+
+        if not info_text and not last_seen:
+            self.qrz_info_label.setTextFormat(Qt.PlainText)
             self.qrz_info_label.setText(QRZ_MISS_TEXT)
             self.qrz_info_label.setStyleSheet(
                 "QLabel { background-color:transparent; color:#000000;"
@@ -402,11 +403,98 @@ class JS8DirectMessageDialog(QDialog):
             )
             return
 
-        self.qrz_info_label.setText(text)
+        # Everything renders Kode Mono except the literal words "Last Seen",
+        # which are Roboto bold via an inline span (RichText). The elapsed
+        # time that follows stays Kode Mono.
+        segments = []
+        if info_text:
+            segments.append(
+                f"<span style=\"font-family:'Kode Mono';\">{escape(info_text)}</span>"
+            )
+        if last_seen:
+            if info_text:
+                segments.append("<span style=\"font-family:'Kode Mono';\"> | </span>")
+            prefix = "Last Seen"
+            remainder = last_seen[len(prefix):] if last_seen.startswith(prefix) else ""
+            segments.append(
+                "<span style=\"font-family:Roboto; font-weight:bold;\">Last Seen</span>"
+            )
+            if remainder:
+                segments.append(
+                    f"<span style=\"font-family:'Kode Mono';\">{escape(remainder)}</span>"
+                )
+
+        self.qrz_info_label.setTextFormat(Qt.RichText)
+        self.qrz_info_label.setText("".join(segments))
         self.qrz_info_label.setStyleSheet(
             "QLabel { background-color:transparent; color:#000000;"
             " padding-left:2px; font-family:'Kode Mono'; font-size:13px; }"
         )
+
+    def _last_seen_text(self, target_cs: str) -> str:
+        """Return 'Last Seen <elapsed> ago' for the most recent contacts
+        observation of *target_cs*, or '' if the station isn't in the roster.
+
+        insert_date is stored as 'YYYY-MM-DD HH:MM:SS UTC' (see little_gucci
+        upsert_contacts_*); its fixed width lets MAX() pick the newest row
+        across all relays / frequencies by plain string comparison.
+        """
+        cs = (target_cs or "").strip().upper()
+        if not cs:
+            return ""
+
+        insert_date = None
+        try:
+            with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
+                cur = conn.execute(
+                    "SELECT MAX(insert_date) FROM contacts WHERE target_cs = ?",
+                    (cs,),
+                )
+                row = cur.fetchone()
+                insert_date = row[0] if row else None
+        except sqlite3.Error as e:
+            print(f"[JS8DirectMessage] last-seen query failed: {e}")
+            return ""
+
+        ago = self._ago_text(insert_date)
+        return f"Last Seen {ago}" if ago else ""
+
+    def _ago_text(self, insert_date: str) -> str:
+        """Elapsed-since string for a contacts insert_date: 'just now',
+        '1h 21m ago', '2d 3h ago', or '' if the timestamp can't be parsed."""
+        seen = self._parse_insert_date(insert_date)
+        if seen is None:
+            return ""
+        elapsed = (datetime.now(timezone.utc) - seen).total_seconds()
+        if elapsed < 60:
+            return "just now"
+        return f"{self._format_elapsed(elapsed)} ago"
+
+    @staticmethod
+    def _parse_insert_date(value: str):
+        """Parse a 'YYYY-MM-DD HH:MM:SS UTC' contacts timestamp into a
+        timezone-aware UTC datetime, or None if it can't be parsed."""
+        s = (value or "").strip()
+        if s.endswith(" UTC"):
+            s = s[:-4].strip()
+        try:
+            dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+        return dt.replace(tzinfo=timezone.utc)
+
+    @staticmethod
+    def _format_elapsed(seconds: float) -> str:
+        """Compact elapsed string: '45m', '6h 21m', or '2d 3h'."""
+        total = max(0, int(seconds))
+        days    = total // 86400
+        hours   = (total % 86400) // 3600
+        minutes = (total % 3600) // 60
+        if days > 0:
+            return f"{days}d {hours}h"
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
 
     def _effective_relay_cs(self) -> str:
         """
@@ -572,7 +660,7 @@ class JS8DirectMessageDialog(QDialog):
         try:
             with sqlite3.connect(DATABASE_FILE, timeout=10) as conn:
                 cur = conn.execute(
-                    "SELECT relay_cs, target_snr FROM contacts "
+                    "SELECT relay_cs, target_snr, insert_date FROM contacts "
                     "WHERE target_cs = ? AND freq = ? "
                     "ORDER BY target_snr DESC",
                     (target_cs, self._current_freq_mhz),
@@ -592,7 +680,7 @@ class JS8DirectMessageDialog(QDialog):
         blank.setData("", Qt.UserRole)
         model.appendRow(blank)
 
-        for relay_cs, target_snr in rows:
+        for relay_cs, target_snr, insert_date in rows:
             if not relay_cs:
                 continue
             try:
@@ -600,13 +688,16 @@ class JS8DirectMessageDialog(QDialog):
             except (TypeError, ValueError):
                 snr_int = 0
 
+            ago = self._ago_text(insert_date)
+            suffix = f" | {ago}" if ago else ""
+
             if relay_cs == target_cs:
-                item = QStandardItem(f"{NO_RELAY_LABEL}  {snr_int:+d}")
+                item = QStandardItem(f"{NO_RELAY_LABEL}  {snr_int:+d}{suffix}")
                 f = item.font()
                 f.setBold(True)
                 item.setFont(f)
             else:
-                item = QStandardItem(f"{relay_cs}  {snr_int:+d}")
+                item = QStandardItem(f"{relay_cs}  {snr_int:+d}{suffix}")
             item.setData(relay_cs, Qt.UserRole)
             model.appendRow(item)
 

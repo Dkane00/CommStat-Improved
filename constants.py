@@ -112,7 +112,7 @@ NEWSFEED_SCROLL_DURATION_MS = 1000            # total ms for scroll-off phase
 # Contacts roster retention. Hourly cleanup deletes rows whose insert_date is
 # older than this many hours, keeping the JS8 Direct Message target/relay
 # pickers focused on recently-heard stations.
-CONTACTS_RETENTION_HOURS   = 24
+CONTACTS_RETENTION_HOURS   = 6
 
 # =============================================================================
 # StatRep Table Headers
