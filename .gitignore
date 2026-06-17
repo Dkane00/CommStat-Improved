@@ -42,6 +42,9 @@ CLAUDE.md
 # Demo mode files (generated for demonstrations)
 demo_mode.py
 
+# Local slideshow images (not distributed)
+my_images/
+
 # Documentation (internal development notes)
 BACKBONE_DATA_MESSAGES.md
 F304_F301_GRID_LOOKUP.md
