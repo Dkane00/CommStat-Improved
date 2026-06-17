@@ -31,7 +31,7 @@ from constants import (
     RIG_FETCH_DELAY_MS, RIG_FREQ_DELAY_MS,
 )
 from id_utils import generate_time_based_id
-from ui_helpers import make_button, label_font, mono_font, apply_standard_dialog_chrome
+from ui_helpers import make_button, label_font, mono_font, apply_standard_dialog_chrome, connect_single
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -832,7 +832,7 @@ class StatRepDialog(QDialog):
         btn_grid.addWidget(self.btn_save, 1, 2)
 
         btn_tx = make_button("Transmit", COLOR_BTN_BLUE)
-        btn_tx.clicked.connect(self._on_transmit)
+        connect_single(btn_tx, self._on_transmit)
         btn_grid.addWidget(btn_tx, 1, 3)
 
         btn_cancel = make_button("Cancel", _COL_CANCEL)

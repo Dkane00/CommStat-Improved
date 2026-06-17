@@ -34,7 +34,7 @@ from constants import (
 )
 from id_utils import generate_time_based_id
 from qrz_client import get_qrz_cached
-from ui_helpers import make_button, apply_standard_dialog_chrome
+from ui_helpers import make_button, apply_standard_dialog_chrome, connect_single
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -323,7 +323,7 @@ class JS8DirectMessageDialog(QDialog):
         btn_row.addWidget(self.btn_clear)
 
         self.btn_transmit = make_button("Transmit", COLOR_BTN_BLUE, min_w=100)
-        self.btn_transmit.clicked.connect(self._on_transmit)
+        connect_single(self.btn_transmit, self._on_transmit)
         btn_row.addWidget(self.btn_transmit)
 
         self.btn_cancel = make_button("Cancel", COLOR_BTN_RED, min_w=100)
@@ -597,6 +597,13 @@ class JS8DirectMessageDialog(QDialog):
             return
         freq_mhz = dial_freq / 1_000_000
         self.freq_field.setText(f"{freq_mhz:.3f}")
+        # JS8Call re-broadcasts RIG.FREQ roughly once a second even when the
+        # radio hasn't moved. Only rebuild the Target list (which clears the
+        # combo) when the frequency has actually changed — otherwise the
+        # periodic poll wipes the user's current selection. Use Refresh to
+        # pick up newly-heard stations at the same frequency.
+        if self._current_freq_mhz is not None and abs(freq_mhz - self._current_freq_mhz) < 1e-6:
+            return
         self._current_freq_mhz = float(freq_mhz)
         self._load_targets(self._current_freq_mhz)
 

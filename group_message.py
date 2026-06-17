@@ -31,7 +31,7 @@ from constants import (
     RIG_FETCH_DELAY_MS,
 )
 from id_utils import generate_time_based_id
-from ui_helpers import make_button, apply_standard_dialog_chrome
+from ui_helpers import make_button, apply_standard_dialog_chrome, connect_single
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -229,7 +229,7 @@ class GroupMessageDialog(QDialog):
         btn_row.addWidget(self.pushButton_3)
 
         self.pushButton = make_button("Transmit", COLOR_BTN_BLUE)
-        self.pushButton.clicked.connect(self._transmit)
+        connect_single(self.pushButton, self._transmit)
         btn_row.addWidget(self.pushButton)
 
         self.pushButton_2 = make_button("Cancel", _COL_CANCEL)

@@ -43,7 +43,7 @@ from constants import (
 )
 # Single source of truth for mouse-wheel zoom dampening — see little_gucci.py
 from little_gucci import MAP_WHEEL_PX_PER_ZOOM
-from ui_helpers import apply_standard_dialog_chrome
+from ui_helpers import apply_standard_dialog_chrome, connect_single
 
 DB_PATH = "traffic.db3"
 _COMMSRVR_URL  = base64.b64decode("aHR0cHM6Ly9jb21tc3RhdC5hcHA=").decode()
@@ -866,7 +866,7 @@ class QRZLookupDialog(QDialog):
         self.btn_clear_msg.clicked.connect(self.msg_edit.clear)
         self.btn_send = _btn("Send", COLOR_BTN_BLUE)
         self.btn_send.setVisible(False)
-        self.btn_send.clicked.connect(self._on_send_internet)
+        connect_single(self.btn_send, self._on_send_internet)
         self.btn_close_lookup = _btn("Close", _COL_CANCEL)
         self.btn_close_lookup.clicked.connect(self.reject)
 
@@ -1210,7 +1210,7 @@ class JS8MessageDialog(QDialog):
         btn_row.addWidget(self.btn_clear_msg)
         self.btn_transmit = _btn("Transmit", COLOR_BTN_CYAN)
         self.btn_transmit.setVisible(False)
-        self.btn_transmit.clicked.connect(self._on_transmit)
+        connect_single(self.btn_transmit, self._on_transmit)
         btn_row.addWidget(self.btn_transmit)
         self.btn_close = _btn("Close", _COL_CANCEL)
         self.btn_close.clicked.connect(self.reject)

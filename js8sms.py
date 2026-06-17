@@ -20,7 +20,7 @@ from constants import (
     COLOR_DISABLED_BG, COLOR_DISABLED_TEXT,
     COLOR_BTN_BLUE, COLOR_BTN_RED,
 )
-from ui_helpers import make_button, apply_standard_dialog_chrome
+from ui_helpers import make_button, apply_standard_dialog_chrome, connect_single
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -210,7 +210,7 @@ class JS8SMSDialog(QDialog):
         btn_row.addStretch()
 
         self.btn_transmit = make_button("Transmit", COLOR_BTN_BLUE, min_w=100)
-        self.btn_transmit.clicked.connect(self._on_transmit)
+        connect_single(self.btn_transmit, self._on_transmit)
         btn_row.addWidget(self.btn_transmit)
 
         btn_cancel = make_button("Cancel", COLOR_BTN_RED, min_w=100)

@@ -30,7 +30,7 @@ from constants import (
     COLOR_BTN_BLUE, COLOR_BTN_CYAN,
 )
 from id_utils import generate_time_based_id
-from ui_helpers import make_button, label_font, apply_standard_dialog_chrome
+from ui_helpers import make_button, label_font, apply_standard_dialog_chrome, connect_single
 
 if TYPE_CHECKING:
     from js8_tcp_client import TCPConnectionPool
@@ -273,7 +273,7 @@ class AlertDialog(QDialog):
         btn_row.addWidget(self.save_button)
 
         self.transmit_button = make_button("Transmit", COLOR_BTN_BLUE, min_w=100)
-        self.transmit_button.clicked.connect(self._transmit)
+        connect_single(self.transmit_button, self._transmit)
         btn_row.addWidget(self.transmit_button)
 
         self.cancel_button = make_button("Cancel", _COL_CANCEL, min_w=100)

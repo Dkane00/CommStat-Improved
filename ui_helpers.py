@@ -13,7 +13,7 @@ import os
 from typing import Tuple
 
 from PyQt5 import QtGui
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QPushButton, QLineEdit, QCheckBox, QComboBox, QWidget, QHBoxLayout, QMessageBox,
 )
@@ -41,6 +41,26 @@ def make_button(label: str, color: str, min_w: int = 90) -> QPushButton:
         f"QPushButton:disabled {{ background-color:#cccccc; color:#888888; }}"
     )
     return b
+
+
+def connect_single(button, handler, window_ms: int = 1000):
+    """Connect button.clicked to handler so rapid repeat clicks (e.g. a
+    double-click) fire the handler only once. A second click within window_ms
+    is ignored. Does NOT touch setEnabled(), so it never interferes with
+    validation- or mode-driven enable/disable logic."""
+    state = {"busy": False}
+
+    def _wrapped(*_args):
+        if state["busy"]:
+            return
+        state["busy"] = True
+        try:
+            handler()
+        finally:
+            QTimer.singleShot(window_ms, lambda: state.update(busy=False))
+
+    button.clicked.connect(_wrapped)
+    return _wrapped
 
 
 # ── Confirmation dialog ───────────────────────────────────────────────────────
