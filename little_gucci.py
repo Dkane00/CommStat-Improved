@@ -3979,6 +3979,11 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             content = self._fetch_commsrvr_content()
             if not content:
+                self._commsrvr_fail_count += 1
+                print(f"[Heartbeat] No reply from server (failure {self._commsrvr_fail_count}/{self._commsrvr_max_failures})")
+                if self._commsrvr_fail_count >= self._commsrvr_max_failures:
+                    print("[Heartbeat] Max failures reached — heartbeat stopped")
+                    self.commsrvr_timer.stop()
                 return
 
             self._commsrvr_fail_count = 0
@@ -4727,6 +4732,8 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
                     program_background=self.config.get_color('program_background'),
                     program_foreground=self.config.get_color('program_foreground'),
                     msg_id=msg_id,
+                    tcp_pool=self.tcp_pool,
+                    connector_manager=self.connector_manager,
                     refresh_callback=self._load_message_data,
                     parent=self
                 )
@@ -4855,7 +4862,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
 
         # Commsrvr check timer - runs every 3 minutes, starts 30 seconds after launch
         self._commsrvr_fail_count = 0
-        self._commsrvr_max_failures = 20
+        self._commsrvr_max_failures = 3
         self.commsrvr_timer = QTimer(self)
         self.commsrvr_timer.timeout.connect(self._check_commsrvr)
         if self._internet_available:

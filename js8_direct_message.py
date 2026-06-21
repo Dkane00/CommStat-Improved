@@ -178,6 +178,21 @@ class JS8DirectMessageDialog(QDialog):
         self._load_rigs()
         self._update_transmit_state()
 
+    def set_reply_context(self, callsign: str, body: str = "") -> None:
+        """Pre-populate the dialog when opened from a StatRep 'JS8 Reply'.
+
+        Shows the read-only yellow Target reminder box with *callsign* (a hint
+        of who is being replied to — the operator still picks the real Target /
+        Relay from the live roster) and seeds the message body. The body's
+        textChanged handler uppercases and caps it at MAX_MESSAGE_LENGTH.
+        """
+        cs = (callsign or "").strip().upper()
+        self.reply_target_field.setText(cs)
+        self.reply_target_label.setVisible(bool(cs))
+        self.reply_target_field.setVisible(bool(cs))
+        if body:
+            self.body.setPlainText(body)   # _on_body_changed normalizes/caps
+
     # -------------------------------------------------------------------------
     # UI
     # -------------------------------------------------------------------------
@@ -245,6 +260,30 @@ class JS8DirectMessageDialog(QDialog):
         self.freq_field.setFixedWidth(90)
         self.freq_field.setReadOnly(True)
         rig_row.addLayout(self._labeled_col("Freq:", self.freq_field))
+
+        # Read-only "Target:" reminder box — shown only when this dialog is
+        # opened via the StatRep "JS8 Reply" button (see set_reply_context).
+        # Built inline (not via _labeled_col) so both label and field can be
+        # toggled. Hidden by default so a normal menu-launch shows nothing.
+        self.reply_target_label = QLabel("Target:")
+        self.reply_target_label.setStyleSheet(
+            "QLabel { font-family:Roboto; font-size:13px; font-weight:bold; }"
+        )
+        self.reply_target_field = QLineEdit()
+        self.reply_target_field.setFixedWidth(110)
+        self.reply_target_field.setReadOnly(True)
+        self.reply_target_field.setStyleSheet(
+            "QLineEdit { background-color:#FFFF00; color:#000000;"
+            " border:1px solid #999999; border-radius:4px; padding:2px 4px;"
+            " font-family:'Kode Mono'; font-size:13px; }"
+        )
+        rt_col = QVBoxLayout()
+        rt_col.setSpacing(2)
+        rt_col.addWidget(self.reply_target_label)
+        rt_col.addWidget(self.reply_target_field)
+        rig_row.addLayout(rt_col)
+        self.reply_target_label.setVisible(False)
+        self.reply_target_field.setVisible(False)
 
         rig_row.addStretch()
         layout.addLayout(rig_row)

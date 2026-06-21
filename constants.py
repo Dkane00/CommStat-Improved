@@ -13,7 +13,7 @@ from typing import Dict
 # Application Identity
 # =============================================================================
 
-VERSION = "4.3.a"
+VERSION = "4.3.1"
 
 WINDOW_TITLE = f"CommStat (v{VERSION}) by N0DDK"
 WINDOW_SIZE = (1360, 768)
@@ -21,6 +21,7 @@ CONFIG_FILE = "config.ini"
 ICON_FILE = "radiation-32.png"
 DATABASE_FILE = "traffic.db3"
 SOUNDS_DIR = "sounds"
+
 
 # =============================================================================
 # Fonts

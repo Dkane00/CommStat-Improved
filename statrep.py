@@ -158,6 +158,8 @@ def get_state_from_connector(connector_manager, rig_name: str) -> str:
 class StatRepDialog(QDialog):
     """Modern StatRep form for creating and transmitting status reports."""
 
+    _commsrvr_error = QtCore.pyqtSignal(str)
+
     def __init__(
         self,
         tcp_pool: "TCPConnectionPool",
@@ -173,6 +175,8 @@ class StatRepDialog(QDialog):
         self.data_background = data_background
 
         apply_standard_dialog_chrome(self, "Status Report", WINDOW_WIDTH, WINDOW_HEIGHT)
+
+        self._commsrvr_error.connect(self._on_commsrvr_error)
 
         # Configuration
         self.callsign = ""
@@ -315,33 +319,37 @@ class StatRepDialog(QDialog):
         def submit_thread():
             """Background thread that performs the HTTP POST."""
             global_id = 0
+            error_msg = ""
             try:
-                # Format data string: datetime\tfreq_hz\t0\t30\tmessage
                 data_string = f"{now}\t{frequency}\t0\t30\t{message}"
-
-                # Build POST data
                 post_data = urllib.parse.urlencode({
                     'cs': callsign,
                     'data': data_string
                 }).encode('utf-8')
 
-                # Create and send request with 10-second timeout
                 req = urllib.request.Request(_DATAFEED, data=post_data, method='POST')
-                with urllib.request.urlopen(req, timeout=10) as response:
+                with urllib.request.urlopen(req, timeout=5) as response:
                     result = response.read().decode('utf-8').strip()
 
-                # Server returns the assigned global_id as an integer string
                 if result.isdigit():
                     global_id = int(result)
                     print(f"[Commsrvr] Statrep submitted successfully (global_id={global_id})")
                 else:
-                    print(f"[Commsrvr] Statrep submission failed - server returned: {result}")
+                    error_msg = result[5:] if result.startswith("ERR::") else (result or "Unknown server error")
+                    print(f"[Commsrvr] Statrep submission failed — server returned: {result}")
 
             except Exception as e:
-                print(f"[Commsrvr] Failed to submit statrep: {e}")
+                reason = getattr(e, 'reason', e)
+                if isinstance(reason, TimeoutError):
+                    error_msg = "Server timeout — the server did not respond in time."
+                else:
+                    error_msg = f"Connection error — {e}"
+                print(f"[Commsrvr] Statrep submission failed — {error_msg}")
             finally:
                 if on_complete:
                     on_complete(global_id)
+                if error_msg:
+                    self._commsrvr_error.emit(error_msg)
 
         # Start daemon thread (won't block app shutdown)
         thread = threading.Thread(target=submit_thread, daemon=True)
@@ -978,6 +986,11 @@ class StatRepDialog(QDialog):
 
         dlg.exec_()
 
+    def _on_commsrvr_error(self, message: str) -> None:
+        from qrz_lookup import InternetDeliveryFailureDialog
+        parent = self if self.isVisible() else (self.parent() or self)
+        InternetDeliveryFailureDialog(message, parent=parent).exec_()
+
     def _show_error(self, message: str) -> None:
         """Display an error message box."""
         msg = QMessageBox(self)
@@ -1460,8 +1473,9 @@ class StatRepDialog(QDialog):
                 self._pending_save_data = self._capture_save_data(0)
 
                 def _on_internet_commsrvr_complete(global_id: int) -> None:
-                    self._save_to_database(0, global_id)
-                    QtCore.QTimer.singleShot(0, self._refresh_and_close)
+                    if global_id:
+                        self._save_to_database(0, global_id)
+                        QtCore.QTimer.singleShot(0, self._refresh_and_close)
 
                 self._submit_to_commsrvr_async(0, on_complete=_on_internet_commsrvr_complete)
             else:

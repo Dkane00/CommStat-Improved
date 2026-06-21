@@ -98,6 +98,8 @@ def make_uppercase(field: QLineEdit) -> None:
 class AlertDialog(QDialog):
     """Group Alert dialog — create and transmit callsign alerts via JS8Call."""
 
+    _commsrvr_result = QtCore.pyqtSignal(str)
+
     def __init__(
         self,
         tcp_pool: "TCPConnectionPool" = None,
@@ -115,6 +117,8 @@ class AlertDialog(QDialog):
         self.alert_id: str       = ""
         self._pending_message: str  = ""
         self._pending_callsign: str = ""
+
+        self._commsrvr_result.connect(self._on_commsrvr_result)
 
         apply_standard_dialog_chrome(self, "Alerts", _WIN_W, _WIN_H)
 
@@ -526,14 +530,38 @@ class AlertDialog(QDialog):
                     'cs': callsign, 'data': data_string
                 }).encode('utf-8')
                 req = urllib.request.Request(_DATAFEED, data=post_data, method='POST')
-                with urllib.request.urlopen(req, timeout=10) as response:
+                with urllib.request.urlopen(req, timeout=5) as response:
                     result = response.read().decode('utf-8').strip()
-                if result != "1":
-                    print(f"[Commsrvr] Alert submission failed - server returned: {result}")
+                if result.isdigit():
+                    print(f"[Commsrvr] Alert submitted successfully (global_id={result})")
+                else:
+                    print(f"[Commsrvr] Alert submission failed — server returned: {result}")
+                self._commsrvr_result.emit(result)
             except Exception as e:
-                print(f"[Commsrvr] Error submitting alert: {e}")
+                reason = getattr(e, 'reason', e)
+                if isinstance(reason, TimeoutError):
+                    err = "ERR::Server timeout — the server did not respond in time."
+                else:
+                    err = f"ERR::Connection error — {e}"
+                print(f"[Commsrvr] Alert submission failed — {err[5:]}")
+                self._commsrvr_result.emit(err)
 
         threading.Thread(target=submit_thread, daemon=True).start()
+
+    def _on_commsrvr_result(self, result: str) -> None:
+        if result.startswith("ERR::"):
+            from qrz_lookup import InternetDeliveryFailureDialog
+            parent = self if self.isVisible() else (self.parent() or self)
+            InternetDeliveryFailureDialog(result[5:], parent=parent).exec_()
+        elif result.isdigit():
+            if self.isVisible():
+                self._save_to_database(
+                    self._pending_callsign, self._pending_color,
+                    self._pending_title, self._pending_alert_message, frequency=0,
+                )
+                self.close()
+                if self.on_alert_saved:
+                    self.on_alert_saved()
 
     def _save_to_database(self, callsign: str, color: int, title: str, message: str,
                           frequency: int = 0, db: int = 30) -> None:
@@ -601,12 +629,11 @@ class AlertDialog(QDialog):
             self.callsign = callsign
             self._pending_callsign = callsign
             self._pending_message  = self._build_message(callsign, color, title, message)
-            self._save_to_database(callsign, color, title, message, frequency=0)
+            self._pending_color         = color
+            self._pending_title         = title
+            self._pending_alert_message = message
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
             self._submit_to_commsrvr_async(0, callsign, self._pending_message, now)
-            self.close()
-            if self.on_alert_saved:
-                self.on_alert_saved()
             return
 
         if "(disconnected)" in rig_name:

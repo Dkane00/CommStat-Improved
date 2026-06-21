@@ -87,6 +87,8 @@ def _labeled_col(lbl_text: str, ctrl: QtWidgets.QWidget) -> QHBoxLayout:
 class GroupMessageDialog(QDialog):
     """Group Message dialog — compose and transmit a group message."""
 
+    _commsrvr_result = QtCore.pyqtSignal(str)
+
     def __init__(
         self,
         tcp_pool: "TCPConnectionPool" = None,
@@ -104,6 +106,8 @@ class GroupMessageDialog(QDialog):
         self._pending_message: str   = ""
         self._pending_callsign: str  = ""
         self._message_is_expanded: bool = False
+
+        self._commsrvr_result.connect(self._on_commsrvr_result)
 
         apply_standard_dialog_chrome(self, "Group Message", _WIN_W, _WIN_H_RF)
 
@@ -483,16 +487,35 @@ class GroupMessageDialog(QDialog):
                 data_string = f"{now}\t{frequency}\t0\t30\t{message_data}"
                 post_data = urllib.parse.urlencode({'cs': callsign, 'data': data_string}).encode('utf-8')
                 req = urllib.request.Request(_DATAFEED, data=post_data, method='POST')
-                with urllib.request.urlopen(req, timeout=10) as response:
+                with urllib.request.urlopen(req, timeout=5) as response:
                     result = response.read().decode('utf-8').strip()
-                if result == "1":
-                    print(f"[Commsrvr] Message submitted successfully")
+                if result.isdigit():
+                    print(f"[Commsrvr] Message submitted successfully (global_id={result})")
                 else:
-                    print(f"[Commsrvr] Message submission failed - server returned: {result}")
+                    print(f"[Commsrvr] Message submission failed — server returned: {result}")
+                self._commsrvr_result.emit(result)
             except Exception as e:
-                print(f"[Commsrvr] Error submitting message: {e}")
+                reason = getattr(e, 'reason', e)
+                if isinstance(reason, TimeoutError):
+                    err = "ERR::Server timeout — the server did not respond in time."
+                else:
+                    err = f"ERR::Connection error — {e}"
+                print(f"[Commsrvr] Message submission failed — {err[5:]}")
+                self._commsrvr_result.emit(err)
 
         threading.Thread(target=submit_thread, daemon=True).start()
+
+    def _on_commsrvr_result(self, result: str) -> None:
+        if result.startswith("ERR::"):
+            from qrz_lookup import InternetDeliveryFailureDialog
+            parent = self if self.isVisible() else (self.parent() or self)
+            InternetDeliveryFailureDialog(result[5:], parent=parent).exec_()
+        elif result.isdigit():
+            if self.isVisible():
+                self._save_to_database(self._pending_callsign, self._pending_message_raw, frequency=0)
+                if self.refresh_callback:
+                    self.refresh_callback()
+                self.accept()
 
     def _save_to_database(self, callsign: str, message: str, frequency: int = 0) -> None:
         now = QDateTime.currentDateTime()
@@ -568,17 +591,14 @@ class GroupMessageDialog(QDialog):
 
         if rig_name == INTERNET_RIG:
             self._pending_callsign = callsign
+            self._pending_message_raw = message
             self._pending_message  = self._build_message(message)
             now = QDateTime.currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss")
             message_data = (
                 f"{callsign}: @{self.group_combo.currentText()}"
                 f" MSG ,{self.msg_id},{message},{{^%3}}"
             )
-            self._save_to_database(callsign, message, frequency=0)
             self._submit_to_commsrvr_async(0, callsign, message_data, now)
-            if self.refresh_callback:
-                self.refresh_callback()
-            self.accept()
             return
 
         if "(disconnected)" in rig_name:

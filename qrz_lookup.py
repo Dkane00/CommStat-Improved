@@ -929,6 +929,7 @@ class QRZLookupDialog(QDialog):
                 self.memo_edit.blockSignals(False)
             else:
                 self.qrz_info.show_no_data_placeholder()
+            self.msg_edit.setFocus()
             return
 
         if not is_active:
@@ -943,6 +944,7 @@ class QRZLookupDialog(QDialog):
                 self.memo_edit.blockSignals(False)
             else:
                 self.qrz_info.show_no_data_placeholder()
+            self.msg_edit.setFocus()
             return
 
         if cached_fresh:
@@ -951,6 +953,7 @@ class QRZLookupDialog(QDialog):
             self.memo_edit.blockSignals(True)
             self.memo_edit.setText(cached_fresh.get("memo") or "")
             self.memo_edit.blockSignals(False)
+            self.msg_edit.setFocus()
             return
 
         self.lbl_status.setText(f"Looking up {cs}…")
@@ -971,6 +974,7 @@ class QRZLookupDialog(QDialog):
         else:
             self.lbl_status.setText("No results found.")
             self.qrz_info.show_no_data_placeholder()
+        self.msg_edit.setFocus()
 
     def _save_memo(self) -> None:
         """Save memo text to the qrz table on focus-out."""
@@ -1012,16 +1016,10 @@ class QRZLookupDialog(QDialog):
         msg_id = generate_time_based_id()
         message_data = f"{my_cs}: {cs} MSG ,{msg_id},{text},{{^%3}}"
         data_string  = f"DM:{now}\t0\t0\t30\t{message_data}"
+        self._pending_dm = (my_cs, cs, text, msg_id, now)
         threading.Thread(
             target=self._submit_internet, args=(my_cs, data_string), daemon=True
         ).start()
-
-        # Write to the local messages table so the sent message shows up in the
-        # message log, mirroring group_message.py's internet path. Done here on
-        # the send (not in the commsrvr callback) for the same reason.
-        self._save_to_local_messages(my_cs, cs, text, msg_id, now)
-        if self._refresh_callback:
-            self._refresh_callback()
 
     def _save_to_local_messages(self, from_cs: str, target_cs: str,
                                 message: str, msg_id: str, now: str) -> None:
@@ -1050,17 +1048,32 @@ class QRZLookupDialog(QDialog):
         try:
             post = urllib.parse.urlencode({'cs': callsign, 'data': data_string}).encode()
             req  = urllib.request.Request(_DATAFEED_URL, data=post, method='POST')
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:
                 result = resp.read().decode().strip()
+            if result.lstrip('-').isdigit():
+                print(f"[Commsrvr] Direct message submitted successfully (global_id={result})")
+            else:
+                print(f"[Commsrvr] Direct message submission failed — server returned: {result}")
             self._send_result.emit(result)
         except Exception as e:
-            print(f"[QRZLookupDialog] Internet send error: {e}")
-            self._send_result.emit("")
+            reason = getattr(e, 'reason', e)
+            if isinstance(reason, TimeoutError):
+                err = "ERR::Server timeout — the server did not respond in time."
+            else:
+                err = f"ERR::Connection Error — The CommStat server did not reply.\nURL: {_DATAFEED_URL}"
+            print(f"[Commsrvr] Direct message submission failed — {err[5:]}")
+            self._send_result.emit(err)
 
     def _on_send_result(self, result: str) -> None:
-        if result.lstrip('-').isdigit():
-            QMessageBox.information(self, "Message Sent", "Your message was sent.")
-            self.msg_edit.clear()
+        if result.startswith("ERR::"):
+            InternetDeliveryFailureDialog(result[5:], parent=self).exec_()
+        elif result.lstrip('-').isdigit():
+            if self._pending_dm:
+                self._save_to_local_messages(*self._pending_dm)
+                self._pending_dm = None
+                if self._refresh_callback:
+                    self._refresh_callback()
+            self.accept()
 
 
 # ── Dialog 2: JS8 Message (RF) ─────────────────────────────────────────────
@@ -1531,9 +1544,9 @@ class StatRepDetailDialog(QDialog):
         self.btn_reply_sr.clicked.connect(self._on_reply_clicked)
         btn_row.addWidget(self.btn_reply_sr)
 
-        self.btn_message_sr = _btn("Message", COLOR_BTN_BLUE)
-        self.btn_message_sr.clicked.connect(self._on_message_clicked)
-        btn_row.addWidget(self.btn_message_sr)
+        self.btn_js8_reply_sr = _btn("JS8 Reply", COLOR_BTN_BLUE)
+        self.btn_js8_reply_sr.clicked.connect(self._on_js8_reply_clicked)
+        btn_row.addWidget(self.btn_js8_reply_sr)
 
         btn_brevity = _btn("Brevity", _COL_PURPLE)
         btn_brevity.clicked.connect(self._on_brevity)
@@ -2033,16 +2046,21 @@ class StatRepDetailDialog(QDialog):
         )
         dlg.exec_()
 
-    def _on_message_clicked(self) -> None:
-        dlg = QRZLookupDialog(
-            module_background=self._module_bg,
-            module_foreground=self._module_fg,
-            program_background=self._program_bg,
-            program_foreground=self._program_fg,
-            initial_callsign=self.callsign,
+    def _on_js8_reply_clicked(self) -> None:
+        """Reply to this StatRep over RF via JS8 Direct Message. The clicked
+        callsign is shown as a read-only reminder in the JS8 dialog (not forced
+        into its roster-driven Target combo); the body is seeded with the
+        original comments."""
+        from js8_direct_message import JS8DirectMessageDialog
+        original = (self._row_data.get("comments") or "").replace("||", "\n")
+        prefill = "\n\n----------\n" + original
+        dlg = JS8DirectMessageDialog(
+            tcp_pool=self._tcp_pool,
+            connector_manager=self._connector_manager,
             refresh_callback=self._refresh_callback,
             parent=self,
         )
+        dlg.set_reply_context(self.callsign, prefill)
         dlg.exec_()
 
     def _on_newer(self) -> None:
@@ -2167,6 +2185,9 @@ class StatRepDetailDialog(QDialog):
             except Exception as e:
                 print(f"[StatRepDetailDialog] Delete request failed: {e}")
         deleted_id = self._record_id
+        direction = self._last_nav
+        full_list = self._get_record_list()
+        idx_before = self._find_index(full_list, deleted_id) if full_list else None
         try:
             with sqlite3.connect(DB_PATH, timeout=10) as conn:
                 conn.execute("DELETE FROM statrep WHERE id = ?", (deleted_id,))
@@ -2174,10 +2195,7 @@ class StatRepDetailDialog(QDialog):
         except sqlite3.Error:
             pass
         self.record_deleted.emit()
-        direction = self._last_nav
-        full_list = self._get_record_list()
         if full_list:
-            idx_before = self._find_index(full_list, deleted_id)
             remaining = [(rid, cs) for (rid, cs) in full_list if str(rid) != str(deleted_id)]
             if not remaining:
                 self.accept()
@@ -2355,6 +2373,8 @@ class MessageDetailDialog(QDialog):
                  program_background: str = "",
                  program_foreground: str = "",
                  msg_id: str = "",
+                 tcp_pool=None,
+                 connector_manager=None,
                  refresh_callback=None,
                  parent=None):
         super().__init__(parent)
@@ -2368,6 +2388,8 @@ class MessageDetailDialog(QDialog):
         )
         self.callsign = callsign
         self.message_text = message_text
+        self._tcp_pool = tcp_pool
+        self._connector_manager = connector_manager
         self.internet_available = internet_available
         self._module_bg = module_background
         self._module_fg = module_foreground
@@ -2448,9 +2470,9 @@ class MessageDetailDialog(QDialog):
         self.btn_reply.clicked.connect(self._on_reply_clicked)
         btn_row.addWidget(self.btn_reply)
 
-        self.btn_message_msg = _btn("Message", COLOR_BTN_BLUE)
-        self.btn_message_msg.clicked.connect(self._on_message_clicked)
-        btn_row.addWidget(self.btn_message_msg)
+        self.btn_js8_reply = _btn("JS8 Reply", COLOR_BTN_BLUE)
+        self.btn_js8_reply.clicked.connect(self._on_js8_reply_clicked)
+        btn_row.addWidget(self.btn_js8_reply)
 
         self.btn_close = _btn("Close", _COL_CANCEL)
         self.btn_close.clicked.connect(self._on_close_clicked)
@@ -2469,18 +2491,6 @@ class MessageDetailDialog(QDialog):
         except sqlite3.Error as e:
             print(f"[MessageDetailDialog] Contact memo save error: {e}")
 
-    def _on_message_clicked(self) -> None:
-        dlg = QRZLookupDialog(
-            module_background=self._module_bg,
-            module_foreground=self._module_fg,
-            program_background=self._program_bg,
-            program_foreground=self._program_fg,
-            initial_callsign=self.callsign,
-            refresh_callback=self._refresh_callback,
-            parent=self,
-        )
-        dlg.exec_()
-
     def _on_reply_clicked(self) -> None:
         original = self.message_text.replace("||", "\n")
         prefill = "\n\n----------\n" + original
@@ -2494,6 +2504,23 @@ class MessageDetailDialog(QDialog):
             refresh_callback=self._refresh_callback,
             parent=self,
         )
+        dlg.exec_()
+
+    def _on_js8_reply_clicked(self) -> None:
+        """Reply to this message over RF via JS8 Direct Message. The clicked
+        callsign is shown as a read-only reminder in the JS8 dialog (not forced
+        into its roster-driven Target combo); the body is seeded with the
+        original message text."""
+        from js8_direct_message import JS8DirectMessageDialog
+        original = self.message_text.replace("||", "\n")
+        prefill = "\n\n----------\n" + original
+        dlg = JS8DirectMessageDialog(
+            tcp_pool=self._tcp_pool,
+            connector_manager=self._connector_manager,
+            refresh_callback=self._refresh_callback,
+            parent=self,
+        )
+        dlg.set_reply_context(self.callsign, prefill)
         dlg.exec_()
 
     def _on_close_clicked(self) -> None:
@@ -2752,6 +2779,49 @@ class MessageDetailDialog(QDialog):
                     QUrl("http://localhost/")
                 )
         # map already loaded — nothing more to do for message detail view
+
+
+# ── Dialog: Internet Delivery Failure popup ──────────────────────────────
+
+class InternetDeliveryFailureDialog(QDialog):
+    """Styled error popup shown when commsrvr returns an ERR:: reply or times out."""
+
+    def __init__(self, message: str, parent=None):
+        super().__init__(parent)
+        apply_standard_dialog_chrome(self, "Internet Delivery Failure")
+        self.setModal(True)
+        self.setFixedWidth(420)
+
+        self.setStyleSheet("QDialog { background-color:#f5f5f5; }")
+
+        main = QVBoxLayout(self)
+        main.setContentsMargins(15, 15, 15, 15)
+        main.setSpacing(10)
+
+        title = QLabel("Internet Delivery Failure")
+        title.setAlignment(Qt.AlignCenter)
+        title.setFont(QFont("Roboto Slab", -1, QFont.Black))
+        title.setStyleSheet(
+            f"QLabel {{ background-color: {_PROG_BG}; color: {_PROG_FG};"
+            " font-size: 16px; padding-top: 9px; padding-bottom: 9px; }"
+        )
+        main.addWidget(title)
+
+        body = QLabel(message)
+        body.setWordWrap(True)
+        body.setAlignment(Qt.AlignCenter)
+        body.setStyleSheet(
+            "QLabel { color:#333333; font-family:Roboto; font-size:15px;"
+            " font-weight:bold; padding: 12px 8px; }"
+        )
+        main.addWidget(body)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn = _btn("Close", _COL_CANCEL)
+        btn.clicked.connect(self.accept)
+        btn_row.addWidget(btn)
+        main.addLayout(btn_row)
 
 
 # ── Dialog: Delivery Confirmation popup (commsrvr ::DELIVERED::) ──────────
