@@ -2237,7 +2237,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Send first heartbeat after the HEARTBEAT_DELAY_MS delay, then start timer
             def start_commsrvr_heartbeat():
                 self._check_commsrvr()  # Send first heartbeat immediately
-                self.commsrvr_timer.start(180000)  # Then start 3 minute interval timer
+                self.commsrvr_timer.start(HEARTBEAT_INTERVAL_MS)
             QTimer.singleShot(HEARTBEAT_DELAY_MS, start_commsrvr_heartbeat)
         elif not self._internet_available:
             print("Internet connectivity: Still not available (will retry in 30 minutes)")
@@ -3982,10 +3982,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._commsrvr_fail_count += 1
                 print(f"[Heartbeat] No reply from server (failure {self._commsrvr_fail_count}/{self._commsrvr_max_failures})")
                 if self._commsrvr_fail_count >= self._commsrvr_max_failures:
-                    print("[Heartbeat] Max failures reached — heartbeat stopped")
-                    self.commsrvr_timer.stop()
+                    print(f"[Heartbeat] Max failures reached — backing off to {HEARTBEAT_BACKOFF_MS // 60000} min interval")
+                    self.commsrvr_timer.setInterval(HEARTBEAT_BACKOFF_MS)
                 return
 
+            if self._commsrvr_fail_count >= self._commsrvr_max_failures:
+                print("[Heartbeat] Server reconnected — restoring normal interval")
+                self.commsrvr_timer.setInterval(HEARTBEAT_INTERVAL_MS)
             self._commsrvr_fail_count = 0
 
             if content.strip() == '1':
@@ -4018,7 +4021,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             self._commsrvr_fail_count += 1
             if self._commsrvr_fail_count >= self._commsrvr_max_failures:
-                self.commsrvr_timer.stop()
+                self.commsrvr_timer.setInterval(HEARTBEAT_BACKOFF_MS)
 
     def _setup_live_feed(self) -> None:
         """Create the live feed text area."""
@@ -4869,7 +4872,7 @@ if (window.webkitStorageInfo === undefined && navigator.webkitTemporaryStorage) 
             # Delay first heartbeat by HEARTBEAT_DELAY_MS, then start timer for subsequent heartbeats
             def start_commsrvr_heartbeat():
                 self._check_commsrvr()  # Send first heartbeat immediately
-                self.commsrvr_timer.start(180000)  # Then start 3 minute interval timer
+                self.commsrvr_timer.start(HEARTBEAT_INTERVAL_MS)
             QTimer.singleShot(HEARTBEAT_DELAY_MS, start_commsrvr_heartbeat)
 
         # News ticker animation timer
